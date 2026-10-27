@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sayon: Programming made easy. Safety made automatic.</title>
+  <meta name="description" content="Sayon is a readable programming language whose compiler checks ownership for you: no garbage collector, no hidden copies, and errors that say how to fix them.">
+  <link rel="icon" href="favicon.ico" sizes="any">
+  <link rel="icon" href="images/logo.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="images/icon-256.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="bar">
+    <a class="brand" href="./"><img src="images/logo.svg" alt="" width="32" height="32"> Sayon</a>
+    <nav aria-label="Main">
+      <a href="#start">Get started</a>
+      <a href="https://github.com/sayon-lang/docs.sayon-lang.org">Docs</a>
+      <a href="https://github.com/sayon-lang/packages.sayon-lang.org">Packages</a>
+      <a href="https://github.com/sayon-lang/sayon">GitHub</a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero">
+      <img class="mark" src="images/logo.svg" alt="Sayon logo" width="160" height="160">
+      <h1>Programming made easy.<br><span>Safety made automatic.</span></h1>
+      <p class="lead">Sayon means “easy”. Ordinary programs need fewer decisions, less boilerplate, and less setup, while the compiler checks who owns each value, so memory is freed on time without a garbage collector.</p>
+      <div class="actions">
+        <a class="button primary" href="#start">Get started</a>
+        <a class="button" href="https://github.com/sayon-lang/docs.sayon-lang.org/blob/main/language.md">Read the language guide</a>
+      </div>
+    </section>
+
+    <section class="sample" aria-label="A Sayon program">
+      <pre><code><span class="k">function</span> <span class="f">total</span>(values: <span class="t">Array</span>&lt;<span class="t">integer</span>&gt;) -&gt; <span class="t">integer</span>
+    result = <span class="n">0</span>
+    <span class="k">for</span> value <span class="k">in</span> values
+        result = result + value
+    <span class="k">return</span> result
+
+numbers = [<span class="n">1</span>, <span class="n">2</span>, <span class="n">3</span>]
+<span class="f">print</span>(<span class="s">"Sum: <span class="i">{total(numbers)}</span>"</span>)
+<span class="f">print</span>(<span class="f">length</span>(numbers))  <span class="c"># numbers is still owned here</span></code></pre>
+    </section>
+
+    <section class="points" aria-label="What Sayon is like">
+      <article>
+        <h2>Reads like what it does</h2>
+        <p>Blocks by indentation, whole words for keywords, and values written into strings where they go. Types are inferred, and you name them where it helps.</p>
+      </article>
+      <article>
+        <h2>Safe without trying</h2>
+        <p>The compiler checks ownership and infers borrowing, so each value is cleaned up exactly once, at a time you can tell from the code. No garbage collector, no hidden copies.</p>
+      </article>
+      <article>
+        <h2>Errors that teach</h2>
+        <p>Every diagnostic has a stable code, points at the problem, and suggests a concrete fix. <code>sayon explain</code> says more about any of them.</p>
+      </article>
+      <article>
+        <h2>One program, many places</h2>
+        <p>Run it in the interpreter, or compile it through LLVM to a native program for Windows or Linux, WebAssembly for WASI and web pages, or an Android app.</p>
+      </article>
+    </section>
+
+    <section class="status">
+      <h2>Early days</h2>
+      <p>Sayon is in early development and not ready for real programs yet. What exists, what is planned, and for which milestone is in the <a href="https://github.com/sayon-lang/sayon/blob/main/docs/features.md">feature ledger</a>.</p>
+    </section>
+
+    <section id="start" class="start">
+      <h2>Get started</h2>
+      <ol>
+        <li>Download the installer for your device from the <a href="https://github.com/sayon-lang/sayon/releases">releases page</a> and run it. <a href="https://github.com/sayon-lang/docs.sayon-lang.org/blob/main/installing.md">Installing</a> lists them all.</li>
+        <li>Open a new terminal and make a project:
+          <pre><code>sayon init hello
+cd hello
+sayon run</code></pre>
+        </li>
+        <li>For VS Code, install the <a href="https://github.com/sayon-lang/sayon-vscode">Sayon extension</a>: highlighting, errors as you type, completion, and more.</li>
+      </ol>
+    </section>
+  </main>
+
+  <footer>
+    <img src="images/logo.svg" alt="" width="24" height="24">
+    <p>Sayon is open source, under the Apache License 2.0 with LLVM's exception.
+      <a href="https://github.com/sayon-lang">github.com/sayon-lang</a></p>
+  </footer>
+</body>
+</html>
