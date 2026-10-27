@@ -1,0 +1,34 @@
+# Writes the website into `site`: the page, from src/page.sayon, and the
+# files of `static` beside it.
+
+filesystem = import("standard/filesystem.sayon")
+io = import("standard/io.sayon")
+page = import("src/page.sayon")
+
+constant SITE = "site"
+constant STATIC = "static"
+
+# Removes a folder and everything in it.
+function clear(folder: string)
+    if not filesystem.exists(folder)
+        return
+    entries = filesystem.walk(folder)
+    # Each folder comes before what it holds, so the last entries go first.
+    index = length(entries) - 1
+    while index >= 0
+        filesystem.remove(filesystem.join(folder, entries[index]))
+        index -= 1
+    filesystem.remove(folder)
+
+function main()
+    clear(SITE)
+    filesystem.create_directory(SITE)
+    for entry in filesystem.walk(STATIC)
+        source = filesystem.join(STATIC, entry)
+        target = filesystem.join(SITE, entry)
+        if filesystem.is_directory(source)
+            filesystem.create_directory(target)
+        else
+            filesystem.copy(source, target)
+    io.write_file(filesystem.join(SITE, "index.html"), page.render())
+    print("wrote {SITE}/index.html")

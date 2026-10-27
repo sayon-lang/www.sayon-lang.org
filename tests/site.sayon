@@ -1,0 +1,5 @@
+io = import("standard/io.sayon")
+page = import("src/page.sayon")
+
+test "the site holds the page as the program writes it"
+    assert(io.read_file("site/index.html") == page.render(), "run `sayon run` to write the site again")
