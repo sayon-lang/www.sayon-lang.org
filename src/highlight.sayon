@@ -24,7 +24,7 @@ private function is_type(word: string) -> boolean
             return first >= "A" and first <= "Z"
 
 private function is_letter(character: string) -> boolean
-    return (character >= "a" and character <= "z") or (character >= "A" and character <= "Z") or character == "_"
+    return character >= "a" and character <= "z" or character >= "A" and character <= "Z" or character == "_"
 
 private function is_digit(character: string) -> boolean
     return character >= "0" and character <= "9"
