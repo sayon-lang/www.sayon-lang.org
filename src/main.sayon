@@ -1,9 +1,16 @@
 # Writes the website into `site`: the page, from src/page.sayon, and the
 # files of `static` beside it.
+#
+#     sayon run                  writes the site
+#     sayon run -- serve [port]  writes it and serves it on this computer,
+#                                at http://localhost:8000/ by default
 
 filesystem = import("standard/filesystem.sayon")
 io = import("standard/io.sayon")
+network = import("standard/network.sayon")
+os = import("standard/os.sayon")
 page = import("src/page.sayon")
+serve = import("src/serve.sayon")
 
 constant SITE = "site"
 constant STATIC = "static"
@@ -20,7 +27,7 @@ function clear(folder: string)
         index -= 1
     filesystem.remove(folder)
 
-function main()
+function write_site()
     clear(SITE)
     filesystem.create_directory(SITE)
     for entry in filesystem.walk(STATIC)
@@ -32,3 +39,18 @@ function main()
             filesystem.copy(source, target)
     io.write_file(filesystem.join(SITE, "index.html"), page.render())
     print("wrote {SITE}/index.html")
+
+function main()
+    write_site()
+    arguments = os.arguments()
+    if length(arguments) == 0 or arguments[0] != "serve"
+        return
+    port = 8000
+    if length(arguments) > 1
+        given = tonumber(arguments[1])
+        if typeof(given) != "integer"
+            error("the port is a whole number, not {arguments[1]}")
+        port = given
+    listener = network.listen("127.0.0.1", port)
+    print("serving {SITE} at http://localhost:{port}/; stop with Ctrl+C")
+    serve.serve(listener, SITE)

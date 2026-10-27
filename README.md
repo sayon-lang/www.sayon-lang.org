@@ -19,13 +19,13 @@ sayon test
 
 `sayon test` runs the tests of the highlighter and the HTML, and checks that `site/` holds the page as the program writes it, so a change to the program goes with the page it writes.
 
-`site/` is the whole website, plain HTML and CSS with no scripts, so any static host serves it as it is. It follows the reader's light or dark preference and fits a phone's width. To see it:
+`site/` is the whole website, plain HTML and CSS with no scripts, so any static host serves it as it is. It follows the reader's light or dark preference and fits a phone's width. To see it, Sayon serves it too, with `src/serve.sayon`:
 
 ```bash
-python -m http.server 8000 --directory site
+sayon run -- serve
 ```
 
-Then open `http://localhost:8000`.
+Then open `http://localhost:8000`; `sayon run -- serve 8080` takes another port.
 
 ## The logo
 
