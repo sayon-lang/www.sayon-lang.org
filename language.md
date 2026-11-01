@@ -1228,6 +1228,8 @@ A range accepts a pre-release only when one of its parts names a pre-release of 
 
 `sayon search json` finds packages by part of their names or descriptions, and `sayon info json` shows a package's versions and dependencies, as its index has them. Both, like every registry command, take `--registry <address>`.
 
+Sayon's first packages are [math_core](https://github.com/sayon-lang/math_core), with whole numbers, exact fractions, complex numbers, matrices, and statistics; [json_parser](https://github.com/sayon-lang/json_parser), with JSON that has comments, JSON Pointer, and JSON Patch; and [http_client](https://github.com/sayon-lang/http_client), a client for HTTP APIs that depends on json_parser. Their repositories show how a package lays out its modules, tests, and examples.
+
 ### Publishing
 
 `sayon publish` sends the project's package to the registry: every file in the project's folder but hidden ones (any name starting with `.`), and `build`, `target`, and `sayon.lock` at its top, 10 MiB at most. `sayon publish --dry-run` lists those files, their size, and the digest, and sends nothing.
