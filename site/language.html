@@ -688,7 +688,7 @@ name = <span class="t">c_string</span>(<span class="s">"Sayon"</span>)
 <li>Its fields are numbers, <code>pointer</code>, and other <code>foreign type</code> structures, in C's order: each at the next multiple of its alignment, and the whole a multiple of the largest (<code>E_FOREIGN_TYPE</code> for anything else, and for type parameters). Text is a <code>pointer</code> to its bytes, a boolean a <code>c_int</code>, and a structure that points to another of its type does so with a <code>pointer</code>.</li>
 <li>Otherwise it is an ordinary structure: built, read, changed, compared, and shown as any other, and copied, since every field is.</li>
 <li>A variadic C function takes a structure by its address, as a <code>pointer</code>.</li>
-<li>Structures go to C and come back as the target's C convention passes them; compiled programs and the interpreter pass them as Windows x64 and Linux x86-64 do, compiled programs for WASI as WebAssembly's C convention does and for Android on ARM64 as AAPCS64 does, and compiled programs report <code>ForeignError</code> on other targets.</li>
+<li>Structures go to C and come back as the target's C convention passes them; compiled programs and the interpreter pass them as Windows x64 and Linux x86-64 do, compiled programs for WASI as WebAssembly's C convention does and for ARM64 with Android, Linux, or Windows as AAPCS64 does (on Windows, but to and from variadic functions), and compiled programs report <code>ForeignError</code> on other targets.</li>
 </ul>
 <h3 id="functions-that-c-calls-back">Functions that C calls back</h3>
 <p>A parameter of a C function can be a function, which C calls during the call:</p>

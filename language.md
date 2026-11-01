@@ -750,7 +750,7 @@ unsafe
 - Its fields are numbers, `pointer`, and other `foreign type` structures, in C's order: each at the next multiple of its alignment, and the whole a multiple of the largest (`E_FOREIGN_TYPE` for anything else, and for type parameters). Text is a `pointer` to its bytes, a boolean a `c_int`, and a structure that points to another of its type does so with a `pointer`.
 - Otherwise it is an ordinary structure: built, read, changed, compared, and shown as any other, and copied, since every field is.
 - A variadic C function takes a structure by its address, as a `pointer`.
-- Structures go to C and come back as the target's C convention passes them; compiled programs and the interpreter pass them as Windows x64 and Linux x86-64 do, compiled programs for WASI as WebAssembly's C convention does and for Android on ARM64 as AAPCS64 does, and compiled programs report `ForeignError` on other targets.
+- Structures go to C and come back as the target's C convention passes them; compiled programs and the interpreter pass them as Windows x64 and Linux x86-64 do, compiled programs for WASI as WebAssembly's C convention does and for ARM64 with Android, Linux, or Windows as AAPCS64 does (on Windows, but to and from variadic functions), and compiled programs report `ForeignError` on other targets.
 
 ### Functions that C calls back
 
