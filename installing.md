@@ -74,6 +74,16 @@ Run `~/.local/share/sayon/uninstall`, or the installer with `uninstall`. Uninsta
 
 The `sayon-<version>-linux-x64.tar.gz` archive holds the same files. Unpack it anywhere (`tar -xzf <file>`), add its `bin` folder to your `PATH`, and run `sayon doctor`.
 
+### Programs for ARM64 Linux
+
+Sayon for Linux x64 also builds programs for ARM64 Linux, such as a Raspberry Pi's or an ARM server's, with `sayon build --target linux-arm64`. Clang links them with the ARM64 version of the GNU C library, which your system's cross packages install:
+
+```text
+sudo apt install gcc-aarch64-linux-gnu libc6-dev-arm64-cross
+```
+
+`sayon target setup linux-arm64` says whether this computer has what it needs, and `sayon doctor` lists it. Copy the program to an ARM64 Linux computer to run it, or run it here under QEMU's emulator, from the `qemu-user` package: `qemu-aarch64 -L /usr/aarch64-linux-gnu ./program`. Sayon's own tests run its programs that way; ARM hardware has not run them yet.
+
 ## Building the downloads
 
 `scripts/package.ps1` on Windows, and `scripts/package.sh` on Linux, build a release of the compiler and runtime, pack it into the archive, and build the installer with the files inside it, for the device they run on:

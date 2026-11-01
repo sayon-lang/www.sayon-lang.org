@@ -1260,11 +1260,12 @@ sayon target manifest             # the capability manifest, as JSON
 | `web` | `web` | `wasm32` | built on any computer, run in Edge, Chrome, Firefox, and Node |
 | `android-x64` | `android` | `x64` | built on any computer with the Android SDK, run on Android's emulator |
 | `android-arm64` | `android` | `arm64` | built on any computer with the Android SDK, run on the emulator through Android's translation of ARM code |
-| `windows-arm64`, `linux-arm64` | `windows`, `linux` | `arm64` | checked; built from M5 on |
+| `linux-arm64` | `linux` | `arm64` | built on Linux x64 with the ARM64 C library, run under QEMU's emulator |
+| `windows-arm64` | `windows` | `arm64` | checked; built from M5 on |
 | `macos-arm64`, `macos-x64` | `macos` | `arm64`, `x64` | checked; built from M7 on |
 | `ios-arm64`, `ios-simulator-arm64` | `ios` | `arm64` | checked; built from M7 on |
 
-`native` is this computer's target, and the short names `windows`, `linux`, `android`, `macos`, and `ios` are `windows-x64`, `linux-x64`, `android-arm64`, `macos-arm64`, and `ios-arm64`, for good: a later release never moves them to another processor. Each target's LLVM triple, such as `x86_64-unknown-linux-gnu`, names it too. A native program is built on the system it is for; for another native target, `sayon build` checks the program but stops before building it. A WebAssembly program is the same wherever it is built, so `wasi` and `web` build on any computer, and so do Android's programs, wherever the Android SDK is. `sayon build` writes a program for a target other than this computer's under `build/debug/<target>/`, or next to a standalone file as `<name>-<target>`, such as `hello-wasi.wasm`.
+`native` is this computer's target, and the short names `windows`, `linux`, `android`, `macos`, and `ios` are `windows-x64`, `linux-x64`, `android-arm64`, `macos-arm64`, and `ios-arm64`, for good: a later release never moves them to another processor. Each target's LLVM triple, such as `x86_64-unknown-linux-gnu`, names it too. A native program is built on the system it is for, and a Linux program on Linux of either processor, given the C library of the program's processor (see [Installing](installing.md#programs-for-arm64-linux)); for another native target, `sayon build` checks the program but stops before building it. A WebAssembly program is the same wherever it is built, so `wasi` and `web` build on any computer, and so do Android's programs, wherever the Android SDK is. `sayon build` writes a program for a target other than this computer's under `build/debug/<target>/`, or next to a standalone file as `<name>-<target>`, such as `hello-wasi.wasm`.
 
 ### WASI
 
