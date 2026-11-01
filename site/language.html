@@ -688,7 +688,7 @@ name = <span class="t">c_string</span>(<span class="s">"Sayon"</span>)
 <li>Its fields are numbers, <code>pointer</code>, and other <code>foreign type</code> structures, in C's order: each at the next multiple of its alignment, and the whole a multiple of the largest (<code>E_FOREIGN_TYPE</code> for anything else, and for type parameters). Text is a <code>pointer</code> to its bytes, a boolean a <code>c_int</code>, and a structure that points to another of its type does so with a <code>pointer</code>.</li>
 <li>Otherwise it is an ordinary structure: built, read, changed, compared, and shown as any other, and copied, since every field is.</li>
 <li>A variadic C function takes a structure by its address, as a <code>pointer</code>.</li>
-<li>Structures go to C and come back as the target's C convention passes them; compiled programs and the interpreter pass them as Windows x64 and Linux x86-64 do, compiled programs for WASI as WebAssembly's C convention does and for ARM64 with Android, Linux, or Windows as AAPCS64 does (on Windows, but to and from variadic functions), and compiled programs report <code>ForeignError</code> on other targets.</li>
+<li>Structures go to C and come back as the target's C convention passes them; compiled programs and the interpreter pass them as Windows x64 and Linux x86-64 do, and as AAPCS64 does on ARM64 with Linux or Windows (on Windows, but to and from variadic functions), compiled programs for WASI as WebAssembly's C convention does and for Android on ARM64 as AAPCS64 does, and compiled programs report <code>ForeignError</code> on other targets.</li>
 </ul>
 <h3 id="functions-that-c-calls-back">Functions that C calls back</h3>
 <p>A parameter of a C function can be a function, which C calls during the call:</p>
@@ -706,7 +706,7 @@ name = <span class="t">c_string</span>(<span class="s">"Sayon"</span>)
 <li>Its failure cannot pass through C. The first one is kept, and C gets 0 (or <code>null_pointer</code>) from that call and from every later one, without the function running again; once C returns, the call of the C function fails with the error.</li>
 <li>A function that C calls can call C functions too, which can call back in turn.</li>
 </ul>
-<p>Compiled programs call C functions on every target. The interpreter calls them on Windows x64 and Linux x86-64 so far, loading each library and finding each function the first time the program calls one; elsewhere it reports <code>ForeignError</code>, and a program built with <code>sayon build</code> calls them. The interpreter has room for functions for 64 different parameters of C functions.</p>
+<p>Compiled programs call C functions on every target. The interpreter calls them on Windows and Linux, x64 and ARM64, so far, loading each library and finding each function the first time the program calls one; elsewhere it reports <code>ForeignError</code>, and a program built with <code>sayon build</code> calls them. The interpreter has room for functions for 64 different parameters of C functions.</p>
 <h2 id="built-in-functions">Built-in functions</h2>
 <div class="table"><table>
 <thead><tr><th>Function</th><th>Description</th></tr></thead>

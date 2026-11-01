@@ -750,7 +750,7 @@ unsafe
 - Its fields are numbers, `pointer`, and other `foreign type` structures, in C's order: each at the next multiple of its alignment, and the whole a multiple of the largest (`E_FOREIGN_TYPE` for anything else, and for type parameters). Text is a `pointer` to its bytes, a boolean a `c_int`, and a structure that points to another of its type does so with a `pointer`.
 - Otherwise it is an ordinary structure: built, read, changed, compared, and shown as any other, and copied, since every field is.
 - A variadic C function takes a structure by its address, as a `pointer`.
-- Structures go to C and come back as the target's C convention passes them; compiled programs and the interpreter pass them as Windows x64 and Linux x86-64 do, compiled programs for WASI as WebAssembly's C convention does and for ARM64 with Android, Linux, or Windows as AAPCS64 does (on Windows, but to and from variadic functions), and compiled programs report `ForeignError` on other targets.
+- Structures go to C and come back as the target's C convention passes them; compiled programs and the interpreter pass them as Windows x64 and Linux x86-64 do, and as AAPCS64 does on ARM64 with Linux or Windows (on Windows, but to and from variadic functions), compiled programs for WASI as WebAssembly's C convention does and for Android on ARM64 as AAPCS64 does, and compiled programs report `ForeignError` on other targets.
 
 ### Functions that C calls back
 
@@ -772,7 +772,7 @@ unsafe
 - Its failure cannot pass through C. The first one is kept, and C gets 0 (or `null_pointer`) from that call and from every later one, without the function running again; once C returns, the call of the C function fails with the error.
 - A function that C calls can call C functions too, which can call back in turn.
 
-Compiled programs call C functions on every target. The interpreter calls them on Windows x64 and Linux x86-64 so far, loading each library and finding each function the first time the program calls one; elsewhere it reports `ForeignError`, and a program built with `sayon build` calls them. The interpreter has room for functions for 64 different parameters of C functions.
+Compiled programs call C functions on every target. The interpreter calls them on Windows and Linux, x64 and ARM64, so far, loading each library and finding each function the first time the program calls one; elsewhere it reports `ForeignError`, and a program built with `sayon build` calls them. The interpreter has room for functions for 64 different parameters of C functions.
 
 ## Built-in functions
 
