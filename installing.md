@@ -5,12 +5,12 @@ Each release has an installer for each device it supports, named after the opera
 | Device | Download | State |
 |---|---|---|
 | Windows, x64 processors (most PCs) | `sayon-<version>-windows-x64-setup.exe` | available |
-| Windows, ARM64 processors | `sayon-<version>-windows-arm64-setup.exe` | not yet; arrives with the ARM64 validation in milestone M5 |
+| Windows, ARM64 processors | `sayon-<version>-windows-arm64-setup.exe` | available |
 | Linux, x64 processors | `sayon-<version>-linux-x64-setup` | available |
-| Linux, ARM64 processors | `sayon-<version>-linux-arm64-setup` | not yet; arrives with the ARM64 validation in milestone M5 |
+| Linux, ARM64 processors | `sayon-<version>-linux-arm64-setup` | available |
 | macOS | `sayon-<version>-macos-arm64-setup` | not yet; planned for milestone M7 |
 
-To find your processor on Windows, open Settings > System > About and look at "System type"; on Linux, `uname -m` prints `x86_64` for x64. Downloads are published on the [releases page](https://github.com/sayon-lang/sayon/releases), together with a `SHA256SUMS.txt` file for checking them: `Get-FileHash <file>` in PowerShell prints the checksum to compare, and `sha256sum -c SHA256SUMS.txt` on Linux checks every file next to it. No release has been published yet; see [Building the downloads](#building-the-downloads) to make the installer yourself.
+To find your processor on Windows, open Settings > System > About and look at "System type"; on Linux, `uname -m` prints `x86_64` for x64 and `aarch64` for ARM64. Downloads are published on the [releases page](https://github.com/sayon-lang/sayon/releases), together with a `SHA256SUMS.txt` file for checking them: `Get-FileHash <file>` in PowerShell prints the checksum to compare, and `sha256sum -c SHA256SUMS.txt` on Linux checks every file next to it. No release has been published yet; see [Building the downloads](#building-the-downloads) to make the installer yourself.
 
 ## Windows
 
@@ -97,4 +97,6 @@ powershell -File scripts/package.ps1
 scripts/package.sh
 ```
 
-The results are in `dist/`: the installer, the archive, and `SHA256SUMS.txt`. On Linux the installer carries the files as a zip archive, which `scripts/package.sh` writes with Python 3. A plain `cargo build` builds an installer with no files inside, which says so when run.
+The results are in `dist/`: the installer, the archive, and `SHA256SUMS.txt`. On Linux the installer carries the files as a zip archive, which `scripts/package.sh` writes with Python 3. A plain `cargo build` builds an installer with no files inside, which says so when run. The device is the one the Rust compiler builds for, so the scripts make the ARM64 downloads on an ARM64 computer.
+
+For each change, GitHub's ARM64 runners build the Windows ARM64 and Linux ARM64 downloads this way, install Sayon from the installer, run a program with it, interpreted and compiled, and uninstall it. The [workflow's runs](https://github.com/sayon-lang/sayon/actions/workflows/arm64.yml) keep the downloads for 30 days; they are for trying, not a release.

@@ -26,12 +26,12 @@
 <thead><tr><th>Device</th><th>Download</th><th>State</th></tr></thead>
 <tbody>
 <tr><td>Windows, x64 processors (most PCs)</td><td><code>sayon-&lt;version&gt;-windows-x64-setup.exe</code></td><td>available</td></tr>
-<tr><td>Windows, ARM64 processors</td><td><code>sayon-&lt;version&gt;-windows-arm64-setup.exe</code></td><td>not yet; arrives with the ARM64 validation in milestone M5</td></tr>
+<tr><td>Windows, ARM64 processors</td><td><code>sayon-&lt;version&gt;-windows-arm64-setup.exe</code></td><td>available</td></tr>
 <tr><td>Linux, x64 processors</td><td><code>sayon-&lt;version&gt;-linux-x64-setup</code></td><td>available</td></tr>
-<tr><td>Linux, ARM64 processors</td><td><code>sayon-&lt;version&gt;-linux-arm64-setup</code></td><td>not yet; arrives with the ARM64 validation in milestone M5</td></tr>
+<tr><td>Linux, ARM64 processors</td><td><code>sayon-&lt;version&gt;-linux-arm64-setup</code></td><td>available</td></tr>
 <tr><td>macOS</td><td><code>sayon-&lt;version&gt;-macos-arm64-setup</code></td><td>not yet; planned for milestone M7</td></tr>
 </tbody></table></div>
-<p>To find your processor on Windows, open Settings &gt; System &gt; About and look at "System type"; on Linux, <code>uname -m</code> prints <code>x86_64</code> for x64. Downloads are published on the <a href="https://github.com/sayon-lang/sayon/releases">releases page</a>, together with a <code>SHA256SUMS.txt</code> file for checking them: <code>Get-FileHash &lt;file&gt;</code> in PowerShell prints the checksum to compare, and <code>sha256sum -c SHA256SUMS.txt</code> on Linux checks every file next to it. No release has been published yet; see <a href="#building-the-downloads">Building the downloads</a> to make the installer yourself.</p>
+<p>To find your processor on Windows, open Settings &gt; System &gt; About and look at "System type"; on Linux, <code>uname -m</code> prints <code>x86_64</code> for x64 and <code>aarch64</code> for ARM64. Downloads are published on the <a href="https://github.com/sayon-lang/sayon/releases">releases page</a>, together with a <code>SHA256SUMS.txt</code> file for checking them: <code>Get-FileHash &lt;file&gt;</code> in PowerShell prints the checksum to compare, and <code>sha256sum -c SHA256SUMS.txt</code> on Linux checks every file next to it. No release has been published yet; see <a href="#building-the-downloads">Building the downloads</a> to make the installer yourself.</p>
 <h2 id="windows">Windows</h2>
 <p>Run the installer and answer its question. It installs Sayon for your user account, so it needs no administrator rights, and it:</p>
 <ul>
@@ -80,7 +80,8 @@ sayon-setup uninstall [options]    Remove Sayon
 <p><code>scripts/package.ps1</code> on Windows, and <code>scripts/package.sh</code> on Linux, build a release of the compiler and runtime, pack it into the archive, and build the installer with the files inside it, for the device they run on:</p>
 <pre><code class="language-text">powershell -File scripts/package.ps1
 scripts/package.sh</code></pre>
-<p>The results are in <code>dist/</code>: the installer, the archive, and <code>SHA256SUMS.txt</code>. On Linux the installer carries the files as a zip archive, which <code>scripts/package.sh</code> writes with Python 3. A plain <code>cargo build</code> builds an installer with no files inside, which says so when run.</p>
+<p>The results are in <code>dist/</code>: the installer, the archive, and <code>SHA256SUMS.txt</code>. On Linux the installer carries the files as a zip archive, which <code>scripts/package.sh</code> writes with Python 3. A plain <code>cargo build</code> builds an installer with no files inside, which says so when run. The device is the one the Rust compiler builds for, so the scripts make the ARM64 downloads on an ARM64 computer.</p>
+<p>For each change, GitHub's ARM64 runners build the Windows ARM64 and Linux ARM64 downloads this way, install Sayon from the installer, run a program with it, interpreted and compiled, and uninstall it. The <a href="https://github.com/sayon-lang/sayon/actions/workflows/arm64.yml">workflow's runs</a> keep the downloads for 30 days; they are for trying, not a release.</p>
     </main>
   </div>
   <footer>
