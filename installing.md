@@ -46,6 +46,10 @@ Remove Sayon from Settings > Apps, or run `uninstall.exe` in the installation fo
 
 The `sayon-<version>-windows-x64.zip` archive holds the same files. Unpack it anywhere, add its `bin` folder to your `PATH`, and run `sayon doctor`.
 
+### Programs for Windows on ARM64
+
+Sayon for Windows x64 also builds programs for Windows on ARM64 computers, such as laptops with Snapdragon processors, with `sayon build --target windows-arm64`. They link with Visual Studio's ARM64 libraries, which the Visual Studio Installer adds to Visual Studio or its Build Tools with the component "MSVC ARM64/ARM64EC build tools". `sayon target setup windows-arm64` says whether this computer has them, and `sayon doctor` lists them. An x64 computer cannot run ARM64 programs, so copy them to an ARM64 one to run them; Sayon's tests build them but have not run them on ARM64 yet.
+
 ## Linux
 
 Make the installer executable and run it:
