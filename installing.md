@@ -48,7 +48,7 @@ The `sayon-<version>-windows-x64.zip` archive holds the same files. Unpack it an
 
 ### Programs for Windows on ARM64
 
-Sayon for Windows x64 also builds programs for Windows on ARM64 computers, such as laptops with Snapdragon processors, with `sayon build --target windows-arm64`. They link with Visual Studio's ARM64 libraries, which the Visual Studio Installer adds to Visual Studio or its Build Tools with the component "MSVC ARM64/ARM64EC build tools". `sayon target setup windows-arm64` says whether this computer has them, and `sayon doctor` lists them. An x64 computer cannot run ARM64 programs, so copy them to an ARM64 one to run them; Sayon's tests build them but have not run them on ARM64 yet.
+Sayon for Windows x64 also builds programs for Windows on ARM64 computers, such as laptops with Snapdragon processors, with `sayon build --target windows-arm64`. They link with Visual Studio's ARM64 libraries, which the Visual Studio Installer adds to Visual Studio or its Build Tools with the component "MSVC ARM64/ARM64EC build tools". `sayon target setup windows-arm64` says whether this computer has them, and `sayon doctor` lists them. An x64 computer cannot run ARM64 programs, so copy them to an ARM64 one to run them. Sayon's tests run its programs on ARM64 hardware, GitHub's Windows ARM64 runners, for each change, all but one that passes C structures by value, which compiled programs do not do on Windows ARM64 yet: they raise `ForeignError` there.
 
 ## Linux
 
@@ -86,7 +86,7 @@ Sayon for Linux x64 also builds programs for ARM64 Linux, such as a Raspberry Pi
 sudo apt install gcc-aarch64-linux-gnu libc6-dev-arm64-cross
 ```
 
-`sayon target setup linux-arm64` says whether this computer has what it needs, and `sayon doctor` lists it. Copy the program to an ARM64 Linux computer to run it, or run it here under QEMU's emulator, from the `qemu-user` package: `qemu-aarch64 -L /usr/aarch64-linux-gnu ./program`. Sayon's own tests run its programs that way; ARM hardware has not run them yet.
+`sayon target setup linux-arm64` says whether this computer has what it needs, and `sayon doctor` lists it. Copy the program to an ARM64 Linux computer to run it, or run it here under QEMU's emulator, from the `qemu-user` package: `qemu-aarch64 -L /usr/aarch64-linux-gnu ./program`. Sayon's tests run its programs that way, and on ARM64 hardware, GitHub's Linux ARM64 runners, for each change.
 
 ## Building the downloads
 

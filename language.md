@@ -1260,8 +1260,8 @@ sayon target manifest             # the capability manifest, as JSON
 | `web` | `web` | `wasm32` | built on any computer, run in Edge, Chrome, Firefox, and Node |
 | `android-x64` | `android` | `x64` | built on any computer with the Android SDK, run on Android's emulator |
 | `android-arm64` | `android` | `arm64` | built on any computer with the Android SDK, run on the emulator through Android's translation of ARM code |
-| `linux-arm64` | `linux` | `arm64` | built on Linux x64 with the ARM64 C library, run under QEMU's emulator |
-| `windows-arm64` | `windows` | `arm64` | built on Windows x64 with Visual Studio's ARM64 libraries, not run yet |
+| `linux-arm64` | `linux` | `arm64` | built and run on ARM64 Linux, and built on Linux x64 with the ARM64 C library |
+| `windows-arm64` | `windows` | `arm64` | built and run on Windows ARM64, and built on Windows x64 with Visual Studio's ARM64 libraries |
 | `macos-arm64`, `macos-x64` | `macos` | `arm64`, `x64` | checked; built from M7 on |
 | `ios-arm64`, `ios-simulator-arm64` | `ios` | `arm64` | checked; built from M7 on |
 
