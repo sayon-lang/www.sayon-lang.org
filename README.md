@@ -15,6 +15,7 @@ The references that change with the compiler stay beside its code, in [sayon-lan
 
 - [Feature ledger](https://github.com/sayon-lang/sayon/blob/main/docs/features.md): what exists, what is planned, and for which milestone
 - [Error codes](https://github.com/sayon-lang/sayon/blob/main/docs/errors.md): what each diagnostic and runtime error code means, also shown by `sayon explain CODE`
+- [Standard library API](https://github.com/sayon-lang/sayon/blob/main/docs/api.md): every export of the standard library, its declaration and what it does, written from the library's own declarations
 - [Implementation records](https://github.com/sayon-lang/sayon/blob/main/docs/implementation.md): grammar, ownership rules, cleanup order, data layouts, and the error ABI
 - [Licenses](https://github.com/sayon-lang/sayon/blob/main/docs/licenses.md): what is not Sayon's own in its files and in the programs it builds
 
