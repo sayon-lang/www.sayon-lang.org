@@ -48,6 +48,34 @@ function parse(text: string) -> Version or nothing
         push(numbers, value)
     return Version(major = numbers[0], minor = numbers[1], patch = numbers[2], pre = pre)
 
+# Whether text is a range of versions as `sayon` reads them: `*`, or
+# comparators between commas, each an operator (`>=`, `<=`, `>`, `<`, `=`,
+# `^`, `~`, or none) and one to three numbers, with a pre-release only
+# after all three.
+function valid_range(text: string) -> boolean
+    trimmed = strings.trim(text)
+    if trimmed == "*"
+        return true
+    if trimmed == ""
+        return false
+    for raw in strings.split(trimmed, ",")
+        part = strings.trim(raw)
+        for operator in [">=", "<=", ">", "<", "=", "^", "~"]
+            if strings.starts_with(part, operator)
+                part = strings.trim(strings.slice(part, length(operator), length(part)))
+                break
+        numbers = clone(part)
+        dash = strings.find(part, "-")
+        if dash != nothing
+            numbers = strings.slice(part, 0, dash)
+        pieces = strings.split(numbers, ".")
+        if length(pieces) > 3 or dash != nothing and length(pieces) != 3
+            return false
+        for piece in pieces
+            if not is_number(piece)
+                return false
+    return true
+
 private function sign(difference: integer) -> integer
     if difference < 0
         return -1
@@ -108,6 +136,12 @@ test "versions parse as semantic versioning writes them"
     assert(parse("1.0.0-beta.1") == Version(major = 1, minor = 0, patch = 0, pre = "beta.1"))
     for bad in ["1.2", "01.2.3", "1.2.3-", "1.2.3-be/ta", "a.b.c", ""]
         assert(parse(bad) == nothing, bad)
+
+test "ranges are read as sayon reads them"
+    for good in ["1", "0.2", "^1.2.3", "~ 1.2", ">=1.0, <2.0", "=1.0.0-beta.1", "*"]
+        assert(valid_range(good), good)
+    for bad in ["", "latest", "1.2.3.4", "1.2-beta", ">=", "1,", "../1"]
+        assert(not valid_range(bad), bad)
 
 test "versions are ordered"
     assert(compare_text("1.0.0-alpha", "1.0.0") < 0)

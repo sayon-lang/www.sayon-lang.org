@@ -9,6 +9,7 @@ strings = import("standard/strings.sayon")
 time = import("standard/time.sayon")
 accounts = import("src/accounts.sayon")
 archive = import("src/archive.sayon")
+files = import("src/files.sayon")
 http = import("src/http.sayon")
 index = import("src/index.sayon")
 manifest = import("src/manifest.sayon")
@@ -83,10 +84,10 @@ private function publish(request: http.Request, state: registry.State, name: str
         return http.refuse(400, "`{version}` is not a version, such as 1.0.0")
     if length(request.body) > archive.LARGEST
         return http.refuse(413, "a package holds 10 MiB at most")
-    files = archive.files(request.body)
-    if typeof(files) == "string"
-        return http.refuse(400, files)
-    text = try archive.manifest_text(request.body, files)
+    held = archive.files(request.body)
+    if typeof(held) == "string"
+        return http.refuse(400, held)
+    text = try archive.manifest_text(request.body, held)
     if text is error
         return http.refuse(400, text.message)
     read = manifest.read(text)
@@ -94,6 +95,17 @@ private function publish(request: http.Request, state: registry.State, name: str
         return http.refuse(400, read)
     if read.name != name or read.version != version
         return http.refuse(400, "the archive's sayon.toml is {read.name} {read.version}, not {name} {version}")
+    # Its dependencies are listed as `sayon` reads them, or no one could
+    # install the version.
+    for dependency in read.dependencies
+        for named in [clone(dependency.alias), clone(dependency.package)]
+            if not index.valid_name(named)
+                return http.refuse(400, "the archive's sayon.toml has a dependency named \"{named}\", which is not a package name")
+        if not semver.valid_range(dependency.requirement)
+            return http.refuse(400, "the dependency `{dependency.alias}` asks for \"{dependency.requirement}\", which is not a range of versions")
+        from = clone(dependency.registry)
+        if from != nothing and not registry.valid_address(from)
+            return http.refuse(400, "the dependency `{dependency.alias}` comes from \"{from}\", which is not a registry's address: Sayon reaches registries over HTTPS, or over HTTP on this computer")
     owners = accounts.owners(state.data)
     if haskey(owners, name) and owners[name] != account
         return http.refuse(403, "`{name}` belongs to the account `{owners[name]}`")
@@ -101,10 +113,12 @@ private function publish(request: http.Request, state: registry.State, name: str
         if entry.version == version
             return http.refuse(409, "{name} {version} is already published, and versions never change; publish a new version")
     digest = "sha256:" + crypto.hex(crypto.sha256(request.body))
-    # The archive goes first, so that no version is ever listed without one.
+    # The archive goes first, whole, so that no version is ever listed
+    # without one. After a crash between the two, the version is not listed,
+    # and publishing it again replaces the archive.
     target = registry.archive_path(state, name, version)
     filesystem.create_directory(filesystem.parent(target))
-    io.write_file_bytes(target, request.body)
+    files.save_bytes(target, request.body)
     entry = index.Entry(name = clone(name), version = clone(version), digest = clone(digest), description = clone(read.description), dependencies = clone(read.dependencies), published = time.format(time.now()))
     index.add(state.index, entry)
     if not haskey(owners, name)

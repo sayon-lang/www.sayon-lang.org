@@ -16,6 +16,22 @@ type Summary = [name: string, latest: string, description: string]
 function archive_path(state: State, name: string, version: string) -> string
     return filesystem.join(filesystem.join(filesystem.join(state.data, "archives"), name), version + ".archive")
 
+# Whether an address can be a registry's, as `sayon` reaches registries:
+# HTTPS, or plain HTTP to this computer, for a registry run locally.
+function valid_address(address: string) -> boolean
+    for symbol in ["?", "#", " ", "\""]
+        if strings.contains(address, symbol)
+            return false
+    if strings.starts_with(address, "https://")
+        rest = strings.slice(address, 8, length(address))
+        return rest != "" and not strings.starts_with(rest, "/")
+    for local in ["http://localhost", "http://127.0.0.1", "http://[::1]"]
+        if strings.starts_with(address, local)
+            rest = strings.slice(address, length(local), length(address))
+            if rest == "" or strings.starts_with(rest, ":") or strings.starts_with(rest, "/")
+                return true
+    return false
+
 # Every package, by name.
 function summaries(state: State) -> Array<Summary>
     out: Array<Summary> = []
@@ -41,3 +57,9 @@ function search(state: State, query: string, limit: integer) -> Array<Summary>
     while length(exact) > limit
         pop(exact)
     return exact
+
+test "registries are reached over HTTPS, or over HTTP on this computer"
+    for good in ["https://packages.sayon-lang.org/index", "http://127.0.0.1:4100/index", "http://localhost", "http://[::1]:80/index"]
+        assert(valid_address(good), good)
+    for bad in ["http://registry.example.com/index", "http://localhost.example.com", "https://", "https:///index", "ftp://registry.example.com", "https://a.example/index?x", ""]
+        assert(not valid_address(bad), bad)

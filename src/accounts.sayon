@@ -8,15 +8,10 @@ io = import("standard/io.sayon")
 json = import("standard/json.sayon")
 strings = import("standard/strings.sayon")
 time = import("standard/time.sayon")
+files = import("src/files.sayon")
 
 # An account: the SHA-256 of its token, in hexadecimal, and when it was made.
 type Account = [token: string, created: string]
-
-# Writes a file through a temporary one, so that it is never half written.
-function save(path: string, text: string)
-    temporary = path + ".tmp"
-    io.write_file(temporary, text)
-    filesystem.rename(temporary, path)
 
 function accounts(data: string) -> Dict<string, Account>
     file = filesystem.join(data, "accounts.json")
@@ -25,7 +20,7 @@ function accounts(data: string) -> Dict<string, Account>
     return json.decode(io.read_file(file))
 
 function save_accounts(data: string, all: Dict<string, Account>)
-    save(filesystem.join(data, "accounts.json"), json.encode_value(all))
+    files.save_text(filesystem.join(data, "accounts.json"), json.encode_value(all))
 
 # Who owns each package: the account that published it first.
 function owners(data: string) -> Dict<string, string>
@@ -35,7 +30,7 @@ function owners(data: string) -> Dict<string, string>
     return json.decode(io.read_file(file))
 
 function save_owners(data: string, all: Dict<string, string>)
-    save(filesystem.join(data, "owners.json"), json.encode_value(all))
+    files.save_text(filesystem.join(data, "owners.json"), json.encode_value(all))
 
 function hash(token: string) -> string
     return crypto.hex(crypto.sha256(strings.bytes(token)))

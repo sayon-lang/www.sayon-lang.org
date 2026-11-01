@@ -112,9 +112,11 @@ function read(update connection: network.Connection) -> Request or Response or n
         size = given
     if size > LARGEST
         return refuse(413, "a package holds 10 MiB at most")
+    # A body arrives in parts, as the network carries it, so it is read until
+    # it is whole.
     body: Array<byte> = []
     if size > 0
-        body = connection.read_bytes(size)
+        body = connection.read_exactly(size)
         if length(body) != size
             return refuse(400, "the request ended before its body did")
     target = clone(parts[1])

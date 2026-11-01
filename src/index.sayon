@@ -1,13 +1,14 @@
 # The index (PROTOCOL.md, "The index"): a folder, usually a clone of
 # packages.sayon-lang.org-index, with a file for each package, which holds
 # a line of JSON for each of its versions, oldest first. Lines are only
-# ever added.
+# ever added, each by writing the file anew.
 
 filesystem = import("standard/filesystem.sayon")
 io = import("standard/io.sayon")
 json = import("standard/json.sayon")
 os = import("standard/os.sayon")
 strings = import("standard/strings.sayon")
+files = import("src/files.sayon")
 manifest = import("src/manifest.sayon")
 semver = import("src/semver.sayon")
 
@@ -54,12 +55,17 @@ function entries(folder: string, name: string) -> Array<Entry>
     return out
 
 # Adds a version's line to its package's file, and commits it when the
-# folder is a Git repository.
+# folder is a Git repository. The file is written anew, whole, through a
+# temporary one, so that a crash never leaves half a line, which would
+# keep every version of the package from being read.
 function add(folder: string, entry: Entry)
     relative = path(entry.name)
     file = filesystem.join(folder, relative)
     filesystem.create_directory(filesystem.parent(file))
-    io.append_file(file, json.encode_value(entry) + "\n")
+    text = ""
+    if filesystem.is_file(file)
+        text = io.read_file(file)
+    files.save_text(file, text + json.encode_value(entry) + "\n")
     if filesystem.exists(filesystem.join(folder, ".git"))
         added = os.run("git", ["-C", clone(folder), "add", clone(relative)])
         if added.status != 0

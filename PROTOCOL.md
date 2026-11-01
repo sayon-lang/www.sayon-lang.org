@@ -18,9 +18,11 @@ Its files are plain text, read with `GET`; Sayon reads only those it needs.
 
 A dependency's `registry` is `null` when it comes from the same registry. The latest version is the greatest release, or before the first release the greatest pre-release.
 
+Sayon reads each line as it reads a manifest, since an index could lie: a version of semantic versioning, a digest of `sha256:` and 64 lowercase hexadecimal digits, and dependencies whose aliases and packages are names, whose requirements are ranges `sayon.toml` could hold, and whose `registry` is reached over HTTPS or on this computer. A file with a line it cannot read gives no versions, and it shows the text a registry sends, such as a description or a refusal, without control characters.
+
 ## The API
 
-Under `<api>/api/v1`; answers are JSON, but archives. A request the registry refuses gets a status of 400 or more and `{"error": "<why, in a sentence>"}`, which Sayon shows as it is.
+Under `<api>/api/v1`; answers are JSON, but archives. A request the registry refuses gets a status of 400 or more and `{"error": "<why, in a sentence>"}`, which Sayon shows as it is, but for control characters. Sayon reads an answer of 32 MiB at most.
 
 | Request | Answer |
 | --- | --- |
@@ -35,20 +37,20 @@ Under `<api>/api/v1`; answers are JSON, but archives. A request the registry ref
 
 An archive is the package's files in one sequence of bytes: `sayon-package-digest-1` and a NUL byte, then for each file, in the order of its path (with `/`, compared byte by byte), the length of its path, the path, the length of its contents, and the contents, each length 8 bytes, least significant first. The archive's SHA-256, written `sha256:<hex>`, is the version's digest in the index, and the same digest `sayon.lock` records for the files it unpacks to.
 
-A package holds every file of its folder but those with a part starting with `.`, and `build`, `target`, and `sayon.lock` at its top. Its archive is 10 MiB at most, with 10,000 files at most. Both sides refuse an archive with a path that is absolute, has `..`, `\`, `:`, or a hidden part, comes out of order or twice, or differs from another only in case.
+A package holds every file of its folder but those with a part starting with `.`, and `build`, `target`, and `sayon.lock` at its top. Its archive is 10 MiB at most, with 10,000 files at most. Both sides refuse an archive with a path that is absolute, has `..`, `\`, `:`, or a hidden part, comes out of order or twice, or differs from another only in case. Sayon checks an archive's digest against the index before it unpacks the archive, and unpacks it into a temporary folder, renamed into its cache once whole.
 
 ## Publishing
 
-A publication's archive must have a `sayon.toml` naming the same package and version as the address, with a version of semantic versioning (`1.2.3`, `1.2.3-beta.1`), and every dependency from a registry. The registry refuses:
+A publication's archive must have a `sayon.toml` naming the same package and version as the address, with a version of semantic versioning (`1.2.3`, `1.2.3-beta.1`), and every dependency from a registry, as Sayon reads an index's lines: named by names, with a range, and from this registry or one reached over HTTPS or on this computer. The registry refuses:
 
 - 401 without a token it knows;
 - 403 when the name belongs to another account: the account that published a name first owns it;
 - 409 when the version is published already, since a version never changes;
-- 413 for an archive over 10 MiB;
+- 413 for an archive over 10 MiB, as soon as the request's `Content-Length` says so;
 - 400 for an archive it cannot read, and for the rest.
 
-It keeps the archive first, then adds the version's line to the index, so that the index never lists a version without one. Names are lowercase letters, digits, and `_`, starting with a letter, 64 characters at most, for packages and accounts alike.
+It keeps the archive first, then adds the version's line to the index, so that the index never lists a version without one. It writes each of its files whole, the archive, the package's file of the index, the accounts, and the owners, through a temporary file renamed over it, so that a crash or a power cut never leaves one half written: at worst it leaves an archive the index does not list, which publishing the version again replaces. Names are lowercase letters, digits, and `_`, starting with a letter, 64 characters at most, for packages and accounts alike.
 
 ## Accounts
 
-The registry's operator makes accounts: with `--account` when the registry starts, or `POST /api/v1/users` with the operator's token. Each account has one token, 32 random bytes from the system's secure source, shown once; the registry keeps only its SHA-256. `"replace": true` gives an account a new token, and the old one stops working. `sayon login` checks a token with `GET /api/v1/me` before keeping it.
+The registry's operator makes accounts: with `--account` when the registry starts, or `POST /api/v1/users` with the operator's token. Each account has one token, 32 random bytes from the system's secure source, shown once; the registry keeps only its SHA-256. `"replace": true` gives an account a new token, and the old one stops working. `sayon login` checks a token with `GET /api/v1/me` before keeping it, with the account's name, which must be a name.
