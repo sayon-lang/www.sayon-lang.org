@@ -172,13 +172,21 @@ print(identity(42), identity("text"))   # 42 text
 print(add(1, 2), add("con", "cat"))     # 3 concat
 ```
 
-Generic functions can also be written explicitly. Values of an explicit type parameter can be moved, borrowed, cloned, and converted to and from JSON; cloning or converting one makes it a requirement of the parameter, so a call with a type that cannot be cloned, such as an open file, is an error where it is written. Other operations, such as `+` or `==`, need an inferred parameter instead.
+Generic functions can also be written explicitly. Values of an explicit type parameter can be moved, borrowed, cloned, compared with `==` and `<`, and converted to and from JSON. Cloning, comparing, or converting one makes it a requirement of the parameter, so a call with a type that cannot do it, such as an open file to clone or a structure to order with `<`, is an error where it is written. Other operations, such as `+`, need an inferred parameter instead.
 
 ```sayon
 function wrap<T>(own value: T) -> Array<T>
     return [value]
 
+function largest<T>(items: Array<T>) -> T or nothing
+    variable best: T or nothing = nothing
+    for item in items
+        if best == nothing or best < item
+            best = clone(item)
+    return best
+
 numbers = wrap<integer>(42)
+print(largest([3, 8, 5]), largest(["fig", "apple"]))   # 8 fig
 ```
 
 Generic functions with written types can call each other, each with type arguments of its own, as `count_leaves<T>(tree: Tree<T>)` and `count_all<T>(trees: Array<Tree<T>>)` can for a tree. A generic function that calls itself through other functions needs the types of its parameters and its result written (`E_GENERIC_RECURSION`), and what one function of such a cycle requires of its type parameter, the functions calling it with theirs require too. Each set of type arguments makes a version of the function, so one that calls itself with a type argument that grows each time, as `nest([value])` inside `nest<T>(own value: T)` would, is an error (`E_SPECIALIZATION_LIMIT`).
@@ -810,7 +818,7 @@ Standard modules are imported like any module, with a `standard/` path. Each mod
 | `standard/network.sayon` | `connect` for a `Connection` (`read_line`, `lines`, `read`, `read_bytes`, `write`, `write_line`, `write_bytes`, `flush`, `finish_sending`, `set_timeout`, `local_address`, `peer_address`, `close`), `listen` for a `Listener` (`accept`, `address`, `set_timeout`, `close`), `bind` for a `DatagramSocket` (`send`, `receive`, `address`, `set_timeout`, `close`), `resolve`, `address_text`; HTTP: `get`, `post`, `request`, and `Response` (`text`, `header`, `succeeded`); see [Networking](#networking) |
 | `standard/graphics.sayon` | `canvas`, `image`, `decode_image`, and `load_image` for a `Canvas` (`smooth`, `clear`, `fill_rectangle`, `stroke_rectangle`, `fill_circle`, `fill_polygon`, `line`, `draw`, `text`, `write`, `pixel`, `bytes`, `png`, `save_png`), `text_width`, `text_height`, `decode_font`, `load_font`, and `system_font` for a `Font` (`name`, `ascent`, `descent`, `line_height`, `width`, `height`), colors (`Color`, `rgb`, `rgba`, `BLACK`, `WHITE`, `RED`, `GREEN`, `BLUE`, `TRANSPARENT`), `Point`; `open` for a `Window` (`events`, `present`, `width`, `height`, `scale`, `is_open`, `close`) and its `Event`s; see [Graphics](#graphics) |
 | `standard/time.sayon` | `Duration` (`nanoseconds`, `microseconds`, `milliseconds`, `seconds`, `minutes`, `hours`, `add`, `subtract`, `scale`, `in_seconds`, `in_milliseconds`, `describe`), the monotonic clock (`start`, `elapsed`, `between`, `sleep`), `deadline` for a `Deadline` (`remaining`, `passed`, `wait`), `ticker` for a `Ticker` (`wait`), and UTC dates (`DateTime`, `now`, `unix_seconds`, `from_unix`, `to_unix`, `shift`, `difference`, `weekday`, `is_leap_year`, `days_in_month`, `format` and `parse` for ISO 8601), time zones (`zone` for a `Zone` with `at`, `moment`, `offset`; `ZonedTime` with `format`, `moment`; `local_zone`, `zones_version`) |
-| `standard/collections.sayon` | `sort` and `sort_by` (stable), `reverse`; `Set<T>` with `new_set`, `set_add`, `set_contains`, `set_remove`, `set_size`, `set_values` (as methods: `set.add(value)`); `Queue<T>` with `new_queue`, `queue_add`, `queue_take`, `queue_size` |
+| `standard/collections.sayon` | `sort` and `sort_by` (stable), `reverse`; `Set<T>` with `new_set`, `set_add`, `set_contains`, `set_remove`, `set_size`, `set_values` (as methods: `set.add(value)`); `Queue<T>` with `new_queue` and `add`, `take`, `peek`, `size`, `values`; `Stack<T>` with `new_stack` and `push`, `pop`, `peek`, `size`, `values`; `List<T>` with `new_list` and `add_first`, `add_last`, `add_before`, `add_after`, `take`, `take_first`, `take_last`, `get`, `set`, `first`, `last`, `after`, `before`, `find`, `size`, `values`; `Map<K, V>` with `new_map` and `set`, `get`, `contains`, `remove`, `size`, `keys`, `values`, `first`, `last`, `before`, `after`, `between`; see [Collections](#collections) |
 | `standard/memory.sayon` | `read`, `write`, `size`, `read_bytes`, `write_bytes`, `read_text`, `offset`, `address`; see [C functions and unsafe code](#c-functions-and-unsafe-code) |
 | `standard/math.sayon` | `PI`, `E`, `TAU`, `sqrt`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2`, `exp`, `log`, `log10`, `log2`, `pow`, `floor`, `ceil`, `round`, `trunc`, `abs`, `min`, `max`, `clamp`, `random`; `new_generator(seed)` for a `Generator` (`float`, `integer`, `shuffle`) |
 | `standard/crypto.sayon` | `sha256` (32 bytes), `random_bytes` (from the system's secure source, 1 MiB at most at a time), `hex`, `same` (compares every byte, for secrets) |
@@ -857,6 +865,33 @@ sorting.wait()
 `os.exit(status)` ends the program with a status from 0 to 255 (another status raises `ValueError`). It ends it in order: `finally` blocks run and values are cleaned up on the way out, so open files are written, but `catch` and `try` do not stop it. In a test, it fails the test.
 
 `filesystem.walk(path)` lists every file and directory below `path`, as paths relative to it joined with `/`. Each directory comes just before what it holds, and each directory's entries are sorted by name. A symbolic link is listed but not followed, so a walk always ends; `filesystem.is_link(path)` tells whether a path is one.
+
+### Collections
+
+Beside arrays and dictionaries, `standard/collections` has a `Set`, which holds each value once; a `Queue`, which gives values back in the order they came, and a `Stack`, in the opposite order; a `List`; and a `Map`. A collection owns its values: adding one moves it in, and taking one out gives it back, while `get`, `peek`, and `values` give copies.
+
+A `Map` keeps its keys in order, smallest first, where a dictionary keeps the order they were added in. Its keys are numbers or strings, floats too, but not NaN. Looking a key up, adding one, removing one, and finding the keys around a key take time proportional to log n for n keys. A `List` keeps values in a sequence where adding or taking out a value anywhere takes constant time: each value added gets a `Position`, which names it until it is taken out, however the list changes around it. Using a position whose value was taken out is a `ValueError`.
+
+```sayon
+collections = import("standard/collections.sayon")
+
+prices = collections.new_map()
+prices.set(1.5, "tea")
+prices.set(0.75, "water")
+prices.set(3.0, "cake")
+print(prices.keys())                 # [0.75, 1.5, 3.0]
+print(prices.after(1.5))             # 3.0
+print(prices.between(0.5, 2.0))      # [0.75, 1.5]
+
+line = collections.new_list()
+first = line.add_last("ada")
+line.add_last("cy")
+line.add_after(first, "bo")          # ada, bo, cy
+line.take(first)
+print(line.values())                 # ["bo", "cy"]
+```
+
+`==` compares two sets by their values, in any order, and two stacks by their values in order. How a queue, a list, or a map is kept depends on the order of its changes, so `==` can find two of the same values different: compare their `values()`, and a map's `keys()`, instead.
 
 ### Files
 
