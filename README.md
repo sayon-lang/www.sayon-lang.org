@@ -10,7 +10,7 @@ Sayon's website, and the only one: what [Sayon](https://github.com/sayon-lang/sa
 
 ## On this computer
 
-With Sayon, and nothing else, from this folder:
+With Sayon, and nothing else, from this folder (a Sayon whose `standard/graphics` reads JPEG images and draws them scaled, as sayon-lang/sayon's main branch does):
 
 ```bash
 sayon run -- --port 4100
@@ -45,7 +45,7 @@ It serves the website at `http://127.0.0.1:4100`:
 
 - `src/pages`: the first page, and the guides, made HTML once as the website starts;
 - `src/packages`: the registry's API and index, checking archives and manifests as `sayon` does, and its pages;
-- `src/accounts`: accounts with passwords kept by `crypto.hash_password`, tokens kept as their SHA-256, browsers signed in, the sign-ins `sayon login` starts, pictures (cut to a square of 256 pixels in the browser by `static/site.js`, sent as PNG, and kept in `data/pictures` as their pixels alone, decoded and encoded again), and the pages for all of them;
+- `src/accounts`: accounts with passwords kept by `crypto.hash_password`, tokens kept as their SHA-256, browsers signed in, the sign-ins `sayon login` starts, pictures (a PNG or JPEG image sent by a plain form, as multipart/form-data, decoded and turned as a photo's orientation says, its middle square made 256 pixels a side on a thread of its own, and kept in `data/pictures` as its pixels alone), and the pages for all of them;
 - `src/community`: the forum, with its threads in `data/community`: categories, posts in Markdown shown safely (HTML as text, links only to the web, marked as the poster's), solved questions in Help, reports, and the moderators' tools; a new account posts ten times a day in its first week, and a verified email posts;
 - `src/web`: HTTP with cookies and forms, Markdown, Sayon's highlighting, and the frame every page shares, in the look of `static/style.css` and `static/site.js`.
 

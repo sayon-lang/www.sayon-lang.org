@@ -44,6 +44,19 @@ function send_bytes(port: integer, method: string, target: string, headers: Dict
         size = strings.parse_integer(headers_read["content-length"])
     return Bytes(status = status, headers = headers_read, body = connection.read_exactly(size))
 
+# A form of one file as a browser sends it, as multipart/form-data: the
+# Content-Type to send it with, and its body.
+type Multipart = [kind: string, body: Array<byte>]
+
+function multipart(field: string, file: string, kind: string, bytes: Array<byte>) -> Multipart
+    boundary = "----SayonTestBoundary7MA4YWxkTrZu0gW"
+    body = strings.bytes("--{boundary}\r\nContent-Disposition: form-data; name=\"{field}\"; filename=\"{file}\"\r\nContent-Type: {kind}\r\n\r\n")
+    for value in bytes
+        push(body, value)
+    for value in strings.bytes("\r\n--{boundary}--\r\n")
+        push(body, value)
+    return Multipart(kind = "multipart/form-data; boundary={boundary}", body = body)
+
 # A fresh data folder, and the state of a website serving it at `port`.
 function website(data: string, port: integer) -> registry.State
     clear(data)

@@ -1688,10 +1688,6 @@ input[type="file"].input {
   cursor: pointer;
 }
 
-.hint.problem {
-  color: var(--danger);
-}
-
 .secret {
   margin-bottom: 12px;
   overflow-wrap: anywhere;

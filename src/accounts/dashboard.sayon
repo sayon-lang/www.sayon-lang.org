@@ -21,9 +21,6 @@ layout = import("src/web/layout.sayon")
 
 constant SIGN_IN = "/sign-in?next=%2Faccount"
 
-# How many pixels a side the settings page's script makes a picture.
-constant PICTURE_SIDE = 256
-
 # The packages an account owns, as lists show them.
 function owned(state: registry.State, account: string) -> Array<registry.Summary>
     names = accounts.packages_of(accounts.owners(state.data), account)
@@ -251,16 +248,14 @@ function settings_page(state: registry.State, view: layout.Visitor, done: string
     push(body, "    <section class=\"box\" id=\"picture\" aria-labelledby=\"picture-title\">")
     push(body, "      <div class=\"box-head\"><h2 id=\"picture-title\">Picture</h2></div>")
     push(body, "      <div class=\"box-body picture-box\">")
-    push(body, "        <div class=\"picture-now\" data-picture-preview>{layout.avatar(account, record.picture, "large")}</div>")
-    push(body, "        <form class=\"picture-form\" method=\"post\" action=\"/account/picture\" data-picture>")
+    push(body, "        <div class=\"picture-now\">{layout.avatar(account, record.picture, "large")}</div>")
+    push(body, "        <form class=\"picture-form\" method=\"post\" action=\"/account/picture\" enctype=\"multipart/form-data\">")
     push(body, "          <div class=\"field\">")
     push(body, "            <label for=\"field-picture\">Choose a picture</label>")
-    push(body, "            <input class=\"input\" id=\"field-picture\" type=\"file\" accept=\"image/png,image/jpeg,image/webp,image/gif\" aria-describedby=\"field-picture-hint\" data-picture-file>")
-    push(body, "            <p class=\"hint\" id=\"field-picture-hint\">A PNG, JPEG, WebP, or GIF image. Your browser cuts it to a square of {PICTURE_SIDE} pixels before sending it, without anything else the file holds. It shows on your profile and beside your posts.</p>")
-    push(body, "            <noscript><p class=\"hint\">Choosing a picture needs JavaScript, which cuts it to a square in your browser.</p></noscript>")
-    push(body, "            <p class=\"hint problem\" role=\"alert\" data-picture-problem hidden></p>")
+    push(body, "            <input class=\"input\" id=\"field-picture\" name=\"picture\" type=\"file\" accept=\"image/png,image/jpeg\" required aria-describedby=\"field-picture-hint\">")
+    push(body, "            <p class=\"hint\" id=\"field-picture-hint\">A PNG or JPEG image, such as a photo, 10 MB at most. The website keeps its middle square at {pictures.SIDE} pixels a side, and nothing else the file holds, such as where a photo was taken. It shows on your profile and beside your posts.</p>")
     push(body, "          </div>")
-    push(body, "          <button class=\"button\" type=\"submit\" disabled data-picture-save>Save the picture</button>")
+    push(body, "          <button class=\"button\" type=\"submit\">Save the picture</button>")
     push(body, "        </form>")
     if record.picture != nothing
         push(body, "        <form class=\"picture-remove\" method=\"post\" action=\"/account/picture/remove\"><button class=\"button quiet\" type=\"submit\">Remove the picture</button></form>")
@@ -369,25 +364,30 @@ function change_profile(request: http.Request, state: registry.State, view: layo
     accounts.save_accounts(state.data, all)
     return http.redirect("/account/settings?done=profile")
 
-# Keeps a new picture for the account, sent as the body of the request by
-# the settings page's script: a square PNG, which `pictures` checks and
-# keeps as its pixels alone. Refusals are JSON, which the script shows.
+# Keeps a new picture for the account, from the image the settings page's
+# form sends: `pictures` checks it, and keeps its middle square as pixels
+# alone.
 function change_picture(request: http.Request, state: registry.State, view: layout.Visitor) -> http.Response
     account = signed_in_account(view)
     if account == nothing
-        return http.refuse(401, "Sign in again to change your picture.")
+        return http.redirect(SIGN_IN)
     if not pages.from_here(request, state)
-        return http.refuse(403, "Pictures are sent from the website's own settings page.")
-    wrong = pictures.problem(request.body)
+        return settings_page(state, view, "", pages.FOREIGN, 403)
+    sent = http.upload(request, "picture")
+    if sent == nothing
+        return settings_page(state, view, "", "Choose a picture first.", 400)
+    wrong = pictures.problem(sent.bytes)
     if wrong != ""
-        return http.refuse(400, wrong)
-    png = try pictures.cleaned(request.body)
+        return settings_page(state, view, "", wrong, 400)
+    png = try pictures.made_apart(sent.bytes)
     if png is error
-        return http.refuse(400, "That PNG image is damaged. Choose the picture again.")
+        return settings_page(state, view, "", "That image could not be read; it may be damaged. Choose another.", 400)
     version = pictures.keep(state.data, account, png)
+    # The image was made on a thread of its own while others were answered,
+    # so the accounts are read now.
     all = accounts.accounts(state.data)
     if not haskey(all, account)
-        return http.refuse(401, "Sign in again to change your picture.")
+        return http.redirect(SIGN_IN)
     all[account].picture = version
     accounts.save_accounts(state.data, all)
     return http.redirect("/account/settings?done=picture")

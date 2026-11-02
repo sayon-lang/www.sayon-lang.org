@@ -194,6 +194,84 @@ function form(request: Request) -> Dict<string, string>
         return []
     return parse_query(content)
 
+# A part of a form sent as multipart/form-data, as a form with a file is:
+# its field's name, the file's name and type as the browser gave them, and
+# its bytes.
+type Upload = [field: string, file: string, kind: string, bytes: Array<byte>]
+
+# The boundary between the parts of a multipart/form-data body, or "".
+private function boundary_of(request: Request) -> string
+    if not haskey(request.headers, "content-type")
+        return ""
+    kind = clone(request.headers["content-type"])
+    if not strings.starts_with(strings.lower(kind), "multipart/form-data")
+        return ""
+    at = strings.find(strings.lower(kind), "boundary=")
+    if at == nothing
+        return ""
+    value = strings.slice(kind, at + 9, length(kind))
+    end = strings.find(value, ";")
+    if end != nothing
+        value = strings.slice(value, 0, end)
+    value = strings.trim(value)
+    if length(value) >= 2 and strings.starts_with(value, "\"") and strings.ends_with(value, "\"")
+        value = strings.slice(value, 1, length(value) - 1)
+    return value
+
+# A parameter of a part's Content-Disposition, such as `name="picture"`.
+private function parameter(head: string, name: string) -> string
+    at = strings.find(head, "; {name}=\"")
+    if at == nothing
+        return ""
+    value = strings.slice(head, at + length(name) + 4, length(head))
+    end = strings.find(value, "\"")
+    if end == nothing
+        return ""
+    return strings.slice(value, 0, end)
+
+# A header of a part, by its name in lowercase, or "".
+private function part_header(head: string, name: string) -> string
+    for line in strings.split(head, "\r\n")
+        colon = strings.find(line, ":")
+        if colon != nothing and strings.lower(strings.trim(strings.slice(line, 0, colon))) == name
+            return strings.trim(strings.slice(line, colon + 1, length(line)))
+    return ""
+
+# The parts of a form sent as multipart/form-data, in order. The body is
+# read as Latin-1, a character for each byte, so that it is searched as
+# text and each part's bytes come back as they were sent.
+function form_parts(request: Request) -> Array<Upload>
+    out: Array<Upload> = []
+    boundary = boundary_of(request)
+    if boundary == ""
+        return out
+    latin = strings.decode(request.body, "latin-1")
+    delimiter = "--" + boundary
+    start = strings.find(latin, delimiter)
+    if start == nothing
+        return out
+    rest = strings.slice(latin, start + length(delimiter), length(latin))
+    while strings.starts_with(rest, "\r\n")
+        head_end = strings.find(rest, "\r\n\r\n")
+        if head_end == nothing
+            break
+        head = strings.slice(rest, 2, head_end)
+        rest = strings.slice(rest, head_end + 4, length(rest))
+        end = strings.find(rest, "\r\n" + delimiter)
+        if end == nothing
+            break
+        content = strings.slice(rest, 0, end)
+        push(out, Upload(field = parameter(head, "name"), file = parameter(head, "filename"), kind = part_header(head, "content-type"), bytes = strings.encode(content, "latin-1")))
+        rest = strings.slice(rest, end + 2 + length(delimiter), length(rest))
+    return out
+
+# The first part a form sent for a field, or nothing.
+function upload(request: Request, field: string) -> Upload or nothing
+    for part in form_parts(request)
+        if part.field == field
+            return clone(part)
+    return nothing
+
 # The token of `Authorization: Bearer <token>`.
 function bearer(request: Request) -> string or nothing
     if not haskey(request.headers, "authorization")
@@ -232,3 +310,17 @@ test "cookies are found by name"
     request = Request(method = "GET", target = "/", path = "/", query = [], headers = headers, body = [], client = "127.0.0.1")
     assert(cookie(request, "sayon_session") == "ab12" and cookie(request, "other") == "x=y")
     assert(cookie(request, "session") == nothing)
+
+test "the parts of a form with a file come back as they were sent"
+    file: Array<byte> = [255, 216, 0, 13, 10, 45, 45, 128, 200, 13]
+    body = strings.bytes("--XyZ\r\nContent-Disposition: form-data; name=\"note\"\r\n\r\nhello\r\n--XyZ\r\nContent-Disposition: form-data; name=\"picture\"; filename=\"me.jpg\"\r\nContent-Type: image/jpeg\r\n\r\n")
+    for value in file
+        push(body, value)
+    for value in strings.bytes("\r\n--XyZ--\r\n")
+        push(body, value)
+    headers: Dict<string, string> = ["content-type" = "multipart/form-data; boundary=\"XyZ\""]
+    request = Request(method = "POST", target = "/", path = "/", query = [], headers = headers, body = body, client = "127.0.0.1")
+    found = form_parts(request)
+    assert(length(found) == 2 and found[0].field == "note" and strings.from_bytes(found[0].bytes) == "hello" and found[0].file == "")
+    assert(found[1].field == "picture" and found[1].file == "me.jpg" and found[1].kind == "image/jpeg" and found[1].bytes == file)
+    assert(upload(request, "picture") != nothing and upload(request, "missing") == nothing)

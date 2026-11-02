@@ -1,4 +1,5 @@
 graphics = import("standard/graphics.sayon")
+io = import("standard/io.sayon")
 network = import("standard/network.sayon")
 strings = import("standard/strings.sayon")
 threads = import("standard/threads.sayon")
@@ -9,11 +10,23 @@ client = import("tests/client.sayon")
 # How many requests the test's server answers.
 constant REQUESTS = 40
 
-# A square of one color, `side` pixels a side, as PNG.
-function square(side: integer, color: graphics.Color) -> Array<byte>
-    canvas = graphics.canvas(side, side)
-    canvas.clear(color)
+# A PNG of two colors side by side, `width` by `height` pixels.
+function halves(width: integer, height: integer) -> Array<byte>
+    canvas = graphics.canvas(width, height)
+    canvas.fill_rectangle(0, 0, width / 2, height, graphics.rgb(200, 30, 20))
+    canvas.fill_rectangle(width / 2, 0, width - width / 2, height, graphics.rgb(20, 40, 210))
     return canvas.png()
+
+# A JPEG image with an EXIF segment after its start saying it is shown
+# turned a quarter clockwise, as a phone held upright writes it.
+function upright(jpeg: Array<byte>) -> Array<byte>
+    out: Array<byte> = [255, 216, 255, 225, 0, 34]
+    exif: Array<byte> = [69, 120, 105, 102, 0, 0, 77, 77, 0, 42, 0, 0, 0, 8, 0, 1, 1, 18, 0, 3, 0, 0, 0, 1, 0, 6, 0, 0, 0, 0, 0, 0]
+    for value in exif
+        push(out, value)
+    for index in range(2, length(jpeg))
+        push(out, jpeg[index])
+    return out
 
 # The first `count` bytes.
 function first_bytes(bytes: Array<byte>, count: integer) -> Array<byte>
@@ -22,7 +35,25 @@ function first_bytes(bytes: Array<byte>, count: integer) -> Array<byte>
         push(out, bytes[index])
     return out
 
-test "a picture is chosen, kept as its pixels, shown, and removed"
+# The headers of a form with a file, from someone's form headers.
+function with_file(headers: Dict<string, string>, form: client.Multipart) -> Dict<string, string>
+    out: Dict<string, string> = clone(headers)
+    out["Content-Type"] = clone(form.kind)
+    return out
+
+# Sends a picture as the settings page's form does.
+function choose(update talk: client.Talk, headers: Dict<string, string>, file: string, kind: string, bytes: Array<byte>) -> client.Bytes
+    form = client.multipart("picture", file, kind, bytes)
+    return client.ask_bytes(talk, "POST", "/account/picture", with_file(headers, form), form.body)
+
+# The picture an account has, decoded.
+function picture_of(update talk: client.Talk, data: string, name: string) -> graphics.Canvas
+    version = clone(accounts.accounts(data)[name].picture)
+    if version == nothing
+        error("{name} has no picture")
+    return graphics.decode_image(client.ask_bytes(talk, "GET", "/users/{name}/picture?v={version}", [], []).body)
+
+test "a picture is chosen, kept as its middle square, shown, and removed"
     data = "build/test-pictures"
     listener = network.listen("127.0.0.1", 0)
     port = listener.address().port
@@ -37,13 +68,10 @@ test "a picture is chosen, kept as its pixels, shown, and removed"
     all = accounts.accounts(data)
     all["moe"].role = "moderator"
     accounts.save_accounts(data, all)
-    picture: Dict<string, string> = clone(ada)
-    picture["Content-Type"] = "image/png"
 
-    # Ada's picture is kept as its pixels, at an address for its version.
-    sent = square(256, graphics.rgb(30, 120, 200))
-    saved = client.ask_bytes(talk, "POST", "/account/picture", picture, sent)
-    assert(saved.status == 303 and saved.headers["location"] == "/account/settings?done=picture")
+    # A PNG wider than high: its middle square is kept, at 256 pixels.
+    saved = choose(talk, ada, "halves.png", "image/png", halves(64, 32))
+    assert(saved.status == 303 and saved.headers["location"] == "/account/settings?done=picture", strings.from_bytes_lossy(saved.body))
     known = clone(accounts.accounts(data)["ada"].picture)
     if known == nothing
         error("ada has no picture")
@@ -51,36 +79,47 @@ test "a picture is chosen, kept as its pixels, shown, and removed"
     shown = client.ask_bytes(talk, "GET", address, [], [])
     assert(shown.status == 200 and shown.headers["content-type"] == "image/png" and shown.headers["x-content-type-options"] == "nosniff")
     assert(strings.contains(shown.headers["cache-control"], "immutable"))
-    assert(shown.body == graphics.canvas_png(graphics.decode_image(sent)))
     image = graphics.decode_image(shown.body)
-    assert(image.width == 256 and image.pixel(100, 100) == graphics.rgb(30, 120, 200))
+    assert(image.width == 256 and image.height == 256)
+    assert(image.pixel(60, 128) == graphics.rgb(200, 30, 20) and image.pixel(196, 128) == graphics.rgb(20, 40, 210))
 
     # It shows in the bar, in the settings, on the profile, and beside posts.
     settings = client.ask(talk, "GET", "/account/settings", ada, "")
     assert(strings.contains(settings.body, "<img class=\"initial\" src=\"{address}\" alt=\"\">") and strings.contains(settings.body, "<img class=\"initial large\" src=\"{address}\" alt=\"\">"), settings.body)
+    assert(strings.contains(settings.body, "enctype=\"multipart/form-data\"") and not strings.contains(settings.body, "<script>"))
     assert(strings.contains(client.ask(talk, "GET", "/users/ada", [], "").body, "src=\"{address}\""))
     assert(client.ask(talk, "POST", "/community/new", ada, "category=ideas&title=Pictures+beside+posts&text=They+show.").status == 303)
     assert(strings.contains(client.ask(talk, "GET", "/community/ideas/1", [], "").body, "src=\"{address}\""))
 
-    # What is not a square PNG of a size, or is damaged, is refused, as JSON.
-    oblong = graphics.canvas(64, 32)
-    refused = client.ask_bytes(talk, "POST", "/account/picture", picture, oblong.png())
-    assert(refused.status == 400 and strings.contains(strings.from_bytes(refused.body), "square"))
-    assert(client.ask_bytes(talk, "POST", "/account/picture", picture, square(600, graphics.WHITE)).status == 400)
-    script = strings.bytes("<svg xmlns=\"http://www.w3.org/2000/svg\" onload=\"alert(1)\"></svg>")
-    assert(client.ask_bytes(talk, "POST", "/account/picture", picture, script).status == 400)
-    broken = client.ask_bytes(talk, "POST", "/account/picture", picture, first_bytes(sent, 60))
-    assert(broken.status == 400 and strings.contains(strings.from_bytes(broken.body), "damaged"))
-    outside: Dict<string, string> = clone(picture)
+    # A photo is turned as its orientation says: red, its top left corner,
+    # is shown at the top right, and blue at the top left.
+    photo = io.read_file_bytes("tests/photo.jpg")
+    assert(choose(talk, ada, "photo.jpg", "image/jpeg", upright(photo)).status == 303)
+    turned = picture_of(talk, data, "ada")
+    right = turned.pixel(200, 50)
+    left = turned.pixel(50, 50)
+    assert(right.red > 180 and right.blue < 90 and left.blue > 160 and left.red < 90)
+    kept = clone(accounts.accounts(data)["ada"].picture)
+
+    # What is not a PNG or JPEG image, nothing, too large, or damaged is
+    # refused, saying why, and the picture stays.
+    refused = choose(talk, ada, "notes.txt", "text/plain", strings.bytes("Not a picture at all."))
+    assert(refused.status == 400 and strings.contains(strings.from_bytes(refused.body), "not a PNG or JPEG image"))
+    assert(strings.contains(strings.from_bytes(choose(talk, ada, "", "application/octet-stream", []).body), "Choose a picture first."))
+    huge: Array<byte> = [137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 39, 16, 0, 0, 39, 16, 8, 6, 0, 0, 0]
+    assert(strings.contains(strings.from_bytes(choose(talk, ada, "huge.png", "image/png", huge).body), "too large"))
+    broken = choose(talk, ada, "broken.jpg", "image/jpeg", first_bytes(photo, 200))
+    assert(broken.status == 400 and strings.contains(strings.from_bytes(broken.body), "could not be read"))
+    assert(client.ask(talk, "POST", "/account/picture", ada, "picture=nothing").status == 400)
+    outside: Dict<string, string> = clone(ada)
     outside["Origin"] = "https://elsewhere.example"
-    assert(client.ask_bytes(talk, "POST", "/account/picture", outside, sent).status == 403)
-    assert(client.ask_bytes(talk, "POST", "/account/picture", ["Origin" = "http://127.0.0.1:{port}"], sent).status == 401)
-    assert(accounts.accounts(data)["ada"].picture == known)
+    assert(choose(talk, outside, "photo.jpg", "image/jpeg", photo).status == 403)
+    assert(choose(talk, ["Origin" = "http://127.0.0.1:{port}"], "photo.jpg", "image/jpeg", photo).status == 303)
+    assert(accounts.accounts(data)["ada"].picture == kept)
 
     # A moderator removes a member's picture, and Ada her own.
-    others: Dict<string, string> = clone(who["bob"])
-    others["Content-Type"] = "image/png"
-    assert(client.ask_bytes(talk, "POST", "/account/picture", others, square(64, graphics.BLACK)).status == 303)
+    assert(choose(talk, clone(who["bob"]), "photo.jpg", "image/jpeg", photo).status == 303)
+    assert(accounts.accounts(data)["bob"].picture != nothing)
     assert(client.ask(talk, "POST", "/community/members", moe, "name=bob&action=remove-picture").status == 303)
     assert(accounts.accounts(data)["bob"].picture == nothing)
     assert(client.ask(talk, "POST", "/account/picture/remove", ada, "").status == 303)

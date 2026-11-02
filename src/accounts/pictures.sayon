@@ -1,57 +1,55 @@
 # Profile pictures: a PNG for each account that chose one, kept in
-# `<data>/pictures/<name>.png`. The settings page's script cuts the image
-# to a square in the browser and sends it as PNG; the website checks its
-# header, decodes it, and keeps it encoded again from its pixels alone, so
-# that nothing else it held, such as where a photo was taken, stays.
+# `<data>/pictures/<name>.png`. The settings page's form sends a PNG or JPEG
+# image as it is; the website decodes it, turned as a photo's orientation
+# says, takes its middle square, makes it SIDE pixels a side, and keeps
+# those pixels alone, so that nothing else the file held stays, such as
+# where a photo was taken.
 
 crypto = import("standard/crypto.sayon")
 filesystem = import("standard/filesystem.sayon")
 graphics = import("standard/graphics.sayon")
 io = import("standard/io.sayon")
 strings = import("standard/strings.sayon")
+threads = import("standard/threads.sayon")
 files = import("src/web/files.sayon")
 
-# The most bytes a picture is sent in, and its sides' lengths in pixels.
-constant LARGEST = 1048576
-constant SMALLEST_SIDE = 32
-constant LARGEST_SIDE = 512
+# How many pixels a side a picture is kept at.
+constant SIDE = 256
 
-# What every PNG starts with.
-private constant SIGNATURE = [137, 80, 78, 71, 13, 10, 26, 10]
+# The most pixels an image sent may have, which its header tells before
+# anything is decoded: a photo of a large camera, and no more.
+constant MOST_PIXELS = 40000000
 
-# A number of four bytes, the first the highest, as PNG writes them.
-private function big_endian(bytes: Array<byte>, start: integer) -> integer
-    value = 0
-    for index in range(start, start + 4)
-        value = value * 256 + integer(bytes[index])
-    return value
-
-# Why bytes are not a picture the website keeps, or "", from their header
-# alone, before anything is decoded: a PNG image, square, `SMALLEST_SIDE`
-# to `LARGEST_SIDE` pixels a side, in `LARGEST` bytes at most.
+# Why bytes sent are not an image the website takes, or "".
 function problem(bytes: Array<byte>) -> string
-    if length(bytes) > LARGEST
-        return "A picture is sent in 1 MiB at most."
-    if length(bytes) < 33
-        return "That is not a PNG image."
-    for index in range(8)
-        if integer(bytes[index]) != SIGNATURE[index]
-            return "That is not a PNG image."
-    # The first chunk is IHDR, which holds the width and the height.
-    if strings.from_bytes_lossy([bytes[12], bytes[13], bytes[14], bytes[15]]) != "IHDR"
-        return "That is not a PNG image."
-    width = big_endian(bytes, 16)
-    height = big_endian(bytes, 20)
-    if width != height
-        return "A picture is square."
-    if width < SMALLEST_SIDE or width > LARGEST_SIDE
-        return "A picture is {SMALLEST_SIDE} to {LARGEST_SIDE} pixels a side."
+    if length(bytes) == 0
+        return "Choose a picture first."
+    size = try graphics.image_size(bytes)
+    if size is error
+        return "That file is not a PNG or JPEG image. Choose a photo or a picture of one of those kinds."
+    if size.width * size.height > MOST_PIXELS
+        return "That image of {size.width} by {size.height} pixels is too large. Choose one of 40 million pixels at most."
     return ""
 
-# The PNG to keep for a picture: its pixels, decoded and encoded again.
+# The PNG to keep for an image: its middle square, SIDE pixels a side.
 # Fails with ImageError for what does not decode.
-function cleaned(bytes: Array<byte>) -> Array<byte>
-    return graphics.canvas_png(graphics.decode_image(bytes))
+function made(bytes: Array<byte>) -> Array<byte>
+    image = graphics.decode_image(bytes)
+    side = image.width
+    if image.height < side
+        side = image.height
+    canvas = graphics.canvas(SIDE, SIDE)
+    canvas.draw_part(image, (image.width - side) / 2, (image.height - side) / 2, side, side, 0, 0, SIDE, SIDE)
+    return canvas.png()
+
+# `made` on a thread of its own, since a photo takes a while to decode, and
+# the website answers others meanwhile.
+function made_apart(bytes: Array<byte>) -> Array<byte>
+    sent = clone(bytes)
+    making = threads.spawn_parallel(function() -> Array<byte>
+        return made(sent)
+    )
+    return threads.join(making)
 
 private function file_of(data: string, account: string) -> string
     return filesystem.join(filesystem.join(data, "pictures"), account + ".png")
@@ -76,20 +74,24 @@ function forget(data: string, account: string)
     if filesystem.is_file(file)
         filesystem.remove(file)
 
-private function square(side: integer) -> Array<byte>
-    canvas = graphics.canvas(side, side)
-    canvas.clear(graphics.rgb(219, 87, 53))
+# A PNG of two colors side by side, `width` by `height` pixels.
+private function halves(width: integer, height: integer) -> Array<byte>
+    canvas = graphics.canvas(width, height)
+    canvas.fill_rectangle(0, 0, width / 2, height, graphics.rgb(200, 30, 20))
+    canvas.fill_rectangle(width / 2, 0, width - width / 2, height, graphics.rgb(20, 40, 210))
     return canvas.png()
 
-test "pictures are square PNG images of a size, judged by their header"
-    assert(problem(square(64)) == "")
-    assert(problem(square(16)) != "" and problem(square(600)) != "")
-    oblong = graphics.canvas(64, 32)
-    assert(problem(oblong.png()) == "A picture is square.")
-    assert(problem(strings.bytes("<svg xmlns=\"http://www.w3.org/2000/svg\"></svg> and more bytes")) == "That is not a PNG image.")
+test "images sent are judged by their header first"
+    assert(problem([]) == "Choose a picture first.")
+    assert(problem(halves(64, 32)) == "")
+    assert(strings.contains(problem(strings.bytes("<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>")), "not a PNG or JPEG"))
+    # A PNG's header that claims 10000 by 10000 pixels is refused undecoded.
+    huge: Array<byte> = [137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 39, 16, 0, 0, 39, 16, 8, 6, 0, 0, 0]
+    assert(strings.contains(problem(huge), "too large"))
 
-test "a picture is kept as its pixels, encoded again"
-    sent = square(48)
-    kept = cleaned(sent)
-    again = graphics.decode_image(kept)
-    assert(again.width == 48 and again.height == 48 and again.pixel(10, 10) == graphics.rgb(219, 87, 53))
+test "a picture is the middle square of its image, at its size"
+    kept = graphics.decode_image(made(halves(64, 32)))
+    assert(kept.width == SIDE and kept.height == SIDE)
+    assert(kept.pixel(60, 128) == graphics.rgb(200, 30, 20) and kept.pixel(196, 128) == graphics.rgb(20, 40, 210))
+    tall = graphics.decode_image(made_apart(halves(20, 60)))
+    assert(tall.width == SIDE and tall.pixel(10, 10) == graphics.rgb(200, 30, 20))
