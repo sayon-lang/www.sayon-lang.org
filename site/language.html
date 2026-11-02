@@ -3,104 +3,125 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>The Sayon language · Sayon</title>
+  <title>The Sayon language · Sayon docs</title>
+  <meta name="description" content="The guides to Sayon: installing it, and the language from values and ownership to projects, packages, and targets.">
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#12151b" media="(prefers-color-scheme: dark)">
   <link rel="icon" href="favicon.ico" sizes="any">
   <link rel="icon" href="images/logo.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="images/icon-256.png">
   <link rel="stylesheet" href="style.css">
+  <script src="site.js"></script>
 </head>
 <body>
+  <a class="skip" href="#main">Skip to the content</a>
   <header class="bar">
-    <a class="brand" href="index.html"><img src="images/logo.svg" alt="" width="28" height="28"> Sayon docs</a>
-    <nav aria-label="Guides">
-      <a href="installing.html">Installing</a>
-      <a href="language.html" aria-current="page">Language</a>
-      <a href="https://github.com/sayon-lang/www.sayon-lang.org">Website</a>
-      <a href="https://github.com/sayon-lang/docs.sayon-lang.org">GitHub</a>
-    </nav>
+    <div class="bar-inner">
+      <a class="brand" href="index.html"><img src="images/logo.svg" alt="" width="28" height="28">Sayon</a>
+      <nav class="sites" aria-label="Sayon's sites">
+        <a href="https://github.com/sayon-lang/www.sayon-lang.org">Overview</a>
+        <a href="index.html" aria-current="page">Docs</a>
+        <a href="https://github.com/sayon-lang/packages.sayon-lang.org">Packages</a>
+      </nav>
+      <div class="tools">
+        <a class="tool-link hide-small" href="https://github.com/sayon-lang">GitHub</a>
+        <button class="icon-button theme" type="button" data-theme-switch aria-label="Switch the theme"><svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/></svg><svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/></svg></button>
+      </div>
+    </div>
   </header>
-  <div class="page with-contents">
-    <nav class="contents" aria-label="On this page">
-      <p>On this page</p>
+  <div class="docs">
+    <nav class="guides" aria-label="Guides">
+      <h2>Guides</h2>
       <ul>
-        <li><a href="#source-files">Source files</a><ul>
-          <li><a href="#comments">Comments</a></li>
-          <li><a href="#names-and-keywords">Names and keywords</a></li>
-        </ul></li>
-        <li><a href="#literals">Literals</a><ul>
-          <li><a href="#strings">Strings</a></li>
-          <li><a href="#arrays-and-dictionaries">Arrays and dictionaries</a></li>
-        </ul></li>
-        <li><a href="#bindings-and-scope">Bindings and scope</a><ul>
-        </ul></li>
-        <li><a href="#types">Types</a><ul>
-          <li><a href="#type-inference">Type inference</a></li>
-          <li><a href="#unions-and-narrowing">Unions and narrowing</a></li>
-          <li><a href="#structures">Structures</a></li>
-          <li><a href="#enums">Enums</a></li>
-        </ul></li>
-        <li><a href="#operators">Operators</a><ul>
-          <li><a href="#conversions">Conversions</a></li>
-        </ul></li>
-        <li><a href="#control-flow">Control flow</a><ul>
-          <li><a href="#matching">Matching</a></li>
-        </ul></li>
-        <li><a href="#functions">Functions</a><ul>
-          <li><a href="#parameter-modes">Parameter modes</a></li>
-          <li><a href="#methods">Methods</a></li>
-          <li><a href="#function-values-and-closures">Function values and closures</a></li>
-        </ul></li>
-        <li><a href="#ownership">Ownership</a><ul>
-          <li><a href="#views">Views</a></li>
-          <li><a href="#shared-values">Shared values</a></li>
-          <li><a href="#finally-functions">Finally functions</a></li>
-        </ul></li>
-        <li><a href="#errors">Errors</a><ul>
-          <li><a href="#capturing-errors">Capturing errors</a></li>
-        </ul></li>
-        <li><a href="#c-functions-and-unsafe-code">C functions and unsafe code</a><ul>
-          <li><a href="#c-structures">C structures</a></li>
-          <li><a href="#functions-that-c-calls-back">Functions that C calls back</a></li>
-        </ul></li>
-        <li><a href="#built-in-functions">Built-in functions</a><ul>
-        </ul></li>
-        <li><a href="#standard-library">Standard library</a><ul>
-          <li><a href="#collections">Collections</a></li>
-          <li><a href="#files">Files</a></li>
-          <li><a href="#json">JSON</a></li>
-          <li><a href="#time">Time</a></li>
-          <li><a href="#tasks-and-channels">Tasks and channels</a></li>
-          <li><a href="#tasks-on-threads-of-their-own">Tasks on threads of their own</a></li>
-          <li><a href="#networking">Networking</a></li>
-          <li><a href="#graphics">Graphics</a></li>
-          <li><a href="#display">Display</a></li>
-        </ul></li>
-        <li><a href="#modules">Modules</a><ul>
-        </ul></li>
-        <li><a href="#projects">Projects</a><ul>
-          <li><a href="#dependencies">Dependencies</a></li>
-          <li><a href="#versions-from-the-registry">Versions from the registry</a></li>
-          <li><a href="#publishing">Publishing</a></li>
-        </ul></li>
-        <li><a href="#targets">Targets</a><ul>
-          <li><a href="#wasi">WASI</a></li>
-          <li><a href="#web-pages">Web pages</a></li>
-          <li><a href="#android">Android</a></li>
-          <li><a href="#platform-branches">Platform branches</a></li>
-          <li><a href="#capabilities">Capabilities</a></li>
-        </ul></li>
-        <li><a href="#tests">Tests</a><ul>
-        </ul></li>
-        <li><a href="#formatting">Formatting</a><ul>
-        </ul></li>
-        <li><a href="#linting">Linting</a><ul>
-        </ul></li>
-        <li><a href="#editors">Editors</a><ul>
-        </ul></li>
-        <li><a href="#programs">Programs</a><ul>
-        </ul></li>
+        <li><a href="index.html">Overview</a></li>
+        <li><a href="installing.html">Installing</a></li>
+        <li><a href="language.html" aria-current="page">The language</a></li>
       </ul>
     </nav>
-    <main class="text">
+    <main id="main" class="prose">
+      <details class="toc-inline">
+        <summary>On this page</summary>
+        <nav class="toc" aria-label="On this page">
+          <ul>
+            <li><a href="#source-files">Source files</a><ul>
+              <li><a href="#comments">Comments</a></li>
+              <li><a href="#names-and-keywords">Names and keywords</a></li>
+            </ul></li>
+            <li><a href="#literals">Literals</a><ul>
+              <li><a href="#strings">Strings</a></li>
+              <li><a href="#arrays-and-dictionaries">Arrays and dictionaries</a></li>
+            </ul></li>
+            <li><a href="#bindings-and-scope">Bindings and scope</a><ul>
+            </ul></li>
+            <li><a href="#types">Types</a><ul>
+              <li><a href="#type-inference">Type inference</a></li>
+              <li><a href="#unions-and-narrowing">Unions and narrowing</a></li>
+              <li><a href="#structures">Structures</a></li>
+              <li><a href="#enums">Enums</a></li>
+            </ul></li>
+            <li><a href="#operators">Operators</a><ul>
+              <li><a href="#conversions">Conversions</a></li>
+            </ul></li>
+            <li><a href="#control-flow">Control flow</a><ul>
+              <li><a href="#matching">Matching</a></li>
+            </ul></li>
+            <li><a href="#functions">Functions</a><ul>
+              <li><a href="#parameter-modes">Parameter modes</a></li>
+              <li><a href="#methods">Methods</a></li>
+              <li><a href="#function-values-and-closures">Function values and closures</a></li>
+            </ul></li>
+            <li><a href="#ownership">Ownership</a><ul>
+              <li><a href="#views">Views</a></li>
+              <li><a href="#shared-values">Shared values</a></li>
+              <li><a href="#finally-functions">Finally functions</a></li>
+            </ul></li>
+            <li><a href="#errors">Errors</a><ul>
+              <li><a href="#capturing-errors">Capturing errors</a></li>
+            </ul></li>
+            <li><a href="#c-functions-and-unsafe-code">C functions and unsafe code</a><ul>
+              <li><a href="#c-structures">C structures</a></li>
+              <li><a href="#functions-that-c-calls-back">Functions that C calls back</a></li>
+            </ul></li>
+            <li><a href="#built-in-functions">Built-in functions</a><ul>
+            </ul></li>
+            <li><a href="#standard-library">Standard library</a><ul>
+              <li><a href="#collections">Collections</a></li>
+              <li><a href="#files">Files</a></li>
+              <li><a href="#json">JSON</a></li>
+              <li><a href="#time">Time</a></li>
+              <li><a href="#tasks-and-channels">Tasks and channels</a></li>
+              <li><a href="#tasks-on-threads-of-their-own">Tasks on threads of their own</a></li>
+              <li><a href="#networking">Networking</a></li>
+              <li><a href="#graphics">Graphics</a></li>
+              <li><a href="#display">Display</a></li>
+            </ul></li>
+            <li><a href="#modules">Modules</a><ul>
+            </ul></li>
+            <li><a href="#projects">Projects</a><ul>
+              <li><a href="#dependencies">Dependencies</a></li>
+              <li><a href="#versions-from-the-registry">Versions from the registry</a></li>
+              <li><a href="#publishing">Publishing</a></li>
+            </ul></li>
+            <li><a href="#targets">Targets</a><ul>
+              <li><a href="#wasi">WASI</a></li>
+              <li><a href="#web-pages">Web pages</a></li>
+              <li><a href="#android">Android</a></li>
+              <li><a href="#platform-branches">Platform branches</a></li>
+              <li><a href="#capabilities">Capabilities</a></li>
+            </ul></li>
+            <li><a href="#tests">Tests</a><ul>
+            </ul></li>
+            <li><a href="#formatting">Formatting</a><ul>
+            </ul></li>
+            <li><a href="#linting">Linting</a><ul>
+            </ul></li>
+            <li><a href="#editors">Editors</a><ul>
+            </ul></li>
+            <li><a href="#programs">Programs</a><ul>
+            </ul></li>
+          </ul>
+        </nav>
+      </details>
 <h1 id="the-sayon-language">The Sayon language</h1>
 <p>This reference describes the language as currently implemented. Features scheduled for later milestones are listed in <a href="https://github.com/sayon-lang/sayon/blob/main/docs/features.md">the feature ledger</a>; using one produces an <code>E_UNAVAILABLE</code> error that names its milestone.</p>
 <h2 id="source-files">Source files</h2>
@@ -763,7 +784,7 @@ strings = <span class="k">import</span>(<span class="s">"standard/strings.sayon"
     <span class="k">if</span> line == <span class="k">nothing</span>
         <span class="k">break</span>
     <span class="f">print</span>(strings.<span class="f">upper</span>(line))</code></pre>
-<p>String positions count Unicode characters. File and directory failures raise <code>IOError</code>; text that is not UTF-8 raises <code>EncodingError</code>. <code>math.random()</code> is not suitable for security; <code>crypto.random_bytes</code> is, for keys and tokens. <a href="https://github.com/sayon-lang/sayon/blob/main/docs/api.md">The standard library's API</a> lists every export with its declaration.</p>
+<p>String positions count Unicode characters. File and directory failures raise <code>IOError</code>; text that is not UTF-8 raises <code>EncodingError</code>. <code>math.random()</code> is not suitable for security; <code>crypto.random_bytes</code> is, for keys and tokens. <code>crypto.hash_password</code> makes a password safe to keep, slowly on purpose, and <code>crypto.check_password</code> tells whether a password is the one kept. <a href="https://github.com/sayon-lang/sayon/blob/main/docs/api.md">The standard library's API</a> lists every export with its declaration.</p>
 <p>For numbers that can be had again, <code>math.new_generator(seed)</code> gives a <code>Generator</code>: generators from the same seed give the same numbers in the same order, on every device and target, in the interpreter and compiled, which suits tests, simulations, and games that replay. <code>float()</code> is from 0 up to 1, <code>integer(low, high)</code> from <code>low</code> up to, but not including, <code>high</code>, each as likely as the others, and <code>shuffle(items)</code> puts an array in a random order:</p>
 <pre><code class="language-sayon">math = <span class="k">import</span>(<span class="s">"standard/math.sayon"</span>)
 
@@ -1079,7 +1100,7 @@ checks = { path = "../checks" }    # only for this project's tests</code></pre>
 <h3 id="publishing">Publishing</h3>
 <p><code>sayon publish</code> sends the project's package to the registry: every file in the project's folder but hidden ones (any name starting with <code>.</code>), and <code>build</code>, <code>target</code>, and <code>sayon.lock</code> at its top, 10 MiB at most. <code>sayon publish --dry-run</code> lists those files, their size, and the digest, and sends nothing.</p>
 <ul>
-<li>Publishing needs an account. The registry's operator makes it and gives you its token; <code>sayon login</code> asks for the token, checks it with the registry, and keeps it: in the Windows Credential Manager, or elsewhere in <code>~/.config/sayon/credentials</code>, which only you can read. <code>sayon logout</code> forgets it. Set <code>SAYON_TOKEN</code> instead for automated publishing.</li>
+<li>Publishing needs an account, which you make on the registry's pages. <code>sayon login</code> opens the registry's page for the sign-in in your browser, showing the same code as your terminal; approve it there, signed in, or making an account on that page. <code>sayon login</code> then keeps the account's new token for this computer: in the Windows Credential Manager, or elsewhere in <code>~/.config/sayon/credentials</code>, which only you can read. <code>--no-browser</code> shows the page's address without opening it, for a computer without one. <code>sayon logout</code> revokes the token and forgets it. For automated publishing, make a token on your account's page, and give it to <code>sayon login --token</code>, or set <code>SAYON_TOKEN</code>.</li>
 <li>A package's name belongs to the account that published it first. A version never changes once published, so fixing one means publishing the next.</li>
 <li>Everything a published package depends on must come from a registry; <code>dev_dependencies</code> may be local, since only the package's own tests use them.</li>
 <li>The registry, its protocol, and how to run one are in its repository, <a href="https://github.com/sayon-lang/packages.sayon-lang.org">packages.sayon-lang.org</a>; Sayon's index is <a href="https://github.com/sayon-lang/packages.sayon-lang.org-index">packages.sayon-lang.org-index</a>.</li>
@@ -1204,10 +1225,123 @@ capability_manifest = 1                        # the manifest the project was wr
 <pre><code class="language-sayon"><span class="k">function</span> <span class="f">main</span>() -&gt; <span class="t">integer</span>
     <span class="f">print</span>(<span class="s">"done"</span>)
     <span class="k">return</span> <span class="n">0</span></code></pre>
+      <div class="page-end"><span>The language</span><a href="https://github.com/sayon-lang/docs.sayon-lang.org/blob/main/language.md">Edit this page on GitHub</a></div>
+      <nav class="pager" aria-label="The guides before and after this one">
+        <a href="installing.html"><small>Previous</small>Installing</a>
+      </nav>
     </main>
+    <nav class="toc" aria-label="On this page">
+      <h2>On this page</h2>
+      <ul>
+        <li><a href="#source-files">Source files</a><ul>
+          <li><a href="#comments">Comments</a></li>
+          <li><a href="#names-and-keywords">Names and keywords</a></li>
+        </ul></li>
+        <li><a href="#literals">Literals</a><ul>
+          <li><a href="#strings">Strings</a></li>
+          <li><a href="#arrays-and-dictionaries">Arrays and dictionaries</a></li>
+        </ul></li>
+        <li><a href="#bindings-and-scope">Bindings and scope</a><ul>
+        </ul></li>
+        <li><a href="#types">Types</a><ul>
+          <li><a href="#type-inference">Type inference</a></li>
+          <li><a href="#unions-and-narrowing">Unions and narrowing</a></li>
+          <li><a href="#structures">Structures</a></li>
+          <li><a href="#enums">Enums</a></li>
+        </ul></li>
+        <li><a href="#operators">Operators</a><ul>
+          <li><a href="#conversions">Conversions</a></li>
+        </ul></li>
+        <li><a href="#control-flow">Control flow</a><ul>
+          <li><a href="#matching">Matching</a></li>
+        </ul></li>
+        <li><a href="#functions">Functions</a><ul>
+          <li><a href="#parameter-modes">Parameter modes</a></li>
+          <li><a href="#methods">Methods</a></li>
+          <li><a href="#function-values-and-closures">Function values and closures</a></li>
+        </ul></li>
+        <li><a href="#ownership">Ownership</a><ul>
+          <li><a href="#views">Views</a></li>
+          <li><a href="#shared-values">Shared values</a></li>
+          <li><a href="#finally-functions">Finally functions</a></li>
+        </ul></li>
+        <li><a href="#errors">Errors</a><ul>
+          <li><a href="#capturing-errors">Capturing errors</a></li>
+        </ul></li>
+        <li><a href="#c-functions-and-unsafe-code">C functions and unsafe code</a><ul>
+          <li><a href="#c-structures">C structures</a></li>
+          <li><a href="#functions-that-c-calls-back">Functions that C calls back</a></li>
+        </ul></li>
+        <li><a href="#built-in-functions">Built-in functions</a><ul>
+        </ul></li>
+        <li><a href="#standard-library">Standard library</a><ul>
+          <li><a href="#collections">Collections</a></li>
+          <li><a href="#files">Files</a></li>
+          <li><a href="#json">JSON</a></li>
+          <li><a href="#time">Time</a></li>
+          <li><a href="#tasks-and-channels">Tasks and channels</a></li>
+          <li><a href="#tasks-on-threads-of-their-own">Tasks on threads of their own</a></li>
+          <li><a href="#networking">Networking</a></li>
+          <li><a href="#graphics">Graphics</a></li>
+          <li><a href="#display">Display</a></li>
+        </ul></li>
+        <li><a href="#modules">Modules</a><ul>
+        </ul></li>
+        <li><a href="#projects">Projects</a><ul>
+          <li><a href="#dependencies">Dependencies</a></li>
+          <li><a href="#versions-from-the-registry">Versions from the registry</a></li>
+          <li><a href="#publishing">Publishing</a></li>
+        </ul></li>
+        <li><a href="#targets">Targets</a><ul>
+          <li><a href="#wasi">WASI</a></li>
+          <li><a href="#web-pages">Web pages</a></li>
+          <li><a href="#android">Android</a></li>
+          <li><a href="#platform-branches">Platform branches</a></li>
+          <li><a href="#capabilities">Capabilities</a></li>
+        </ul></li>
+        <li><a href="#tests">Tests</a><ul>
+        </ul></li>
+        <li><a href="#formatting">Formatting</a><ul>
+        </ul></li>
+        <li><a href="#linting">Linting</a><ul>
+        </ul></li>
+        <li><a href="#editors">Editors</a><ul>
+        </ul></li>
+        <li><a href="#programs">Programs</a><ul>
+        </ul></li>
+      </ul>
+    </nav>
   </div>
-  <footer>
-    <p>Sayon is open source, under the Apache License 2.0 with LLVM's exception. These pages are made from <a href="https://github.com/sayon-lang/docs.sayon-lang.org">their Markdown</a> by a Sayon program.</p>
+  <footer class="foot">
+    <div class="foot-inner">
+      <div class="foot-brand">
+        <a class="brand" href="index.html"><img src="images/logo.svg" alt="" width="28" height="28">Sayon</a>
+        <p>Programming made easy. Safety made automatic.</p>
+      </div>
+      <nav aria-label="Sites">
+        <h2>Sites</h2>
+        <ul>
+          <li><a href="https://github.com/sayon-lang/www.sayon-lang.org">Overview</a></li>
+          <li><a href="index.html">Docs</a></li>
+          <li><a href="https://github.com/sayon-lang/packages.sayon-lang.org">Packages</a></li>
+        </ul>
+      </nav>
+      <nav aria-label="Source">
+        <h2>Source</h2>
+        <ul>
+          <li><a href="https://github.com/sayon-lang/sayon">The language</a></li>
+          <li><a href="https://github.com/sayon-lang/sayon-vscode">The VS Code extension</a></li>
+          <li><a href="https://github.com/sayon-lang">Every repository</a></li>
+        </ul>
+      </nav>
+      <nav aria-label="License">
+        <h2>License</h2>
+        <ul>
+          <li><a href="https://github.com/sayon-lang/sayon/blob/main/LICENSE">Apache 2.0 with LLVM's exception</a></li>
+        </ul>
+      </nav>
+      <p class="fine">These pages are made from <a href="https://github.com/sayon-lang/docs.sayon-lang.org">their Markdown</a> by a Sayon program.</p>
+    </div>
   </footer>
 </body>
 </html>

@@ -834,7 +834,7 @@ while true
     print(strings.upper(line))
 ```
 
-String positions count Unicode characters. File and directory failures raise `IOError`; text that is not UTF-8 raises `EncodingError`. `math.random()` is not suitable for security; `crypto.random_bytes` is, for keys and tokens. [The standard library's API](https://github.com/sayon-lang/sayon/blob/main/docs/api.md) lists every export with its declaration.
+String positions count Unicode characters. File and directory failures raise `IOError`; text that is not UTF-8 raises `EncodingError`. `math.random()` is not suitable for security; `crypto.random_bytes` is, for keys and tokens. `crypto.hash_password` makes a password safe to keep, slowly on purpose, and `crypto.check_password` tells whether a password is the one kept. [The standard library's API](https://github.com/sayon-lang/sayon/blob/main/docs/api.md) lists every export with its declaration.
 
 For numbers that can be had again, `math.new_generator(seed)` gives a `Generator`: generators from the same seed give the same numbers in the same order, on every device and target, in the interpreter and compiled, which suits tests, simulations, and games that replay. `float()` is from 0 up to 1, `integer(low, high)` from `low` up to, but not including, `high`, each as likely as the others, and `shuffle(items)` puts an array in a random order:
 
@@ -1234,7 +1234,7 @@ Sayon's first packages are [math_core](https://github.com/sayon-lang/math_core),
 
 `sayon publish` sends the project's package to the registry: every file in the project's folder but hidden ones (any name starting with `.`), and `build`, `target`, and `sayon.lock` at its top, 10 MiB at most. `sayon publish --dry-run` lists those files, their size, and the digest, and sends nothing.
 
-- Publishing needs an account. The registry's operator makes it and gives you its token; `sayon login` asks for the token, checks it with the registry, and keeps it: in the Windows Credential Manager, or elsewhere in `~/.config/sayon/credentials`, which only you can read. `sayon logout` forgets it. Set `SAYON_TOKEN` instead for automated publishing.
+- Publishing needs an account, which you make on the registry's pages. `sayon login` opens the registry's page for the sign-in in your browser, showing the same code as your terminal; approve it there, signed in, or making an account on that page. `sayon login` then keeps the account's new token for this computer: in the Windows Credential Manager, or elsewhere in `~/.config/sayon/credentials`, which only you can read. `--no-browser` shows the page's address without opening it, for a computer without one. `sayon logout` revokes the token and forgets it. For automated publishing, make a token on your account's page, and give it to `sayon login --token`, or set `SAYON_TOKEN`.
 - A package's name belongs to the account that published it first. A version never changes once published, so fixing one means publishing the next.
 - Everything a published package depends on must come from a registry; `dev_dependencies` may be local, since only the package's own tests use them.
 - The registry, its protocol, and how to run one are in its repository, [packages.sayon-lang.org](https://github.com/sayon-lang/packages.sayon-lang.org); Sayon's index is [packages.sayon-lang.org-index](https://github.com/sayon-lang/packages.sayon-lang.org-index).

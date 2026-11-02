@@ -16,19 +16,13 @@ serve = import("src/serve.sayon")
 constant SITE = "site"
 constant STATIC = "static"
 
-# A guide's Markdown, and the page it becomes.
-type Guide = [source: string, page: string]
-
-function guides() -> Array<Guide>
-    return [
-        Guide(source = "README.md", page = "index.html"),
-        Guide(source = "installing.md", page = "installing.html"),
-        Guide(source = "language.md", page = "language.html")
-    ]
+# The guides, in the order they are read.
+function guides() -> Array<layout.Guide>
+    return layout.guides()
 
 # A guide's page, as the site holds it.
-function page(guide: Guide) -> string
-    return layout.render(markdown.convert(io.read_file(guide.source)), guide.page)
+function page(guide: layout.Guide) -> string
+    return layout.render(markdown.convert(io.read_file(guide.source)), guide)
 
 # Removes a folder and everything in it.
 function clear(folder: string)

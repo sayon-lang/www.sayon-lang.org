@@ -30,7 +30,7 @@ sayon run
 sayon test
 ```
 
-`sayon run` writes `site/`: each guide's page, in the layout of `src/layout.sayon`, with the files of `static/` (the stylesheet and the logo) beside them. `src/markdown.sayon` reads Markdown as these pages write it: headings with the ids GitHub gives them, paragraphs, lists, tables, code (Sayon's highlighted by `src/highlight.sayon`), and in text `code`, **strong**, *emphasis*, and links, those to another guide made links to its page. `sayon test` runs its tests, and checks that `site/` holds what the program makes, so a change to a page goes with its HTML. `site/` is plain HTML and CSS that any static host serves. To see it, Sayon serves it too, with `src/serve.sayon`, at `http://localhost:8000`:
+`sayon run` writes `site/`: each guide's page, in the layout of `src/layout.sayon` within the frame of Sayon's websites, `src/frame.sayon`, with the files of `static/` (the stylesheet, the script, and the logo) beside them. `src/frame.sayon`, `static/style.css`, and `static/site.js` are the look that www.sayon-lang.org, docs.sayon-lang.org, and packages.sayon-lang.org share, each with a copy, so a change to one goes to all three. `src/markdown.sayon` reads Markdown as these pages write it: headings with the ids GitHub gives them, paragraphs, lists, tables, code (Sayon's highlighted by `src/highlight.sayon`), and in text `code`, **strong**, *emphasis*, and links, those to another guide made links to its page. `sayon test` runs its tests, and checks that `site/` holds what the program makes, so a change to a page goes with its HTML. `site/` is plain HTML and CSS that any static host serves. To see it, Sayon serves it too, with `src/serve.sayon`, at `http://localhost:8000`:
 
 ```bash
 sayon run -- serve
