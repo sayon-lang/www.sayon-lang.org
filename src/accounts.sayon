@@ -1,6 +1,8 @@
-# Accounts and who owns each package, kept in the registry's data folder
-# as JSON. A token is shown once, when it is made; the registry keeps only
-# its SHA-256.
+# Accounts and what shows who holds one: a password, kept as
+# `crypto.hash_password` makes it, for the registry's pages; and tokens,
+# for `sayon` on a computer, each shown once, when it is made, and kept as
+# its SHA-256. And who owns each package. All of it is JSON in the
+# registry's data folder, each file written whole (src/files.sayon).
 
 crypto = import("standard/crypto.sayon")
 filesystem = import("standard/filesystem.sayon")
@@ -10,8 +12,20 @@ strings = import("standard/strings.sayon")
 time = import("standard/time.sayon")
 files = import("src/files.sayon")
 
-# An account: the SHA-256 of its token, in hexadecimal, and when it was made.
-type Account = [token: string, created: string]
+# An account: when it was made, and its password, unless the operator made
+# it and no one has chosen one yet.
+type Account = [created: string, password: string or nothing]
+
+# A token: the account it belongs to, what it is for, such as the computer
+# `sayon login` ran on, and when it was made and last used.
+type Token = [account: string, name: string, created: string, used: string or nothing]
+
+# How long a password is, in characters.
+constant SHORTEST_PASSWORD = 12
+constant LONGEST_PASSWORD = 256
+
+# What the operator's tokens are called.
+constant OPERATOR = "made by the registry's operator"
 
 function accounts(data: string) -> Dict<string, Account>
     file = filesystem.join(data, "accounts.json")
@@ -21,6 +35,16 @@ function accounts(data: string) -> Dict<string, Account>
 
 function save_accounts(data: string, all: Dict<string, Account>)
     files.save_text(filesystem.join(data, "accounts.json"), json.encode_value(all))
+
+# The tokens, by the SHA-256 of each, in hexadecimal.
+function tokens(data: string) -> Dict<string, Token>
+    file = filesystem.join(data, "tokens.json")
+    if not filesystem.is_file(file)
+        return []
+    return json.decode(io.read_file(file))
+
+function save_tokens(data: string, all: Dict<string, Token>)
+    files.save_text(filesystem.join(data, "tokens.json"), json.encode_value(all))
 
 # Who owns each package: the account that published it first.
 function owners(data: string) -> Dict<string, string>
@@ -32,39 +56,132 @@ function owners(data: string) -> Dict<string, string>
 function save_owners(data: string, all: Dict<string, string>)
     files.save_text(filesystem.join(data, "owners.json"), json.encode_value(all))
 
-function hash(token: string) -> string
-    return crypto.hex(crypto.sha256(strings.bytes(token)))
+# The packages an account owns, by name.
+function packages_of(owners: Dict<string, string>, account: string) -> Array<string>
+    out: Array<string> = []
+    for name, owner in owners
+        if owner == account
+            push(out, clone(name))
+    return out
+
+# The SHA-256 of a secret, in hexadecimal, as the registry keeps secrets.
+function hash(secret: string) -> string
+    return crypto.hex(crypto.sha256(strings.bytes(secret)))
 
 # A new token: 32 random bytes from the system's secure source.
 function new_token() -> string
     return "sayon_" + crypto.hex(crypto.random_bytes(32))
 
+# A token's short name on the account's page: the start of its hash.
+function token_id(key: string) -> string
+    return strings.slice(key, 0, 16)
+
 # The account a token belongs to.
-function account_for(all: Dict<string, Account>, token: string) -> string or nothing
-    wanted = strings.bytes(hash(token))
-    for name, account in all
-        if crypto.same(strings.bytes(account.token), wanted)
-            return clone(name)
+function account_for(all: Dict<string, Token>, token: string) -> string or nothing
+    key = hash(token)
+    if haskey(all, key)
+        return clone(all[key].account)
     return nothing
 
-# Makes an account, or with `replace` gives one a new token; the token, or
-# nothing when the account exists and is not to be replaced.
-function make(update all: Dict<string, Account>, name: string, replace: boolean) -> string or nothing
-    if haskey(all, name) and not replace
-        return nothing
+# Gives an account a new token for `name`: the token.
+function add_token(update all: Dict<string, Token>, account: string, name: string) -> string
     token = new_token()
-    all[clone(name)] = Account(token = hash(token), created = time.format(time.now()))
+    all[hash(token)] = Token(account = clone(account), name = clone(name), created = time.format(time.now()), used = nothing)
     return token
+
+# Takes away an account's tokens, every one, or the one whose id is `only`;
+# whether it took any.
+function remove_tokens(update all: Dict<string, Token>, account: string, only: string or nothing = nothing) -> boolean
+    gone: Array<string> = []
+    for key, token in all
+        if token.account == account and (only == nothing or token_id(key) == only)
+            push(gone, clone(key))
+    for key in gone
+        remove(all, key)
+    return length(gone) > 0
+
+# Makes an account for the registry's operator, or with `replace` takes
+# away an existing one's tokens, and gives it a new token: the token, or
+# nothing when the account exists and is not to be replaced.
+function make(update all: Dict<string, Account>, update tokens: Dict<string, Token>, name: string, replace: boolean) -> string or nothing
+    if haskey(all, name)
+        if not replace
+            return nothing
+        remove_tokens(tokens, name)
+    else
+        all[clone(name)] = Account(created = time.format(time.now()), password = nothing)
+    return add_token(tokens, name, OPERATOR)
+
+# What is wrong with a password for an account, or nothing.
+function password_problem(name: string, password: string) -> string or nothing
+    if length(password) < SHORTEST_PASSWORD
+        return "Use at least {SHORTEST_PASSWORD} characters. A few words in a row make a password that is long and easy to remember."
+    if length(password) > LONGEST_PASSWORD
+        return "Use at most {LONGEST_PASSWORD} characters."
+    lowered = strings.lower(password)
+    if lowered == name or length(name) >= 4 and strings.contains(lowered, name)
+        return "Choose a password that does not hold the account's name."
+    return nothing
+
+# Whether a password is the account's own.
+function password_is(account: Account, password: string) -> boolean
+    kept = clone(account.password)
+    if kept == nothing
+        return false
+    return crypto.check_password(password, kept)
+
+# An account as an older registry kept it: with one token, by its hash.
+private type Former = [created: string, token: string or nothing]
+
+# Moves the tokens of an older registry's accounts.json to tokens.json.
+function upgrade(data: string)
+    file = filesystem.join(data, "accounts.json")
+    if not filesystem.is_file(file)
+        return
+    former: Dict<string, Former> = json.decode(io.read_file(file))
+    all = tokens(data)
+    moved = false
+    for name, account in former
+        token = clone(account.token)
+        if token != nothing
+            all[token] = Token(account = clone(name), name = clone(OPERATOR), created = clone(account.created), used = nothing)
+            moved = true
+    if moved
+        # The tokens go first: a crash before the accounts are written
+        # leaves them in both, and upgrading again moves the same ones.
+        save_tokens(data, all)
+        save_accounts(data, accounts(data))
 
 test "a token is kept only as its hash, and finds its account"
     all: Dict<string, Account> = []
-    token = make(all, "ada", false)
+    kept: Dict<string, Token> = []
+    token = make(all, kept, "ada", false)
     assert(token != nothing)
     if token != nothing
         assert(strings.starts_with(token, "sayon_") and length(token) == 70)
-        assert(all["ada"].token == hash(token) and all["ada"].token != token)
-        assert(account_for(all, token) == "ada")
-        assert(account_for(all, token + "x") == nothing)
-        assert(make(all, "ada", false) == nothing)
-        again = make(all, "ada", true)
-        assert(again != nothing and account_for(all, token) == nothing)
+        assert(haskey(kept, hash(token)) and not haskey(kept, token))
+        assert(account_for(kept, token) == "ada")
+        assert(account_for(kept, token + "x") == nothing)
+        assert(make(all, kept, "ada", false) == nothing)
+        other = add_token(kept, "ada", "laptop")
+        again = make(all, kept, "ada", true)
+        assert(again != nothing and account_for(kept, token) == nothing and account_for(kept, other) == nothing)
+        assert(length(kept) == 1)
+
+test "a token is taken away by its id"
+    kept: Dict<string, Token> = []
+    first = add_token(kept, "ada", "laptop")
+    second = add_token(kept, "ada", "desktop")
+    assert(not remove_tokens(kept, "bo", token_id(hash(first))))
+    assert(remove_tokens(kept, "ada", token_id(hash(first))))
+    assert(account_for(kept, first) == nothing and account_for(kept, second) == "ada")
+
+test "passwords are long, and not the account's name"
+    assert(password_problem("ada", "short") != nothing)
+    assert(password_problem("lovelace", "ada lovelace 1815") != nothing)
+    assert(password_problem("ada", "ada") != nothing and password_problem("ada", "ada lovelace 1815") == nothing)
+    assert(password_problem("ada", "correct horse battery staple") == nothing)
+    account = Account(created = "2026-11-02T00:00:00Z", password = crypto.hash_password("correct horse battery staple"))
+    assert(password_is(account, "correct horse battery staple"))
+    assert(not password_is(account, "correct horse battery stable"))
+    assert(not password_is(Account(created = "2026-11-02T00:00:00Z", password = nothing), ""))

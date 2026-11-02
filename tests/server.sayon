@@ -27,9 +27,11 @@ test "publications reach the index, and the pages and archives show them"
     clear(DATA)
     filesystem.create_directory(filesystem.join(DATA, "index"))
     all: Dict<string, accounts.Account> = []
-    made = accounts.make(all, "ada", false)
-    other = accounts.make(all, "bo", false)
+    kept: Dict<string, accounts.Token> = []
+    made = accounts.make(all, kept, "ada", false)
+    other = accounts.make(all, kept, "bo", false)
     accounts.save_accounts(DATA, all)
+    accounts.save_tokens(DATA, kept)
     assert(made != nothing and other != nothing)
     if made == nothing or other == nothing
         return

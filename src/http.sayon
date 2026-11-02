@@ -9,7 +9,9 @@ strings = import("standard/strings.sayon")
 # The most a request's body may hold: an archive, and a little more.
 constant LARGEST = 10486784
 
-type Request = [method: string, path: string, query: Dict<string, string>, headers: Dict<string, string>, body: Array<byte>]
+# A request: its method, its target as it came, and the target's path and
+# query; its headers, by lowercase names; and its body.
+type Request = [method: string, target: string, path: string, query: Dict<string, string>, headers: Dict<string, string>, body: Array<byte>]
 
 type Response = [status: integer, kind: string, headers: Dict<string, string>, body: Array<byte>]
 
@@ -22,6 +24,10 @@ function reason(status: integer) -> string
             return "OK"
         case 201
             return "Created"
+        case 303
+            return "See Other"
+        case 308
+            return "Permanent Redirect"
         case 400
             return "Bad Request"
         case 401
@@ -34,8 +40,12 @@ function reason(status: integer) -> string
             return "Method Not Allowed"
         case 409
             return "Conflict"
+        case 410
+            return "Gone"
         case 413
             return "Content Too Large"
+        case 429
+            return "Too Many Requests"
         case _
             return "Internal Server Error"
 
@@ -50,6 +60,28 @@ function json_text(status: integer, content: string) -> Response
 
 function refuse(status: integer, message: string) -> Response
     return json_text(status, json.encode_value(Refusal(error = clone(message))))
+
+# What a page is sent with: it may not be put in another site's frame, run
+# what it did not come with, or be kept, since it shows who is signed in.
+constant PAGE_POLICY = "default-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
+
+# A page of HTML.
+function page(status: integer, content: string) -> Response
+    response = text(status, "text/html; charset=utf-8", content)
+    response.headers["Content-Security-Policy"] = clone(PAGE_POLICY)
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Referrer-Policy"] = "same-origin"
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+# Sends the browser to another address, with GET: after a form, so that
+# going back or reloading never sends it twice.
+function redirect(location: string, status: integer = 303) -> Response
+    response = text(status, "text/plain; charset=utf-8", "See " + location)
+    response.headers["Location"] = clone(location)
+    response.headers["Cache-Control"] = "no-store"
+    return response
 
 private function hex_value(digit: string) -> integer or nothing
     found = strings.find("0123456789abcdef", strings.lower(digit))
@@ -74,6 +106,21 @@ function decode(text: string) -> string
             push(bytes, value)
         index += 1
     return strings.from_bytes_lossy(bytes)
+
+private constant HEX = "0123456789ABCDEF"
+
+# Text made fit to put in a part of an address: each byte but letters,
+# digits, and `-._~` written as `%XX`.
+function encode(text: string) -> string
+    out: Array<string> = []
+    for value in strings.bytes(text)
+        number = integer(value)
+        plain = number >= 48 and number <= 57 or number >= 65 and number <= 90 or number >= 97 and number <= 122
+        if plain or number == 45 or number == 46 or number == 95 or number == 126
+            push(out, strings.character(number))
+        else
+            push(out, "%" + HEX[number / 16] + HEX[number % 16])
+    return strings.join(out, "")
 
 function parse_query(text: string) -> Dict<string, string>
     out: Dict<string, string> = []
@@ -126,7 +173,25 @@ function read(update connection: network.Connection) -> Request or Response or n
     if mark != nothing
         path = strings.slice(target, 0, mark)
         query = parse_query(strings.slice(target, mark + 1, length(target)))
-    return Request(method = clone(parts[0]), path = path, query = query, headers = headers, body = body)
+    return Request(method = clone(parts[0]), target = target, path = path, query = query, headers = headers, body = body)
+
+# A cookie the request carries, or nothing.
+function cookie(request: Request, name: string) -> string or nothing
+    if not haskey(request.headers, "cookie")
+        return nothing
+    for part in strings.split(request.headers["cookie"], ";")
+        equals = strings.find(part, "=")
+        if equals != nothing
+            if strings.trim(strings.slice(part, 0, equals)) == name
+                return strings.trim(strings.slice(part, equals + 1, length(part)))
+    return nothing
+
+# The fields of a form, as a browser sends them.
+function form(request: Request) -> Dict<string, string>
+    content = try strings.from_bytes(request.body)
+    if content is error
+        return []
+    return parse_query(content)
 
 # The token of `Authorization: Bearer <token>`.
 function bearer(request: Request) -> string or nothing
@@ -153,3 +218,11 @@ test "addresses are decoded"
     assert(decode("json+parser%2Fa%C3%A9") == "json parser/aé")
     query = parse_query("q=text%20tools&limit=5&flag")
     assert(query["q"] == "text tools" and query["limit"] == "5" and query["flag"] == "")
+    assert(encode("/login/BCDF-GHJK?a=b c") == "%2Flogin%2FBCDF-GHJK%3Fa%3Db%20c")
+    assert(decode(encode("aé /&")) == "aé /&")
+
+test "cookies are found by name"
+    headers: Dict<string, string> = ["cookie" = "theme=dark; sayon_session=ab12 ;other=x=y"]
+    request = Request(method = "GET", target = "/", path = "/", query = [], headers = headers, body = [])
+    assert(cookie(request, "sayon_session") == "ab12" and cookie(request, "other") == "x=y")
+    assert(cookie(request, "session") == nothing)

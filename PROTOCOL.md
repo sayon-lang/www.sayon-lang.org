@@ -1,6 +1,6 @@
 # The registry protocol
 
-A registry keeps published Sayon packages: each version's archive, and an index of what every version is and depends on. `sayon install` reads the index and fetches archives, `sayon search` asks the API, and `sayon publish`, `login`, and `logout` use the API with an account. [The language reference](https://github.com/sayon-lang/docs.sayon-lang.org/blob/main/language.md#versions-from-the-registry) shows how projects use it; this page is how the two sides talk. The client is in [sayon-lang/sayon](https://github.com/sayon-lang/sayon) (`crates/driver/src/registry.rs` and `crates/cli/src/registry.rs`), the server is this repository, and Sayon's index is [packages.sayon-lang.org-index](https://github.com/sayon-lang/packages.sayon-lang.org-index).
+A registry keeps published Sayon packages: each version's archive, and an index of what every version is and depends on. `sayon install` reads the index and fetches archives, `sayon search` asks the API, and `sayon publish`, `login`, and `logout` use the API with an account, which people make on the registry's pages. [The language reference](https://github.com/sayon-lang/docs.sayon-lang.org/blob/main/language.md#versions-from-the-registry) shows how projects use it; this page is how the two sides talk. The client is in [sayon-lang/sayon](https://github.com/sayon-lang/sayon) (`crates/driver/src/registry.rs` and `crates/cli/src/registry.rs`), the server is this repository, and Sayon's index is [packages.sayon-lang.org-index](https://github.com/sayon-lang/packages.sayon-lang.org-index).
 
 Protocol 1 is HTTPS, or HTTP to `localhost` for a registry on the same computer. A registry is named by its index's address, which `SAYON_REGISTRY` and `--registry` give; this server serves its index at `<registry>/index`.
 
@@ -31,7 +31,10 @@ Under `<api>/api/v1`; answers are JSON, but archives. A request the registry ref
 | `GET /api/v1/search?q=<words>&limit=<1 to 50, 20 by default>` | `{"packages": [{"name", "latest", "description"}]}`: the packages with the words in their names or descriptions, an exact name first |
 | `PUT /api/v1/packages/<name>/<version>` with the archive, and `Authorization: Bearer <token>` | 201 and `{"name", "version", "digest"}` |
 | `GET /api/v1/me` with a token | `{"name": "<account>"}`, or 401 |
-| `POST /api/v1/users` with the operator's token and `{"name": "<account>"}`, and `"replace": true` for a new token | 201 (200 when replaced) and `{"name", "token"}` |
+| `POST /api/v1/logins` with `{"machine": "<the computer's name>"}` | 201 and `{"secret": "<64 hexadecimal digits>", "code": "<as WDJB-MJHT>", "interval": <seconds>, "expires": <seconds>}`: a sign-in for `sayon login` (see Accounts) |
+| `POST /api/v1/logins/poll` with `{"secret": "<secret>"}` | `{"status": "waiting"}`; once approved, `{"status": "approved", "account": "<name>", "token": "<a new token>"}`, once; once denied, `{"status": "denied"}`; 404 once the sign-in is over |
+| `DELETE /api/v1/tokens/current` with a token | `{"revoked": true}`: the token no longer works |
+| `POST /api/v1/users` with the operator's token and `{"name": "<account>"}`, and `"replace": true` to take away an existing account's tokens | 201 (200 for an existing account) and `{"name", "token"}` |
 
 ## Archives
 
@@ -49,8 +52,20 @@ A publication's archive must have a `sayon.toml` naming the same package and ver
 - 413 for an archive over 10 MiB, as soon as the request's `Content-Length` says so;
 - 400 for an archive it cannot read, and for the rest.
 
-It keeps the archive first, then adds the version's line to the index, so that the index never lists a version without one. It writes each of its files whole, the archive, the package's file of the index, the accounts, and the owners, through a temporary file renamed over it, so that a crash or a power cut never leaves one half written: at worst it leaves an archive the index does not list, which publishing the version again replaces. Names are lowercase letters, digits, and `_`, starting with a letter, 64 characters at most, for packages and accounts alike.
+It keeps the archive first, then adds the version's line to the index, so that the index never lists a version without one. It writes each of its files whole, the archive, the package's file of the index, the accounts, their tokens and sessions, and the owners, through a temporary file renamed over it, so that a crash or a power cut never leaves one half written: at worst it leaves an archive the index does not list, which publishing the version again replaces. Names are lowercase letters, digits, and `_`, starting with a letter, 64 characters at most, for packages and accounts alike.
 
 ## Accounts
 
-The registry's operator makes accounts: with `--account` when the registry starts, or `POST /api/v1/users` with the operator's token. Each account has one token, 32 random bytes from the system's secure source, shown once; the registry keeps only its SHA-256. `"replace": true` gives an account a new token, and the old one stops working. `sayon login` checks a token with `GET /api/v1/me` before keeping it, with the account's name, which must be a name.
+People make their own accounts, on the registry's page `/sign-up`: a name, as packages have, and a password of 12 to 256 characters, which the registry keeps as `crypto.hash_password` makes it, with PBKDF2 and HMAC-SHA256, 600,000 rounds, and a salt of its own. A browser that signs in holds a cookie of 32 random bytes, `HttpOnly`, `SameSite=Lax`, and `Secure` over HTTPS, for 30 days or until it signs out; the registry keeps the cookie's SHA-256. Every form must come from the registry's own pages, as the browser's `Origin` says, and no page may be shown in another site's frame. Ten wrong passwords in a row make an account wait 15 minutes. There is no email: for a forgotten password, the operator's `--reset <account>` prints a link that chooses the account's password, once, within an hour.
+
+An account has a token for each computer `sayon login` signed in on, and those its owner makes on its page, `/account`, for a build server or the like. Each is 32 random bytes from the system's secure source, shown once; the registry keeps only its SHA-256. The account's page lists them with when each was last used, and revokes them; `sayon logout` revokes its own.
+
+`sayon login` signs in so:
+
+1. `POST /api/v1/logins` starts a sign-in for the computer it names, and gives `sayon` a secret and a code.
+2. `sayon` shows the code and the sign-in's page, `<api>/login/<code>`, and opens the page in the browser. There, signed in or making an account on the page, the account's owner checks that the page shows the same code, and approves the sign-in or denies it.
+3. `sayon` asks `POST /api/v1/logins/poll` with the secret every `interval` seconds until the sign-in is decided, and keeps the account's new token, which the registry gives once. A sign-in no one decides is over after ten minutes.
+
+The code lets the account's owner tell that the page is for their own `sayon login`, and only the secret, which never leaves `sayon`, takes the token. The account's name must be a name, since `sayon` keeps it beside the token and shows it. With `--token`, `sayon login` takes a token from its input instead, and checks it with `GET /api/v1/me`.
+
+The operator makes accounts too, without passwords: with `--account` when the registry starts, or `POST /api/v1/users` with the operator's token. Each is given a token; `"replace": true`, like `--account` for an account that exists, takes away its other tokens.

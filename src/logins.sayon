@@ -1,0 +1,133 @@
+# The sign-ins `sayon login` starts. The command is given a secret that
+# only it knows, and a code that its user checks on the registry's page
+# for the sign-in, /login/<code>. Once they approve it there, the command
+# trades the secret for a new token of their account, once. A sign-in no
+# one approves expires after ten minutes.
+
+crypto = import("standard/crypto.sayon")
+filesystem = import("standard/filesystem.sayon")
+io = import("standard/io.sayon")
+json = import("standard/json.sayon")
+strings = import("standard/strings.sayon")
+time = import("standard/time.sayon")
+accounts = import("src/accounts.sayon")
+files = import("src/files.sayon")
+
+# How long a sign-in waits for its approval, in seconds.
+constant LASTS = 600
+
+# How often the command asks whether its sign-in is approved, in seconds.
+constant INTERVAL = 2
+
+# The letters of codes: no vowels, so that no code spells a word, and none
+# that could be mistaken for a digit.
+constant LETTERS = "BCDFGHJKLMNPQRSTVWXZ"
+
+# A sign-in: its code, the computer it is for, when it began and when it
+# expires (in seconds since 1970), and once its user decides, the account
+# it is approved for, or that it was denied.
+type Login = [code: string, machine: string, created: string, expires: integer, account: string or nothing, denied: boolean]
+
+# What `start` gives the command.
+type Started = [secret: string, code: string]
+
+# The sign-ins, by the SHA-256 of each secret, in hexadecimal.
+function logins(data: string) -> Dict<string, Login>
+    file = filesystem.join(data, "logins.json")
+    if not filesystem.is_file(file)
+        return []
+    return json.decode(io.read_file(file))
+
+# Keeps the sign-ins that have not expired.
+function save_logins(data: string, all: Dict<string, Login>)
+    now = time.unix_seconds()
+    kept: Dict<string, Login> = []
+    for key, login in all
+        if login.expires > now
+            kept[clone(key)] = clone(login)
+    files.save_text(filesystem.join(data, "logins.json"), json.encode_value(kept))
+
+# A new code: eight letters in two fours, such as WDJB-MJHT.
+function new_code() -> string
+    code = ""
+    count = 0
+    while count < 8
+        for value in crypto.random_bytes(16)
+            number = integer(value)
+            # 240 is 12 times the 20 letters, so that each is as likely.
+            if number < 240 and count < 8
+                if count == 4
+                    code = code + "-"
+                code = code + LETTERS[number % 20]
+                count += 1
+    return code
+
+# Whether text is a code as `new_code` makes them.
+function valid_code(text: string) -> boolean
+    if length(text) != 9
+        return false
+    for position in range(9)
+        letter = text[position]
+        if position == 4
+            if letter != "-"
+                return false
+        elseif not strings.contains(LETTERS, letter)
+            return false
+    return true
+
+# A computer's name as `sayon login` sends it, made fit to show: letters,
+# digits, spaces, `-`, `_`, and `.`, 64 of them at most.
+function machine_name(text: string) -> string
+    out = ""
+    for letter in strings.characters(strings.trim(text))
+        if length(out) >= 64
+            break
+        code = strings.code(letter)
+        fits = code >= 48 and code <= 57 or code >= 65 and code <= 90 or code >= 97 and code <= 122
+        if fits or letter == " " or letter == "-" or letter == "_" or letter == "."
+            out = out + letter
+    out = strings.trim(out)
+    if out == ""
+        return "a computer"
+    return out
+
+# Starts a sign-in for a computer.
+function start(update all: Dict<string, Login>, machine: string) -> Started
+    code = new_code()
+    while find(all, code) != nothing
+        code = new_code()
+    secret = crypto.hex(crypto.random_bytes(32))
+    all[accounts.hash(secret)] = Login(code = clone(code), machine = machine_name(machine), created = time.format(time.now()), expires = time.unix_seconds() + LASTS, account = nothing, denied = false)
+    return Started(secret = secret, code = code)
+
+# The key of the sign-in with a code that has not expired, or nothing.
+function find(all: Dict<string, Login>, code: string) -> string or nothing
+    now = time.unix_seconds()
+    for key, login in all
+        if login.code == code and login.expires > now
+            return clone(key)
+    return nothing
+
+# The key of the sign-in a secret started, unless it has expired.
+function by_secret(all: Dict<string, Login>, secret: string) -> string or nothing
+    key = accounts.hash(secret)
+    if haskey(all, key) and all[key].expires > time.unix_seconds()
+        return key
+    return nothing
+
+test "codes are eight letters in two fours"
+    for _count in range(20)
+        code = new_code()
+        assert(valid_code(code), code)
+    assert(not valid_code("ABCD-EFGH") and not valid_code("BCDFGHJK") and not valid_code("bcdf-ghjk"))
+
+test "a sign-in is found by its code and by its secret"
+    all: Dict<string, Login> = []
+    started = start(all, "DESKTOP-1 (Windows)")
+    key = find(all, started.code)
+    assert(key != nothing and key == by_secret(all, started.secret))
+    assert(by_secret(all, started.code) == nothing)
+    if key != nothing
+        assert(all[key].machine == "DESKTOP-1 Windows" and all[key].account == nothing)
+    assert(machine_name("  <script>  ") == "script" and machine_name("\u{1}") == "a computer")
+    assert(length(machine_name(strings.repeat("a", 100))) == 64)

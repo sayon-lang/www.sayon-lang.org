@@ -1,5 +1,6 @@
 # The registry's API (PROTOCOL.md), under `/api/v1`, and its index, under
-# `/index`: what `sayon publish`, `login`, `search`, and `install` ask.
+# `/index`: what `sayon publish`, `login`, `logout`, `search`, and `install`
+# ask.
 
 crypto = import("standard/crypto.sayon")
 filesystem = import("standard/filesystem.sayon")
@@ -12,6 +13,7 @@ archive = import("src/archive.sayon")
 files = import("src/files.sayon")
 http = import("src/http.sayon")
 index = import("src/index.sayon")
+logins = import("src/logins.sayon")
 manifest = import("src/manifest.sayon")
 registry = import("src/registry.sayon")
 semver = import("src/semver.sayon")
@@ -25,6 +27,19 @@ type Made = [name: string, token: string]
 type Published = [name: string, version: string, digest: string]
 type Found = [packages: Array<registry.Summary>]
 
+# A sign-in `sayon login` starts, for the computer it names, and what it is
+# given: the secret it asks with, the code its user checks, how often to
+# ask, and for how long, in seconds.
+type LoginAsked = [machine: string or nothing]
+type LoginStarted = [secret: string, code: string, interval: integer, expires: integer]
+type LoginPolled = [secret: string]
+
+# How a sign-in stands: "waiting", "denied", or "approved", with the account
+# and its new token.
+type LoginState = [status: string, account: string or nothing, token: string or nothing]
+
+type Revoked = [revoked: boolean]
+
 # The index's `config.json`: where to publish, and where archives are.
 type Config = [protocol: integer, api: string, download: string]
 
@@ -36,15 +51,19 @@ function parts(path: string) -> Array<string>
             push(out, clone(part))
     return out
 
-# The account a request's token belongs to, or the refusal.
+# The account a request's token belongs to, or the refusal. The token is
+# marked as used, for its account's page.
 private function authenticate(request: http.Request, state: registry.State) -> string or http.Response
     token = http.bearer(request)
     if token == nothing
         return http.refuse(401, "this needs an account's token: run `sayon login` first")
-    name = accounts.account_for(accounts.accounts(state.data), token)
-    if name == nothing
+    all = accounts.tokens(state.data)
+    key = accounts.hash(token)
+    if not haskey(all, key)
         return http.refuse(401, "the token is not one this registry knows: run `sayon login` again")
-    return name
+    all[key].used = time.format(time.now())
+    accounts.save_tokens(state.data, all)
+    return clone(all[key].account)
 
 # The operator makes an account, or gives one a new token.
 private function make_account(request: http.Request, state: registry.State) -> http.Response
@@ -60,11 +79,13 @@ private function make_account(request: http.Request, state: registry.State) -> h
     if not index.valid_name(asked.name)
         return http.refuse(400, "an account's name is lowercase letters, digits, and `_`, starting with a letter")
     all = accounts.accounts(state.data)
+    kept = accounts.tokens(state.data)
     replace = asked.replace == true
     existed = haskey(all, asked.name)
-    made = accounts.make(all, asked.name, replace)
+    made = accounts.make(all, kept, asked.name, replace)
     if made == nothing
         return http.refuse(409, "the account `{asked.name}` already exists")
+    accounts.save_tokens(state.data, kept)
     accounts.save_accounts(state.data, all)
     status = 201
     if existed
@@ -163,6 +184,68 @@ private function index_file(state: registry.State, rest: Array<string>) -> http.
         return http.refuse(404, "there is no package `{name}`")
     return http.text(200, "text/plain; charset=utf-8", io.read_file(file))
 
+# Starts a sign-in for `sayon login`, for the computer the request names.
+private function start_login(request: http.Request, state: registry.State) -> http.Response
+    machine = "a computer"
+    text = try strings.from_bytes(request.body)
+    if text is error
+        return http.refuse(400, "the request is not JSON")
+    if strings.trim(text) != ""
+        asked = try json.decode<LoginAsked>(text)
+        if asked is error
+            return http.refuse(400, "the request is not {{\"machine\": ...}}")
+        named = clone(asked.machine)
+        if named != nothing
+            machine = named
+    all = logins.logins(state.data)
+    started = logins.start(all, machine)
+    logins.save_logins(state.data, all)
+    reply = LoginStarted(secret = clone(started.secret), code = clone(started.code), interval = logins.INTERVAL, expires = logins.LASTS)
+    return http.json_text(201, json.encode_value(reply))
+
+# Tells `sayon login` how its sign-in stands, and once it is approved gives
+# it a new token of the account, once.
+private function poll_login(request: http.Request, state: registry.State) -> http.Response
+    text = try strings.from_bytes(request.body)
+    if text is error
+        return http.refuse(400, "the request is not JSON")
+    asked = try json.decode<LoginPolled>(text)
+    if asked is error
+        return http.refuse(400, "the request is not {{\"secret\": ...}}")
+    all = logins.logins(state.data)
+    key = logins.by_secret(all, asked.secret)
+    if key == nothing
+        return http.refuse(404, "the sign-in is over: it was finished, or it expired; run `sayon login` again")
+    if all[key].denied
+        remove(all, key)
+        logins.save_logins(state.data, all)
+        return http.json_text(200, json.encode_value(LoginState(status = "denied", account = nothing, token = nothing)))
+    approved = clone(all[key].account)
+    if approved == nothing
+        return http.json_text(200, json.encode_value(LoginState(status = "waiting", account = nothing, token = nothing)))
+    machine = clone(all[key].machine)
+    kept = accounts.tokens(state.data)
+    token = accounts.add_token(kept, approved, machine)
+    # The sign-in goes first: a crash between the two then loses the token
+    # rather than letting the secret take a second one.
+    remove(all, key)
+    logins.save_logins(state.data, all)
+    accounts.save_tokens(state.data, kept)
+    return http.json_text(200, json.encode_value(LoginState(status = "approved", account = approved, token = token)))
+
+# Revokes the token a request carries, for `sayon logout`.
+private function revoke_current(request: http.Request, state: registry.State) -> http.Response
+    token = http.bearer(request)
+    if token == nothing
+        return http.refuse(401, "this needs the token to revoke")
+    all = accounts.tokens(state.data)
+    key = accounts.hash(token)
+    if not haskey(all, key)
+        return http.refuse(401, "the token is not one this registry knows, so there is nothing to revoke")
+    remove(all, key)
+    accounts.save_tokens(state.data, all)
+    return http.json_text(200, json.encode_value(Revoked(revoked = true)))
+
 # Answers a request to `/api/v1` or `/index`.
 function answer(request: http.Request, state: registry.State) -> http.Response
     path = parts(request.path)
@@ -185,6 +268,12 @@ function answer(request: http.Request, state: registry.State) -> http.Response
         return http.json_text(200, json.encode_value(Me(name = account)))
     if count == 3 and path[2] == "users" and request.method == "POST"
         return make_account(request, state)
+    if count == 3 and path[2] == "logins" and request.method == "POST"
+        return start_login(request, state)
+    if count == 4 and path[2] == "logins" and path[3] == "poll" and request.method == "POST"
+        return poll_login(request, state)
+    if count == 4 and path[2] == "tokens" and path[3] == "current" and request.method == "DELETE"
+        return revoke_current(request, state)
     if count == 3 and path[2] == "search" and request.method == "GET"
         return search(request, state)
     if count == 5 and path[2] == "packages" and request.method == "PUT"
