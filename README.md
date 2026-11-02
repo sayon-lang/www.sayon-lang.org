@@ -10,7 +10,7 @@ The website of [Sayon](https://github.com/sayon-lang/sayon): what Sayon is, a fi
 
 ## Written in Sayon
 
-The site is made by a Sayon program. `src/page.sayon` holds what the page says, as Sayon data, and writes its HTML; `src/highlight.sayon` colors the code it shows, reading Sayon as Sayon's own lexer does; `src/html.sayon` escapes text. `sayon run` writes the page into `site/`, with the files of `static/` (the stylesheet and the logo) beside it:
+The site is made by a Sayon program. `src/page.sayon` holds what the page says, as Sayon data, and writes its HTML in the frame of Sayon's websites, `src/frame.sayon`; `src/highlight.sayon` colors the code it shows, reading Sayon as Sayon's own lexer does; `src/html.sayon` escapes text. `sayon run` writes the page into `site/`, with the files of `static/` (the stylesheet, the script, and the logo) beside it. `src/frame.sayon`, `static/style.css`, and `static/site.js` are the look that www.sayon-lang.org, docs.sayon-lang.org, and packages.sayon-lang.org share, each with a copy, so a change to one goes to all three:
 
 ```bash
 sayon run

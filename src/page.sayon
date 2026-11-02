@@ -1,24 +1,16 @@
-# The page: what it says, and the HTML it becomes.
+# The page: what it says, and the HTML it becomes, in the frame of Sayon's
+# websites (src/frame.sayon).
 
 strings = import("standard/strings.sayon")
-html = import("src/html.sayon")
+frame = import("src/frame.sayon")
 highlight = import("src/highlight.sayon")
+html = import("src/html.sayon")
 
 constant GITHUB = "https://github.com/sayon-lang"
 constant DOCS = "https://github.com/sayon-lang/docs.sayon-lang.org"
 
-type Link = [label: string, address: string]
-
 # What Sayon is like: a heading and a few sentences, with `code` marked.
 type Point = [title: string, text: string]
-
-function links() -> Array<Link>
-    return [
-        Link(label = "Get started", address = "#start"),
-        Link(label = "Docs", address = clone(DOCS)),
-        Link(label = "Packages", address = GITHUB + "/packages.sayon-lang.org"),
-        Link(label = "GitHub", address = GITHUB + "/sayon")
-    ]
 
 # A first program, shown as Sayon writes it.
 function sample() -> string
@@ -34,89 +26,110 @@ function sample() -> string
         "print(length(numbers))  # numbers is still owned here"
     ], "\n")
 
+# What `sayon run` prints for the program.
+function output() -> string
+    return "Sum: 6\n3"
+
+# What `sayon check` says of a value used after it moved, in the compiler's
+# own words.
+function diagnostic() -> Array<string>
+    return [
+        "error[E_MOVED_VALUE]: `names` was transferred to `team`",
+        "  --> moved.sayon:3:14",
+        "   |",
+        " 2 | team = names",
+        "   |        ----- ownership transferred here",
+        " 3 | print(length(names))",
+        "   |              ^^^^^ `names` no longer owns the array",
+        "   |",
+        "   = help: use `team` here, or write `team = clone(names)` when you need two independent copies"
+    ]
+
 function points() -> Array<Point>
     return [
         Point(title = "Reads like what it does", text = "Blocks by indentation, whole words for keywords, and values written into strings where they go. Types are inferred, and you name them where it helps."),
         Point(title = "Safe without trying", text = "The compiler checks ownership and infers borrowing, so each value is cleaned up exactly once, at a time you can tell from the code. No garbage collector, no hidden copies."),
-        Point(title = "Errors that teach", text = "Every diagnostic has a stable code, points at the problem, and suggests a concrete fix. `sayon explain` says more about any of them."),
-        Point(title = "One program, many places", text = "Run it in the interpreter, or compile it through LLVM to a native program for Windows or Linux, WebAssembly for WASI and web pages, or an Android app.")
+        Point(title = "One program, many places", text = "Run it in the interpreter, or compile it through LLVM to a native program for Windows or Linux, WebAssembly for WASI and web pages, or an Android app."),
+        Point(title = "Errors that teach", text = "Every diagnostic has a stable code, points at the problem, and suggests a concrete fix. `sayon explain` says more about any of them.")
     ]
 
-private function link(target: Link) -> string
-    return "<a href=\"{html.escape(target.address)}\">{html.text(target.label)}</a>"
+# The diagnostic as a terminal shows it, its first line and its help marked.
+private function diagnostic_html() -> string
+    lines: Array<string> = []
+    for line in diagnostic()
+        if strings.starts_with(line, "error[")
+            push(lines, "<span class=\"error\">{html.text(line)}</span>")
+        elseif strings.starts_with(line, "   = help:")
+            push(lines, "<span class=\"help\">{html.text(line)}</span>")
+        else
+            push(lines, html.text(line))
+    return strings.join(lines, "\n")
 
 # The whole page.
 function render() -> string
-    out: Array<string> = []
-    push(out, "<!doctype html>")
-    push(out, "<html lang=\"en\">")
-    push(out, "<head>")
-    push(out, "  <meta charset=\"utf-8\">")
-    push(out, "  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">")
-    push(out, "  <title>Sayon: Programming made easy. Safety made automatic.</title>")
-    push(out, "  <meta name=\"description\" content=\"Sayon is a readable programming language whose compiler checks ownership for you: no garbage collector, no hidden copies, and errors that say how to fix them.\">")
-    push(out, "  <link rel=\"icon\" href=\"favicon.ico\" sizes=\"any\">")
-    push(out, "  <link rel=\"icon\" href=\"images/logo.svg\" type=\"image/svg+xml\">")
-    push(out, "  <link rel=\"apple-touch-icon\" href=\"images/icon-256.png\">")
-    push(out, "  <link rel=\"stylesheet\" href=\"style.css\">")
-    push(out, "</head>")
-    push(out, "<body>")
-    push(out, "  <header class=\"bar\">")
-    push(out, "    <a class=\"brand\" href=\"./\"><img src=\"images/logo.svg\" alt=\"\" width=\"32\" height=\"32\"> Sayon</a>")
-    push(out, "    <nav aria-label=\"Main\">")
-    for target in links()
-        push(out, "      " + link(target))
-    push(out, "    </nav>")
-    push(out, "  </header>")
+    framed = frame.Page(title = "Sayon: Programming made easy. Safety made automatic.", description = "Sayon is a readable programming language whose compiler checks ownership for you: no garbage collector, no hidden copies, and errors that say how to fix them.", site = "www", root = "", tools = [], colophon = "This page is written by a Sayon program, <a href=\"{GITHUB}/www.sayon-lang.org\">www.sayon-lang.org</a>.")
+    out = frame.top(framed)
+    push(out, "  <main id=\"main\">")
+    push(out, "    <div class=\"wrap\">")
+    push(out, "      <section class=\"hero\">")
+    push(out, "        <div>")
+    push(out, "          <h1>Programming made easy. Safety made automatic.</h1>")
+    push(out, "          <p class=\"lead\">" + html.prose("Sayon means “easy”. Ordinary programs need fewer decisions, less boilerplate, and less setup, while the compiler checks who owns each value, so memory is freed on time without a garbage collector.") + "</p>")
+    push(out, "          <div class=\"buttons\">")
+    push(out, "            <a class=\"button primary large\" href=\"#start\">Get started</a>")
+    push(out, "            <a class=\"button large\" href=\"{DOCS}/blob/main/language.md\">Read the language guide</a>")
+    push(out, "          </div>")
+    push(out, "        </div>")
+    push(out, "        <figure class=\"editor\" aria-label=\"A Sayon program and what it prints\">")
+    push(out, "          <div class=\"editor-tabs\"><span class=\"open\">hello.sayon</span></div>")
+    push(out, "          <pre><code>" + highlight.highlight(sample()) + "</code></pre>")
+    push(out, "          <pre class=\"terminal\"><span class=\"prompt\">$ sayon run</span>")
+    push(out, html.text(output()) + "</pre>")
+    push(out, "        </figure>")
+    push(out, "      </section>")
     push(out, "")
-    push(out, "  <main>")
-    push(out, "    <section class=\"hero\">")
-    push(out, "      <img class=\"mark\" src=\"images/logo.svg\" alt=\"Sayon logo\" width=\"160\" height=\"160\">")
-    push(out, "      <h1>Programming made easy.<br><span>Safety made automatic.</span></h1>")
-    push(out, "      <p class=\"lead\">" + html.prose("Sayon means “easy”. Ordinary programs need fewer decisions, less boilerplate, and less setup, while the compiler checks who owns each value, so memory is freed on time without a garbage collector.") + "</p>")
-    push(out, "      <div class=\"actions\">")
-    push(out, "        <a class=\"button primary\" href=\"#start\">Get started</a>")
-    push(out, "        <a class=\"button\" href=\"{DOCS}/blob/main/language.md\">Read the language guide</a>")
-    push(out, "      </div>")
-    push(out, "    </section>")
-    push(out, "")
-    push(out, "    <section class=\"sample\" aria-label=\"A Sayon program\">")
-    push(out, "      <pre><code>" + highlight.highlight(sample()) + "</code></pre>")
-    push(out, "    </section>")
-    push(out, "")
-    push(out, "    <section class=\"points\" aria-label=\"What Sayon is like\">")
+    push(out, "      <section class=\"points\" aria-label=\"What Sayon is like\">")
     for point in points()
-        push(out, "      <article>")
-        push(out, "        <h2>{html.text(point.title)}</h2>")
-        push(out, "        <p>{html.prose(point.text)}</p>")
-        push(out, "      </article>")
-    push(out, "    </section>")
+        if point.title == "Errors that teach"
+            push(out, "        <article class=\"wide\">")
+            push(out, "          <div>")
+            push(out, "            <h3>{html.text(point.title)}</h3>")
+            push(out, "            <p>{html.prose(point.text)}</p>")
+            push(out, "          </div>")
+            push(out, "          <pre class=\"terminal\" aria-label=\"What sayon check says of a value used after it moved\">" + diagnostic_html() + "</pre>")
+        else
+            push(out, "        <article>")
+            push(out, "          <h3>{html.text(point.title)}</h3>")
+            push(out, "          <p>{html.prose(point.text)}</p>")
+        push(out, "        </article>")
+    push(out, "      </section>")
     push(out, "")
-    push(out, "    <section class=\"status\">")
-    push(out, "      <h2>Early days</h2>")
-    push(out, "      <p>Sayon is in early development and not ready for real programs yet. What exists, what is planned, and for which milestone is in the <a href=\"{GITHUB}/sayon/blob/main/docs/features.md\">feature ledger</a>.</p>")
-    push(out, "    </section>")
+    push(out, "      <section class=\"section\" aria-label=\"How far Sayon has come\">")
+    push(out, "        <div class=\"notice\"><p><strong>Early days.</strong> Sayon is in early development and not ready for real programs yet. What exists, what is planned, and for which milestone is in the <a href=\"{GITHUB}/sayon/blob/main/docs/features.md\">feature ledger</a>.</p></div>")
+    push(out, "      </section>")
     push(out, "")
-    push(out, "    <section id=\"start\" class=\"start\">")
-    push(out, "      <h2>Get started</h2>")
-    push(out, "      <ol>")
-    push(out, "        <li>Download the installer for your device from the <a href=\"{GITHUB}/sayon/releases\">releases page</a> and run it. <a href=\"{DOCS}/blob/main/installing.md\">Installing</a> lists them all.</li>")
-    push(out, "        <li>Open a new terminal and make a project:")
-    push(out, "          <pre><code>sayon init hello")
+    push(out, "      <section id=\"start\" class=\"section\" aria-labelledby=\"start-title\">")
+    push(out, "        <h2 id=\"start-title\">Get started</h2>")
+    push(out, "        <ol class=\"steps\">")
+    push(out, "          <li>")
+    push(out, "            <h3>Install Sayon</h3>")
+    push(out, "            <p>Download the installer for your device from the <a href=\"{GITHUB}/sayon/releases\">releases page</a> and run it. <a href=\"{DOCS}/blob/main/installing.md\">Installing</a> lists them all.</p>")
+    push(out, "          </li>")
+    push(out, "          <li>")
+    push(out, "            <h3>Make a project</h3>")
+    push(out, "            <p>Open a new terminal, then:</p>")
+    push(out, "            <pre><code>sayon init hello")
     push(out, "cd hello")
     push(out, "sayon run</code></pre>")
-    push(out, "        </li>")
-    push(out, "        <li>For VS Code, install the <a href=\"{GITHUB}/sayon-vscode\">Sayon extension</a>: highlighting, errors as you type, completion, and more.</li>")
-    push(out, "      </ol>")
-    push(out, "    </section>")
+    push(out, "          </li>")
+    push(out, "          <li>")
+    push(out, "            <h3>Set up your editor</h3>")
+    push(out, "            <p>For VS Code, install the <a href=\"{GITHUB}/sayon-vscode\">Sayon extension</a>: highlighting, errors as you type, completion, and more.</p>")
+    push(out, "          </li>")
+    push(out, "        </ol>")
+    push(out, "      </section>")
+    push(out, "    </div>")
     push(out, "  </main>")
-    push(out, "")
-    push(out, "  <footer>")
-    push(out, "    <img src=\"images/logo.svg\" alt=\"\" width=\"24\" height=\"24\">")
-    push(out, "    <p>Sayon is open source, under the Apache License 2.0 with LLVM's exception.")
-    push(out, "      <a href=\"{GITHUB}\">github.com/sayon-lang</a></p>")
-    push(out, "  </footer>")
-    push(out, "</body>")
-    push(out, "</html>")
-    push(out, "")
+    for line in frame.bottom(framed)
+        push(out, clone(line))
     return strings.join(out, "\n")
