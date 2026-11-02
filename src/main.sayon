@@ -1,7 +1,7 @@
 # Runs Sayon's website: its first page, the guides of `docs`, the package
 # registry with its API and its index, and accounts, on this computer.
 #
-#     sayon run -- [--port 4100] [--data data] [--index <folder>] [--account <name>]...
+#     sayon run -- [--port 4100] [--data data] [--index <folder>] [--account <name>]... [--admin <name>]...
 #     sayon run -- [--port 4100] [--data data] --reset <name>
 #
 # Run it from this folder. It serves at http://127.0.0.1:<port> (`--port 0`
@@ -13,7 +13,8 @@
 # address, its index's address, and a token for each `--account`, which it
 # makes, or whose tokens it replaces with that one. The operator's token,
 # for making accounts later, is SAYON_REGISTRY_ADMIN_TOKEN. People make
-# their own accounts on its pages.
+# their own accounts on its pages. Each `--admin` makes an account an admin
+# of the website, who appoints the forum's moderators.
 #
 # `--reset <name>` serves nothing: it prints a line of JSON with a link
 # that chooses the account's password, once, within an hour, for an
@@ -30,7 +31,7 @@ registry = import("src/packages/registry.sayon")
 server = import("src/server.sayon")
 sessions = import("src/accounts/sessions.sayon")
 
-type Options = [port: integer, data: string, index: string, accounts: Array<string>, reset: string]
+type Options = [port: integer, data: string, index: string, accounts: Array<string>, admins: Array<string>, reset: string]
 
 type Started = [url: string, index: string, data: string, accounts: Dict<string, string>]
 
@@ -42,6 +43,7 @@ function options(arguments: Array<string>) -> Options
     index = ""
     reset = ""
     names: Array<string> = []
+    admins: Array<string> = []
     position = 0
     while position < length(arguments)
         option = clone(arguments[position])
@@ -59,14 +61,16 @@ function options(arguments: Array<string>) -> Options
             index = value
         elseif option == "--account"
             push(names, value)
+        elseif option == "--admin"
+            push(admins, value)
         elseif option == "--reset"
             reset = value
         else
-            error("unknown option {option}; the options are --port, --data, --index, --account, and --reset")
+            error("unknown option {option}; the options are --port, --data, --index, --account, --admin, and --reset")
         position += 2
     if index == ""
         index = filesystem.join(data, "index")
-    return Options(port = port, data = data, index = index, accounts = names, reset = reset)
+    return Options(port = port, data = data, index = index, accounts = names, admins = admins, reset = reset)
 
 # Prints a link that chooses an account's password.
 function print_reset(chosen: Options)
@@ -101,6 +105,10 @@ function main()
         token = accounts.make(all, kept, name, true)
         if token != nothing
             made[clone(name)] = token
+    for name in chosen.admins
+        if not haskey(all, name)
+            error("there is no account `{name}` to make an admin")
+        all[name].role = "admin"
     accounts.save_tokens(chosen.data, kept)
     accounts.save_accounts(chosen.data, all)
     listener = network.listen("127.0.0.1", chosen.port)

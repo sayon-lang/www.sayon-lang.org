@@ -41,7 +41,8 @@ type Section = [key: string, label: string, address: string]
 function sections() -> Array<Section>
     return [
         Section(key = "docs", label = "Docs", address = "/docs"),
-        Section(key = "packages", label = "Packages", address = "/packages")
+        Section(key = "packages", label = "Packages", address = "/packages"),
+        Section(key = "community", label = "Community", address = "/community")
     ]
 
 private function brand() -> string

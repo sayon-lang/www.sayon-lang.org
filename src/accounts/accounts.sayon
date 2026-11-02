@@ -18,9 +18,10 @@ files = import("src/web/files.sayon")
 # and post (`verified`: its email was verified, or the operator made it, or
 # it was made before accounts had email, which leaves it nothing); its
 # role, "admin" or "moderator", or nothing for anyone else; a few words
-# about its owner; and whether its owner is mailed news, such as replies
-# (nothing for yes).
-type Account = [created: string, password: string or nothing, email: string or nothing, verified: boolean or nothing, role: string or nothing, bio: string or nothing, notify: boolean or nothing]
+# about its owner; whether its owner is mailed news, such as replies
+# (nothing for yes); and until when moderators keep it from posting, in
+# seconds since 1970.
+type Account = [created: string, password: string or nothing, email: string or nothing, verified: boolean or nothing, role: string or nothing, bio: string or nothing, notify: boolean or nothing, suspended: integer or nothing]
 
 # A token: the account it belongs to, what it is for, such as the computer
 # `sayon login` ran on, and when it was made and last used.
@@ -28,12 +29,32 @@ type Token = [account: string, name: string, created: string, used: string or no
 
 # A new account, made now.
 function new_account(own password: string or nothing, own email: string or nothing, verified: boolean) -> Account
-    return Account(created = time.format(time.now()), password = password, email = email, verified = verified, role = nothing, bio = nothing, notify = nothing)
+    return Account(created = time.format(time.now()), password = password, email = email, verified = verified, role = nothing, bio = nothing, notify = nothing, suspended = nothing)
 
 # Whether an account may publish packages and post: unless it is waiting
 # for its email to be verified.
 function may_publish(account: Account) -> boolean
     return account.verified != false
+
+# Whether an account looks after the forum: its moderators, and the
+# website's admins, who also appoint the moderators.
+function moderates(account: Account) -> boolean
+    return account.role == "moderator" or account.role == "admin"
+
+function is_admin(account: Account) -> boolean
+    return account.role == "admin"
+
+# Until when moderators keep an account from posting, in seconds since
+# 1970, or nothing when it may post.
+function suspended_until(account: Account, now: integer) -> integer or nothing
+    until = clone(account.suspended)
+    if until != nothing and until > now
+        return until
+    return nothing
+
+# Whether an account was made in the last week, when it posts less.
+function is_new(account: Account, now: integer) -> boolean
+    return account.created > time.format(time.from_unix(now - 7 * 86400))
 
 # The most characters an email address, and a bio, have.
 constant LONGEST_EMAIL = 254

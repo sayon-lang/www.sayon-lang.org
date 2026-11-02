@@ -1,0 +1,216 @@
+filesystem = import("standard/filesystem.sayon")
+network = import("standard/network.sayon")
+strings = import("standard/strings.sayon")
+threads = import("standard/threads.sayon")
+time = import("standard/time.sayon")
+accounts = import("src/accounts/accounts.sayon")
+sessions = import("src/accounts/sessions.sayon")
+registry = import("src/packages/registry.sayon")
+server = import("src/server.sayon")
+client = import("tests/client.sayon")
+
+# How many requests each test's server answers.
+constant REQUESTS = 100
+
+# Makes verified accounts, a year old, each signed in: the headers that
+# its forms are sent with, by name.
+function people(data: string, port: integer, names: Array<string>) -> Dict<string, Dict<string, string>>
+    all = accounts.accounts(data)
+    kept = sessions.sessions(data)
+    out: Dict<string, Dict<string, string>> = []
+    for name in names
+        record = accounts.new_account(nothing, "{name}@example.com", true)
+        record.created = "2025-11-01T00:00:00Z"
+        all[clone(name)] = record
+        id = sessions.start(kept, name)
+        headers: Dict<string, string> = ["Content-Type" = "application/x-www-form-urlencoded", "Origin" = "http://127.0.0.1:{port}", "Cookie" = "{sessions.COOKIE}={id}"]
+        out[clone(name)] = headers
+    accounts.save_accounts(data, all)
+    sessions.save_sessions(data, kept)
+    return out
+
+# A fresh data folder, and the state of a website serving it at `port`.
+function website(data: string, port: integer) -> registry.State
+    client.clear(data)
+    filesystem.create_directory(filesystem.join(data, "index"))
+    return registry.State(data = clone(data), index = filesystem.join(data, "index"), address = "http://127.0.0.1:{port}", admin = "operator", guides = [])
+
+test "a question is asked, answered, and marked solved"
+    data = "build/test-community-help"
+    listener = network.listen("127.0.0.1", 0)
+    port = listener.address().port
+    state = website(data, port)
+    running = threads.spawn(function()
+        server.serve(listener, state, REQUESTS)
+    )
+    talk = client.Talk(port = port, sent = 0)
+    who = people(data, port, ["ada", "bob"])
+    ada = clone(who["ada"])
+    bob = clone(who["bob"])
+
+    # Anyone reads the community; posting signs in first.
+    empty = client.ask(talk, "GET", "/community", [], "")
+    assert(empty.status == 200 and strings.contains(empty.body, "No threads yet"), empty.body)
+    anonymous = client.ask(talk, "GET", "/community/new", [], "")
+    assert(anonymous.status == 303 and strings.starts_with(client.header_of(anonymous, "location"), "/sign-in?next="))
+
+    # Ada asks in Help, where the question is listed.
+    asked = client.ask(talk, "POST", "/community/new", ada, "category=help&title=How+do+I+read+a+whole+file%3F&text=I+tried+%60io.read_line%60.")
+    assert(asked.status == 303 and client.header_of(asked, "location") == "/community/help/1", asked.body)
+    assert(strings.contains(client.ask(talk, "GET", "/community", [], "").body, "How do I read a whole file?"))
+    assert(strings.contains(client.ask(talk, "GET", "/community/help", [], "").body, "How do I read a whole file?"))
+    assert(not strings.contains(client.ask(talk, "GET", "/community/ideas", [], "").body, "How do I read a whole file?"))
+    assert(strings.contains(client.ask(talk, "GET", "/community?q=WHOLE+file", [], "").body, "How do I read a whole file?"))
+    assert(not strings.contains(client.ask(talk, "GET", "/community?q=sockets", [], "").body, "How do I read a whole file?"))
+
+    # Bob answers, and Ada is mailed about it.
+    answered = client.ask(talk, "POST", "/community/reply", bob, "thread=1&text=Use+%60io.read_file(path)%60%3A%0A%0A%60%60%60sayon%0Atext+%3D+io.read_file(%22notes.txt%22)%0A%60%60%60")
+    assert(answered.status == 303 and client.header_of(answered, "location") == "/community/help/1#post-2", answered.body)
+    assert(client.mail_link(data, "ada@example.com", "/community/") == "/community/help/1#post-2")
+    page = client.ask(talk, "GET", "/community/help/1", [], "")
+    assert(strings.contains(page.body, "<code>io.read_file(path)</code>") and strings.contains(page.body, "language-sayon"), page.body)
+
+    # Only Ada marks the reply that solved her question.
+    assert(client.ask(talk, "POST", "/community/solve", bob, "thread=1&post=2").status == 403)
+    assert(client.ask(talk, "POST", "/community/solve", ada, "thread=1&post=2").status == 303)
+    page = client.ask(talk, "GET", "/community/help/1", [], "")
+    assert(strings.contains(page.body, "Solved by bob's reply") and strings.contains(page.body, "post post-solution"))
+    assert(strings.contains(client.ask(talk, "GET", "/community", [], "").body, "tag solved"))
+
+    # Ada's dashboard counts Bob's reply until she reads it.
+    assert(strings.contains(client.ask(talk, "GET", "/account", ada, "").body, "1 new"))
+    client.ask(talk, "GET", "/community/help/1", ada, "")
+    assert(not strings.contains(client.ask(talk, "GET", "/account", ada, "").body, "1 new"))
+
+    # Ada changes her question; Bob may not.
+    form = client.ask(talk, "GET", "/community/edit?thread=1&post=1", ada, "")
+    assert(form.status == 200 and strings.contains(form.body, "How do I read a whole file?"))
+    assert(client.ask(talk, "GET", "/community/edit?thread=1&post=1", bob, "").status == 403)
+    assert(client.ask(talk, "POST", "/community/edit", bob, "thread=1&post=1&title=Mine&text=Mine").status == 403)
+    edited = client.ask(talk, "POST", "/community/edit", ada, "thread=1&post=1&title=Reading+a+whole+file&text=I+tried+%60io.read_line%60+in+a+loop.")
+    assert(edited.status == 303)
+    page = client.ask(talk, "GET", "/community/help/1", [], "")
+    assert(strings.contains(page.body, "Reading a whole file") and strings.contains(page.body, ", edited"))
+
+    # With mail about replies off, no mail comes.
+    assert(client.ask(talk, "POST", "/account/notify", ada, "").status == 303)
+    assert(accounts.accounts(data)["ada"].notify == false)
+    assert(client.ask(talk, "POST", "/community/reply", bob, "thread=1&text=Glad+it+helped.").status == 303)
+    unsent = try client.mail_link(data, "ada@example.com", "/community/")
+    assert(unsent is error)
+    client.finish(talk, REQUESTS)
+    threads.join(running)
+
+test "who may post, and what a post may hold"
+    data = "build/test-community-posting"
+    listener = network.listen("127.0.0.1", 0)
+    port = listener.address().port
+    state = website(data, port)
+    running = threads.spawn(function()
+        server.serve(listener, state, REQUESTS)
+    )
+    talk = client.Talk(port = port, sent = 0)
+    who = people(data, port, ["cy", "dee", "eve"])
+    cy = clone(who["cy"])
+    dee = clone(who["dee"])
+    eve = clone(who["eve"])
+    all = accounts.accounts(data)
+    all["dee"].created = time.format(time.now())
+    all["eve"].verified = false
+    accounts.save_accounts(data, all)
+
+    # HTML in a post shows as text, and only links to the web are links.
+    made = client.ask(talk, "POST", "/community/new", cy, "category=show-and-tell&title=A+tiny+game&text=%3Cscript%3Ealert(1)%3C%2Fscript%3E+%5Bsite%5D(https%3A%2F%2Fexample.com)+%5Bbad%5D(javascript%3Aalert(1))")
+    assert(made.status == 303, made.body)
+    page = client.ask(talk, "GET", client.header_of(made, "location"), [], "")
+    assert(strings.contains(page.body, "&lt;script&gt;alert(1)&lt;/script&gt;") and not strings.contains(page.body, "<script>alert"), page.body)
+    assert(strings.contains(page.body, "<a href=\"https://example.com\" rel=\"nofollow ugc\">site</a>") and not strings.contains(page.body, "href=\"javascript"))
+    assert(client.ask(talk, "POST", "/community/new", cy, "category=help&title=Hi&text=Short+title").status == 400)
+    assert(client.ask(talk, "POST", "/community/new", cy, "category=nowhere&title=Somewhere+else&text=Hello").status == 400)
+
+    # Only admins start threads in Announcements.
+    news = "category=announcements&title=Sayon+0.1&text=It+is+out."
+    assert(client.ask(talk, "POST", "/community/new", cy, news).status == 403)
+    all = accounts.accounts(data)
+    all["cy"].role = "admin"
+    accounts.save_accounts(data, all)
+    assert(client.ask(talk, "POST", "/community/new", cy, news).status == 303)
+
+    # An account posts once its email is verified, and comes from here.
+    unverified = client.ask(talk, "POST", "/community/reply", eve, "thread=1&text=Nice")
+    assert(unverified.status == 403 and strings.contains(unverified.body, "Verify your email"), unverified.body)
+    outside: Dict<string, string> = clone(dee)
+    outside["Origin"] = "https://elsewhere.example"
+    assert(client.ask(talk, "POST", "/community/reply", outside, "thread=1&text=Nice").status == 403)
+
+    # In its first week, an account posts ten times a day.
+    for count in range(10)
+        assert(client.ask(talk, "POST", "/community/reply", dee, "thread=1&text=Reply+{count}").status == 303)
+    eleventh = client.ask(talk, "POST", "/community/reply", dee, "thread=1&text=One+more")
+    assert(eleventh.status == 403 and strings.contains(eleventh.body, "first week"), eleventh.body)
+    assert(client.ask(talk, "POST", "/community/reply", cy, "thread=1&text=Older+accounts+go+on").status == 303)
+    client.finish(talk, REQUESTS)
+    threads.join(running)
+
+test "moderators hide, pin, move, lock, and suspend; admins appoint them"
+    data = "build/test-community-moderation"
+    listener = network.listen("127.0.0.1", 0)
+    port = listener.address().port
+    state = website(data, port)
+    running = threads.spawn(function()
+        server.serve(listener, state, REQUESTS)
+    )
+    talk = client.Talk(port = port, sent = 0)
+    who = people(data, port, ["gus", "hal", "ivy", "jo"])
+    gus = clone(who["gus"])
+    hal = clone(who["hal"])
+    ivy = clone(who["ivy"])
+    jo = clone(who["jo"])
+    all = accounts.accounts(data)
+    all["ivy"].role = "moderator"
+    all["jo"].role = "admin"
+    accounts.save_accounts(data, all)
+    assert(client.ask(talk, "POST", "/community/new", gus, "category=ideas&title=Pattern+guards&text=Like+%60case+x+if+x+%3E+0%60.").status == 303)
+    assert(client.ask(talk, "POST", "/community/reply", hal, "thread=1&text=Buy+my+thing").status == 303)
+
+    # Members have no moderators' pages.
+    assert(client.ask(talk, "GET", "/community/reports", hal, "").status == 404)
+    assert(client.ask(talk, "POST", "/community/moderate", hal, "thread=1&action=pin").status == 404)
+
+    # Gus reports Hal's reply; Ivy sees it and hides the reply.
+    reported = client.ask(talk, "POST", "/community/report", gus, "thread=1&post=2&reason=Selling+things")
+    assert(reported.status == 303 and strings.contains(client.header_of(reported, "location"), "done=reported"))
+    queue = client.ask(talk, "GET", "/community/reports", ivy, "")
+    assert(queue.status == 200 and strings.contains(queue.body, "Selling things") and strings.contains(queue.body, "Buy my thing"), queue.body)
+    assert(client.ask(talk, "POST", "/community/moderate-post", ivy, "thread=1&post=2&action=hide&back=reports").status == 303)
+    assert(strings.contains(client.ask(talk, "GET", "/community/reports", ivy, "").body, "No reports are waiting"))
+    page = client.ask(talk, "GET", "/community/ideas/1", [], "")
+    assert(strings.contains(page.body, "A moderator hid this reply") and not strings.contains(page.body, "Buy my thing"))
+
+    # Pinned, moved, locked, and hidden.
+    assert(client.ask(talk, "POST", "/community/moderate", ivy, "thread=1&action=pin").status == 303)
+    moved = client.ask(talk, "POST", "/community/moderate", ivy, "thread=1&action=move&category=help")
+    assert(moved.status == 303 and client.header_of(moved, "location") == "/community/help/1")
+    before = client.ask(talk, "GET", "/community/ideas/1", [], "")
+    assert(before.status == 308 and client.header_of(before, "location") == "/community/help/1")
+    assert(strings.contains(client.ask(talk, "GET", "/community/help", [], "").body, ">Pinned<"))
+    assert(client.ask(talk, "POST", "/community/moderate", ivy, "thread=1&action=lock").status == 303)
+    late = client.ask(talk, "POST", "/community/reply", gus, "thread=1&text=Thanks")
+    assert(late.status == 403 and strings.contains(late.body, "locked"))
+    assert(client.ask(talk, "POST", "/community/moderate", ivy, "thread=1&action=hide").status == 303)
+    assert(client.ask(talk, "GET", "/community/help/1", gus, "").status == 404)
+    assert(client.ask(talk, "GET", "/community/help/1", ivy, "").status == 200)
+
+    # An admin makes a moderator; a moderator suspends a member, not one.
+    assert(client.ask(talk, "POST", "/community/members", ivy, "name=hal&action=moderator").status == 403)
+    assert(client.ask(talk, "POST", "/community/members", jo, "name=hal&action=moderator").status == 303)
+    assert(accounts.accounts(data)["hal"].role == "moderator")
+    assert(client.ask(talk, "POST", "/community/members", ivy, "name=hal&action=suspend&days=7").status == 403)
+    assert(client.ask(talk, "POST", "/community/members", ivy, "name=gus&action=suspend&days=7").status == 303)
+    blocked = client.ask(talk, "POST", "/community/new", gus, "category=ideas&title=Another+idea&text=Hello")
+    assert(blocked.status == 403 and strings.contains(blocked.body, "keep your account from posting"), blocked.body)
+    assert(strings.contains(client.ask(talk, "GET", "/users/gus", ivy, "").body, "may not post until"))
+    assert(client.ask(talk, "POST", "/community/members", ivy, "name=gus&action=restore").status == 303)
+    assert(client.ask(talk, "POST", "/community/new", gus, "category=ideas&title=Another+idea&text=Hello").status == 303)
+    client.finish(talk, REQUESTS)
+    threads.join(running)

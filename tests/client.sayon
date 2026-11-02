@@ -43,6 +43,21 @@ function send(port: integer, method: string, target: string, headers: Dict<strin
             headers_read[strings.lower(strings.trim(strings.slice(line, 0, colon)))] = strings.trim(strings.slice(line, colon + 1, length(line)))
     return Answer(status = status, headers = headers_read, body = strings.slice(text, end + 4, length(text)))
 
+# A test's talk with the website: its port, and how many requests it sent,
+# so that it can make up the count of requests the server was given.
+type Talk = [port: integer, sent: integer]
+
+# A request as `send` makes it, counted.
+function ask(update talk: Talk, method: string, target: string, headers: Dict<string, string>, body: string) -> Answer
+    talk.sent += 1
+    return send(talk.port, method, target, headers, body)
+
+# Sends quick requests until `count` were sent, so that a server given
+# that count returns.
+function finish(update talk: Talk, count: integer)
+    while talk.sent < count
+        ask(talk, "GET", "/api/v1", [], "")
+
 function header_of(answer: Answer, name: string) -> string
     if haskey(answer.headers, name)
         return clone(answer.headers[name])

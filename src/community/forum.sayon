@@ -1,0 +1,366 @@
+# The community's forum: threads in categories, each started by an account
+# and answered by others, kept in `<data>/community`. `threads.json` lists
+# every thread, and `<id>.json` holds a thread's posts, its start first;
+# `reports.json` holds the posts reported to moderators, `seen.json` how
+# many replies each account saw of its own threads, and `activity.json`
+# when each account posted in the last day. Each change reads its file and
+# saves it whole without waiting, so that tasks answering at the same time
+# never interleave in it.
+
+collections = import("standard/collections.sayon")
+filesystem = import("standard/filesystem.sayon")
+io = import("standard/io.sayon")
+json = import("standard/json.sayon")
+strings = import("standard/strings.sayon")
+time = import("standard/time.sayon")
+files = import("src/web/files.sayon")
+
+# How long a title and a post may be, in characters.
+constant SHORTEST_TITLE = 4
+constant LONGEST_TITLE = 120
+constant LONGEST_POST = 20000
+constant LONGEST_REASON = 500
+
+# A part of the forum: the key in its address, its name, what goes there,
+# whether only admins start threads in it, and whether its threads are
+# questions, which whoever asked marks solved by a reply.
+type Category = [key: string, label: string, about: string, admins_only: boolean, solvable: boolean]
+
+function categories() -> Array<Category>
+    return [
+        Category(key = "announcements", label = "Announcements", about = "News about Sayon from the people who make it.", admins_only = true, solvable = false),
+        Category(key = "help", label = "Help", about = "Questions about Sayon, its tools, and its packages. Whoever asks marks the reply that solved it.", admins_only = false, solvable = true),
+        Category(key = "packages", label = "Packages", about = "Packages you made, want, or are publishing.", admins_only = false, solvable = false),
+        Category(key = "show-and-tell", label = "Show and tell", about = "Programs and projects made with Sayon.", admins_only = false, solvable = false),
+        Category(key = "ideas", label = "Ideas", about = "Ideas for the language, its library, its tools, and this website.", admins_only = false, solvable = false)
+    ]
+
+# The category with a key, or nothing.
+function find_category(key: string) -> Category or nothing
+    for each in categories()
+        if each.key == key
+            return clone(each)
+    return nothing
+
+# A thread as lists show it: its number; its title and category; who
+# started it; when it started and when it was last posted in, in seconds
+# since 1970; how many replies it has; the reply that solved it; and
+# whether moderators pinned it to the top of its category, locked it to
+# replies, or hid it.
+type Thread = [id: integer, title: string, category: string, author: string, created: integer, active: integer, replies: integer, solved: integer or nothing, pinned: boolean, locked: boolean, hidden: boolean]
+
+# A post: its number in its thread, from 1 for the start; who wrote it,
+# when, and when they last changed it; its Markdown; and whether a
+# moderator hid it.
+type Post = [number: integer, author: string, created: integer, edited: integer or nothing, text: string, hidden: boolean]
+
+# A post reported to the moderators: the report's number; the thread and
+# the post; who reported it, why, and when; and whether a moderator has
+# yet to look at it.
+type Report = [id: integer, thread: integer, post: integer, reporter: string, reason: string, created: integer, open: boolean]
+
+private function folder(data: string) -> string
+    return filesystem.join(data, "community")
+
+private function file_of(data: string, name: string) -> string
+    return filesystem.join(folder(data), name)
+
+private function save(data: string, name: string, text: string)
+    filesystem.create_directory(folder(data))
+    files.save_text(file_of(data, name), text)
+
+# Every thread, by its number as text.
+function threads(data: string) -> Dict<string, Thread>
+    file = file_of(data, "threads.json")
+    if not filesystem.is_file(file)
+        return []
+    return json.decode(io.read_file(file))
+
+function save_threads(data: string, all: Dict<string, Thread>)
+    save(data, "threads.json", json.encode_value(all))
+
+# A thread's posts, its start first.
+function posts(data: string, id: integer) -> Array<Post>
+    file = file_of(data, "{id}.json")
+    if not filesystem.is_file(file)
+        return []
+    return json.decode(io.read_file(file))
+
+function save_posts(data: string, id: integer, all: Array<Post>)
+    save(data, "{id}.json", json.encode_value(all))
+
+# Starts a thread with its first post, and gives its number.
+function start(data: string, key: string, author: string, title: string, text: string) -> integer
+    all = threads(data)
+    id = 1
+    for _key, thread in all
+        if thread.id >= id
+            id = thread.id + 1
+    now = time.unix_seconds()
+    save_posts(data, id, [Post(number = 1, author = clone(author), created = now, edited = nothing, text = clone(text), hidden = false)])
+    all["{id}"] = Thread(id = id, title = clone(title), category = clone(key), author = clone(author), created = now, active = now, replies = 0, solved = nothing, pinned = false, locked = false, hidden = false)
+    save_threads(data, all)
+    return id
+
+# Adds a reply to a thread, and gives its number.
+function reply(data: string, id: integer, author: string, text: string) -> integer
+    kept = posts(data, id)
+    number = length(kept) + 1
+    now = time.unix_seconds()
+    push(kept, Post(number = number, author = clone(author), created = now, edited = nothing, text = clone(text), hidden = false))
+    save_posts(data, id, kept)
+    all = threads(data)
+    if haskey(all, "{id}")
+        all["{id}"].replies = length(kept) - 1
+        all["{id}"].active = now
+        save_threads(data, all)
+    return number
+
+# Changes a post's text, and the thread's title with its first post's.
+function edit(data: string, id: integer, number: integer, text: string, title: string)
+    kept = posts(data, id)
+    if number < 1 or number > length(kept)
+        return
+    kept[number - 1].text = clone(text)
+    kept[number - 1].edited = time.unix_seconds()
+    save_posts(data, id, kept)
+    if number == 1
+        all = threads(data)
+        if haskey(all, "{id}")
+            all["{id}"].title = clone(title)
+            save_threads(data, all)
+
+# Whether a thread comes before another in a list: pinned ones first when
+# `pinned_first`, then the latest posted in.
+private function comes_before(a: Thread, b: Thread, pinned_first: boolean) -> boolean
+    if pinned_first and a.pinned != b.pinned
+        return a.pinned
+    if a.active != b.active
+        return a.active > b.active
+    return a.id > b.id
+
+# The threads to list: those of one category, or of all for "", whose
+# titles hold every word of `query`, and the hidden ones `with_hidden`.
+function listed(all: Dict<string, Thread>, key: string, query: string, with_hidden: boolean, pinned_first: boolean) -> Array<Thread>
+    words = strings.split(strings.lower(strings.trim(query)), " ")
+    out: Array<Thread> = []
+    for _key, thread in all
+        if key != "" and thread.category != key or thread.hidden and not with_hidden
+            continue
+        title = strings.lower(thread.title)
+        matches = true
+        for word in words
+            if word != "" and not strings.contains(title, word)
+                matches = false
+        if matches
+            push(out, clone(thread))
+    collections.sort_by(out, function(a, b) return comes_before(a, b, pinned_first))
+    return out
+
+# The threads an account started, the latest posted in first.
+function started_by(all: Dict<string, Thread>, account: string, with_hidden: boolean) -> Array<Thread>
+    out: Array<Thread> = []
+    for thread in listed(all, "", "", with_hidden, false)
+        if thread.author == account
+            push(out, clone(thread))
+    return out
+
+# ----- what accounts saw and did ----------------------------------------------
+
+# How many replies of each of its threads each account saw, by account and
+# thread.
+function seen(data: string) -> Dict<string, Dict<string, integer>>
+    file = file_of(data, "seen.json")
+    if not filesystem.is_file(file)
+        return []
+    return json.decode(io.read_file(file))
+
+# Notes that an account saw a thread's replies, up to `replies`.
+function saw(data: string, account: string, id: integer, replies: integer)
+    all = seen(data)
+    if not haskey(all, account)
+        empty: Dict<string, integer> = []
+        all[clone(account)] = empty
+    if haskey(all[account], "{id}") and all[account]["{id}"] == replies
+        return
+    all[account]["{id}"] = replies
+    save(data, "seen.json", json.encode_value(all))
+
+# How many replies an account has not seen of one of its threads.
+function unseen(all: Dict<string, Dict<string, integer>>, account: string, thread: Thread) -> integer
+    if haskey(all, account) and haskey(all[account], "{thread.id}")
+        return thread.replies - all[account]["{thread.id}"]
+    return thread.replies
+
+# When each account posted in the last day, in seconds since 1970.
+function activity(data: string) -> Dict<string, Array<integer>>
+    file = file_of(data, "activity.json")
+    if not filesystem.is_file(file)
+        return []
+    return json.decode(io.read_file(file))
+
+# How many times an account posted in the last day.
+function posted_lately(data: string, account: string) -> integer
+    all = activity(data)
+    if not haskey(all, account)
+        return 0
+    since = time.unix_seconds() - 86400
+    count = 0
+    for moment in all[account]
+        if moment > since
+            count += 1
+    return count
+
+# Notes that an account posted, forgetting posts over a day old.
+function note_post(data: string, account: string)
+    all = activity(data)
+    since = time.unix_seconds() - 86400
+    kept: Dict<string, Array<integer>> = []
+    for name, moments in all
+        recent: Array<integer> = []
+        for moment in moments
+            if moment > since
+                push(recent, moment)
+        if length(recent) > 0
+            kept[clone(name)] = recent
+    if not haskey(kept, account)
+        empty: Array<integer> = []
+        kept[clone(account)] = empty
+    push(kept[account], time.unix_seconds())
+    save(data, "activity.json", json.encode_value(kept))
+
+# ----- reports ------------------------------------------------------------------
+
+# Every report, by its number as text.
+function reports(data: string) -> Dict<string, Report>
+    file = file_of(data, "reports.json")
+    if not filesystem.is_file(file)
+        return []
+    return json.decode(io.read_file(file))
+
+function save_reports(data: string, all: Dict<string, Report>)
+    save(data, "reports.json", json.encode_value(all))
+
+# Reports a post, unless the same account's report of it is still open.
+function report(data: string, thread: integer, post: integer, reporter: string, reason: string)
+    all = reports(data)
+    id = 1
+    for _key, each in all
+        if each.open and each.thread == thread and each.post == post and each.reporter == reporter
+            return
+        if each.id >= id
+            id = each.id + 1
+    all["{id}"] = Report(id = id, thread = thread, post = post, reporter = clone(reporter), reason = clone(reason), created = time.unix_seconds(), open = true)
+    save_reports(data, all)
+
+# The reports a moderator has yet to look at, the oldest first.
+function open_reports(all: Dict<string, Report>) -> Array<Report>
+    out: Array<Report> = []
+    for _key, each in all
+        if each.open
+            push(out, clone(each))
+    collections.sort_by(out, function(a, b) return a.id < b.id)
+    return out
+
+# Closes one report.
+function close_report(data: string, id: integer)
+    all = reports(data)
+    if haskey(all, "{id}") and all["{id}"].open
+        all["{id}"].open = false
+        save_reports(data, all)
+
+# Closes the open reports of a post.
+function close_reports(data: string, thread: integer, post: integer)
+    all = reports(data)
+    closing: Array<string> = []
+    for key, each in all
+        if each.open and each.thread == thread and each.post == post
+            push(closing, clone(key))
+    if length(closing) == 0
+        return
+    for key in closing
+        all[key].open = false
+    save_reports(data, all)
+
+# How long ago a moment was, as a list shows it: "just now", "5 minutes
+# ago", "3 hours ago", "2 days ago", or its day.
+function ago(moment: integer, now: integer) -> string
+    apart = now - moment
+    if apart < 60
+        return "just now"
+    if apart < 3600
+        return count_of(apart / 60, "minute") + " ago"
+    if apart < 86400
+        return count_of(apart / 3600, "hour") + " ago"
+    if apart < 86400 * 7
+        return count_of(apart / 86400, "day") + " ago"
+    return day(moment)
+
+# A moment's day, such as 3 November 2026.
+function day(moment: integer) -> string
+    text = time.format(time.from_unix(moment))
+    months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
+    month = strings.parse_integer(strings.slice(text, 5, 7))
+    number = strings.parse_integer(strings.slice(text, 8, 10))
+    return "{number} {months[month - 1]} {strings.slice(text, 0, 4)}"
+
+private function count_of(count: integer, word: string) -> string
+    if count == 1
+        return "1 " + word
+    return "{count} {word}s"
+
+private constant TEST_DATA = "build/test-forum"
+
+private function fresh() -> string
+    if filesystem.exists(TEST_DATA)
+        entries = filesystem.walk(TEST_DATA)
+        position = length(entries) - 1
+        while position >= 0
+            filesystem.remove(filesystem.join(TEST_DATA, entries[position]))
+            position -= 1
+        filesystem.remove(TEST_DATA)
+    return clone(TEST_DATA)
+
+test "threads start, take replies, and change"
+    data = fresh()
+    first = start(data, "help", "ada", "How do I read a file?", "With `io`?")
+    second = start(data, "ideas", "bob", "Pattern guards", "Like `case x if x > 0`.")
+    assert(first == 1 and second == 2)
+    assert(reply(data, first, "bob", "`io.read_file(path)`.") == 2)
+    edit(data, first, 1, "With `io`, I think.", "How do I read a whole file?")
+    kept = posts(data, first)
+    assert(length(kept) == 2 and kept[0].text == "With `io`, I think." and kept[0].edited != nothing and kept[1].author == "bob")
+    all = threads(data)
+    assert(all["1"].replies == 1 and all["1"].title == "How do I read a whole file?" and all["2"].replies == 0)
+
+test "lists hold a category's threads, the latest first, pinned ones on top"
+    all: Dict<string, Thread> = []
+    all["1"] = Thread(id = 1, title = "Old news", category = "announcements", author = "ada", created = 10, active = 10, replies = 0, solved = nothing, pinned = true, locked = false, hidden = false)
+    all["2"] = Thread(id = 2, title = "Reading files", category = "help", author = "bob", created = 20, active = 40, replies = 2, solved = nothing, pinned = false, locked = false, hidden = false)
+    all["3"] = Thread(id = 3, title = "Writing files", category = "help", author = "cy", created = 30, active = 30, replies = 0, solved = nothing, pinned = false, locked = false, hidden = true)
+    every = listed(all, "", "", false, true)
+    assert(length(every) == 2 and every[0].id == 1 and every[1].id == 2)
+    latest = listed(all, "", "", true, false)
+    assert(latest[0].id == 2 and latest[1].id == 3 and latest[2].id == 1)
+    assert(length(listed(all, "help", "FILES", true, true)) == 2 and length(listed(all, "help", "reading files", false, true)) == 1)
+    assert(length(started_by(all, "cy", false)) == 0 and length(started_by(all, "cy", true)) == 1)
+
+test "reports, what was seen, and posts lately are kept"
+    data = fresh()
+    report(data, 1, 2, "ada", "Spam")
+    report(data, 1, 2, "ada", "Spam again")
+    report(data, 1, 2, "bob", "Rude")
+    assert(length(open_reports(reports(data))) == 2)
+    close_reports(data, 1, 2)
+    assert(length(open_reports(reports(data))) == 0)
+    thread = Thread(id = 4, title = "A thread", category = "ideas", author = "ada", created = 1, active = 1, replies = 3, solved = nothing, pinned = false, locked = false, hidden = false)
+    assert(unseen(seen(data), "ada", thread) == 3)
+    saw(data, "ada", 4, 3)
+    assert(unseen(seen(data), "ada", thread) == 0)
+    note_post(data, "ada")
+    note_post(data, "ada")
+    assert(posted_lately(data, "ada") == 2 and posted_lately(data, "bob") == 0)
+
+test "moments read as people say them"
+    assert(ago(1000, 1030) == "just now" and ago(1000, 1000 + 120) == "2 minutes ago" and ago(0, 3600) == "1 hour ago")
+    assert(ago(0, 86400 * 3) == "3 days ago" and day(1793664000) == "3 November 2026")

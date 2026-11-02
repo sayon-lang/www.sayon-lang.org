@@ -1,9 +1,14 @@
 # A person's public page, /users/<name>: since when their account exists,
-# the few words they wrote about themselves, and the packages they own.
+# the few words they wrote about themselves, the packages they own, and
+# the threads they started; with the moderators' tools for the account.
 
 strings = import("standard/strings.sayon")
+time = import("standard/time.sayon")
 accounts = import("src/accounts/accounts.sayon")
 dashboard = import("src/accounts/dashboard.sayon")
+forum = import("src/community/forum.sayon")
+moderation = import("src/community/moderation.sayon")
+community = import("src/community/pages.sayon")
 index = import("src/packages/index.sayon")
 pages = import("src/packages/pages.sayon")
 registry = import("src/packages/registry.sayon")
@@ -46,5 +51,26 @@ function profile(state: registry.State, view: layout.Visitor, name: string) -> h
             push(body, "      </a></li>")
         push(body, "    </ul>")
     push(body, "  </section>")
+    someone = community.member(state, view)
+    now = time.unix_seconds()
+    started = forum.started_by(forum.threads(state.data), name, community.moderates(someone))
+    push(body, "  <section class=\"section\" aria-labelledby=\"threads-title\">")
+    push(body, "    <div class=\"heading\"><h2 id=\"threads-title\">Threads</h2><span class=\"tag\">{length(started)}</span></div>")
+    if length(started) == 0
+        push(body, "    <div class=\"rows\"><p class=\"empty\">{html.text(name)} started no threads yet.</p></div>")
+    else
+        push(body, "    <ul class=\"rows threads\">")
+        shown = 0
+        for thread in started
+            if shown == 20
+                break
+            shown += 1
+            for line in community.thread_row(thread, now, true)
+                push(body, "      " + line)
+        push(body, "    </ul>")
+    push(body, "  </section>")
+    if someone != nothing
+        for line in moderation.member_tools(someone.account, someone.name, record, name)
+            push(body, "  " + line)
     push(body, "</div>")
-    return layout.page(view, "{name} · Sayon", body, 200, true, "", "{name} on Sayon's website: their packages.")
+    return layout.page(view, "{name} · Sayon", body, 200, true, "", "{name} on Sayon's website: their packages and threads.")

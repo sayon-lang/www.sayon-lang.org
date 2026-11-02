@@ -1,0 +1,246 @@
+# What the forum's moderators do: pin, lock, move, and hide threads; hide
+# replies; look at the posts people reported; and keep an account from
+# posting for some days. The website's admins also make accounts
+# moderators, and moderators again members.
+
+strings = import("standard/strings.sayon")
+time = import("standard/time.sayon")
+accounts = import("src/accounts/accounts.sayon")
+pages = import("src/accounts/pages.sayon")
+community = import("src/community/pages.sayon")
+forum = import("src/community/forum.sayon")
+site = import("src/packages/pages.sayon")
+registry = import("src/packages/registry.sayon")
+html = import("src/web/html.sayon")
+http = import("src/web/http.sayon")
+layout = import("src/web/layout.sayon")
+
+# The days a moderator may keep an account from posting.
+constant SUSPENSIONS = [1, 7, 30]
+
+# The moderator signed in, or nothing.
+private function moderator_of(state: registry.State, view: layout.Visitor) -> community.Member or nothing
+    someone = community.member(state, view)
+    if someone == nothing
+        return nothing
+    if not accounts.moderates(someone.account)
+        return nothing
+    return someone
+
+# Pins a thread, locks it, hides it, or moves it to another category; or
+# undoes it.
+function moderate(request: http.Request, state: registry.State, view: layout.Visitor) -> http.Response
+    if moderator_of(state, view) == nothing
+        return site.not_found(view)
+    fields = http.form(request)
+    id = community.number_of(pages.value(fields, "thread"))
+    all = forum.threads(state.data)
+    if id == nothing
+        return site.not_found(view)
+    key = "{id}"
+    if not haskey(all, key)
+        return site.not_found(view)
+    if not pages.from_here(request, state)
+        return community.thread_page(state, view, all[key].category, key, "", pages.FOREIGN, "", 403)
+    match pages.value(fields, "action")
+        case "pin"
+            all[key].pinned = true
+        case "unpin"
+            all[key].pinned = false
+        case "lock"
+            all[key].locked = true
+        case "unlock"
+            all[key].locked = false
+        case "hide"
+            all[key].hidden = true
+        case "show"
+            all[key].hidden = false
+        case "move"
+            target = forum.find_category(pages.value(fields, "category"))
+            if target == nothing
+                return community.thread_page(state, view, all[key].category, key, "", "Choose the category to move the thread to.", "", 400)
+            all[key].category = clone(target.key)
+        case _
+            return community.thread_page(state, view, all[key].category, key, "", "Moderators pin, lock, hide, and move threads.", "", 400)
+    forum.save_threads(state.data, all)
+    return http.redirect(community.address_of(all[key]))
+
+# Hides a reply from everyone but moderators, which closes its reports, or
+# shows it again.
+function moderate_post(request: http.Request, state: registry.State, view: layout.Visitor) -> http.Response
+    if moderator_of(state, view) == nothing
+        return site.not_found(view)
+    fields = http.form(request)
+    id = community.number_of(pages.value(fields, "thread"))
+    number = community.number_of(pages.value(fields, "post"))
+    all = forum.threads(state.data)
+    if id == nothing or number == nothing
+        return site.not_found(view)
+    key = "{id}"
+    if not haskey(all, key)
+        return site.not_found(view)
+    if not pages.from_here(request, state)
+        return community.thread_page(state, view, all[key].category, key, "", pages.FOREIGN, "", 403)
+    kept = forum.posts(state.data, id)
+    if number < 2 or number > length(kept)
+        return community.thread_page(state, view, all[key].category, key, "", "Hide the whole thread to hide its first post.", "", 400)
+    hide = pages.value(fields, "action") == "hide"
+    kept[number - 1].hidden = hide
+    forum.save_posts(state.data, id, kept)
+    if hide
+        forum.close_reports(state.data, id, number)
+        if all[key].solved == number
+            all[key].solved = nothing
+            forum.save_threads(state.data, all)
+    if pages.value(fields, "back") == "reports"
+        return http.redirect("/community/reports?done=hidden")
+    return http.redirect(community.address_of(all[key]) + "#post-{number}")
+
+# The start of a post's text, as a report shows it.
+private function excerpt(text: string) -> string
+    flat = community.one_line(text)
+    if length(flat) > 240
+        return strings.slice(flat, 0, 240) + "…"
+    return flat
+
+# The posts people reported that no moderator looked at yet, the oldest
+# first.
+function reports_page(state: registry.State, view: layout.Visitor, done: string) -> http.Response
+    if moderator_of(state, view) == nothing
+        return site.not_found(view)
+    all = forum.threads(state.data)
+    waiting = forum.open_reports(forum.reports(state.data))
+    now = time.unix_seconds()
+    body: Array<string> = ["<div class=\"wrap\">"]
+    push(body, "  <header class=\"forum-head\">")
+    push(body, "    <div>")
+    push(body, "      <ol class=\"trail\"><li><a href=\"/community\">Community</a></li><li aria-current=\"page\">Reports</li></ol>")
+    push(body, "      <h1>Reports</h1>")
+    push(body, "      <p class=\"lead\">Posts people reported to the moderators. Hide a post that breaks the rules, or dismiss the report.</p>")
+    push(body, "    </div>")
+    push(body, "  </header>")
+    if done == "hidden"
+        push(body, "  " + layout.notice("success", "The post is hidden, and its reports are closed."))
+    elseif done == "dismissed"
+        push(body, "  " + layout.notice("success", "The report is dismissed."))
+    shown: Array<string> = []
+    for report in waiting
+        key = "{report.thread}"
+        if not haskey(all, key)
+            continue
+        thread = clone(all[key])
+        kept = forum.posts(state.data, thread.id)
+        if report.post < 1 or report.post > length(kept)
+            continue
+        post = clone(kept[report.post - 1])
+        push(shown, "<li class=\"report-row\">")
+        push(shown, "  <div class=\"report-text\">")
+        push(shown, "    <a class=\"row-title\" href=\"{community.address_of(thread)}#post-{post.number}\">{html.text(thread.title)}</a>")
+        push(shown, "    <p class=\"row-text\">{html.text(report.reporter)} reported {html.text(post.author)}'s post {forum.ago(report.created, now)}: {html.text(report.reason)}</p>")
+        push(shown, "    <blockquote class=\"excerpt\">{html.text(excerpt(post.text))}</blockquote>")
+        push(shown, "  </div>")
+        push(shown, "  <div class=\"buttons\">")
+        if post.number > 1 and not post.hidden
+            push(shown, "    <form method=\"post\" action=\"/community/moderate-post\"><input type=\"hidden\" name=\"thread\" value=\"{thread.id}\"><input type=\"hidden\" name=\"post\" value=\"{post.number}\"><input type=\"hidden\" name=\"action\" value=\"hide\"><input type=\"hidden\" name=\"back\" value=\"reports\"><button class=\"button small danger\" type=\"submit\">Hide the post</button></form>")
+        push(shown, "    <form method=\"post\" action=\"/community/reports\"><input type=\"hidden\" name=\"report\" value=\"{report.id}\"><button class=\"button small quiet\" type=\"submit\">Dismiss</button></form>")
+        push(shown, "  </div>")
+        push(shown, "</li>")
+    if length(shown) == 0
+        push(body, "  <div class=\"rows\"><p class=\"empty\">No reports are waiting.</p></div>")
+    else
+        push(body, "  <ul class=\"rows reports\">")
+        for line in shown
+            push(body, "    " + line)
+        push(body, "  </ul>")
+    push(body, "</div>")
+    return layout.page(view, "Reports · Sayon", body, 200, true, "community")
+
+# Closes a report without changing the post.
+function dismiss(request: http.Request, state: registry.State, view: layout.Visitor) -> http.Response
+    if moderator_of(state, view) == nothing
+        return site.not_found(view)
+    if not pages.from_here(request, state)
+        return http.refuse(403, "forms are sent from the website's own pages")
+    id = community.number_of(pages.value(http.form(request), "report"))
+    if id != nothing
+        forum.close_report(state.data, id)
+    return http.redirect("/community/reports?done=dismissed")
+
+# What a moderator may do to an account, by the profile's tools: none to
+# their own; an admin makes members moderators, and moderators members;
+# a moderator keeps a member from posting, and an admin a moderator too.
+function may_change(actor: accounts.Account, actor_name: string, target: accounts.Account, target_name: string, action: string) -> boolean
+    if actor_name == target_name or not accounts.moderates(actor) or accounts.is_admin(target)
+        return false
+    if action == "moderator" or action == "member"
+        return accounts.is_admin(actor)
+    if action == "suspend" or action == "restore"
+        return accounts.is_admin(actor) or not accounts.moderates(target)
+    return false
+
+# The tools a moderator has on a profile, or none.
+function member_tools(actor: accounts.Account, actor_name: string, target: accounts.Account, target_name: string) -> Array<string>
+    out: Array<string> = []
+    can_suspend = may_change(actor, actor_name, target, target_name, "suspend")
+    can_appoint = may_change(actor, actor_name, target, target_name, "moderator")
+    if not can_suspend and not can_appoint
+        return out
+    now = time.unix_seconds()
+    until = accounts.suspended_until(target, now)
+    push(out, "<section class=\"box member-tools\" aria-labelledby=\"tools-title\">")
+    push(out, "  <div class=\"box-head\"><h2 id=\"tools-title\">Moderation</h2></div>")
+    push(out, "  <div class=\"box-body\">")
+    if until != nothing
+        push(out, "    <p>{html.text(target_name)} may not post until {forum.day(until)}.</p>")
+    else
+        push(out, "    <p>{html.text(target_name)} may post.</p>")
+    push(out, "    <div class=\"buttons\">")
+    if can_suspend
+        if until != nothing
+            push(out, "      " + member_button(target_name, "restore", "", "Let them post again"))
+        for days in SUSPENSIONS
+            label = "Suspend for {days} days"
+            if days == 1
+                label = "Suspend for a day"
+            push(out, "      " + member_button(target_name, "suspend", "<input type=\"hidden\" name=\"days\" value=\"{days}\">", label))
+    if can_appoint
+        if target.role == "moderator"
+            push(out, "      " + member_button(target_name, "member", "", "Make them a member again"))
+        else
+            push(out, "      " + member_button(target_name, "moderator", "", "Make them a moderator"))
+    push(out, "    </div>")
+    push(out, "  </div>")
+    push(out, "</section>")
+    return out
+
+private function member_button(name: string, action: string, extra: string, label: string) -> string
+    return "<form method=\"post\" action=\"/community/members\"><input type=\"hidden\" name=\"name\" value=\"{name}\"><input type=\"hidden\" name=\"action\" value=\"{action}\">{extra}<button class=\"button small\" type=\"submit\">{label}</button></form>"
+
+# Changes an account's role or lets it post, as `member_tools` offers.
+function change_member(request: http.Request, state: registry.State, view: layout.Visitor) -> http.Response
+    someone = moderator_of(state, view)
+    if someone == nothing
+        return site.not_found(view)
+    if not pages.from_here(request, state)
+        return http.refuse(403, "forms are sent from the website's own pages")
+    fields = http.form(request)
+    name = pages.value(fields, "name")
+    action = pages.value(fields, "action")
+    all = accounts.accounts(state.data)
+    if not haskey(all, name)
+        return site.not_found(view)
+    if not may_change(someone.account, someone.name, all[name], name, action)
+        return http.refuse(403, "an admin appoints moderators; a moderator suspends members, and an admin moderators too")
+    if action == "moderator"
+        all[name].role = "moderator"
+    elseif action == "member"
+        all[name].role = nothing
+    elseif action == "restore"
+        all[name].suspended = nothing
+    else
+        days = community.number_of(pages.value(fields, "days"))
+        if days == nothing or days < 1 or days > 365
+            return http.refuse(400, "an account is suspended for 1 to 365 days")
+        all[name].suspended = time.unix_seconds() + days * 86400
+    accounts.save_accounts(state.data, all)
+    return http.redirect("/users/{name}")

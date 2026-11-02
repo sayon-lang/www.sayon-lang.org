@@ -1,0 +1,714 @@
+# The forum's pages, under /community: the latest threads, of every
+# category or of one; a thread, with the reply that solved it and a form
+# for another; and the forms that start a thread, change a post, mark the
+# reply that solved a question, and report a post to the moderators, whose
+# own pages are in src/community/moderation.sayon.
+
+strings = import("standard/strings.sayon")
+time = import("standard/time.sayon")
+accounts = import("src/accounts/accounts.sayon")
+mail = import("src/accounts/mail.sayon")
+pages = import("src/accounts/pages.sayon")
+forum = import("src/community/forum.sayon")
+site = import("src/packages/pages.sayon")
+registry = import("src/packages/registry.sayon")
+frame = import("src/web/frame.sayon")
+html = import("src/web/html.sayon")
+http = import("src/web/http.sayon")
+layout = import("src/web/layout.sayon")
+markdown = import("src/web/markdown.sayon")
+
+# How many threads a list shows at once.
+constant PAGE_SIZE = 30
+
+# How many times an account posts a day in its first week.
+constant NEW_POSTS = 10
+
+# What the forms say about writing a post.
+constant MARKDOWN_HINT = "Markdown works: <code>`code`</code>, <code>**strong**</code>, <code>*emphasis*</code>, <code>[a link](https://…)</code>, lists, and code between <code>```</code> lines, Sayon's highlighted. HTML shows as text."
+
+# Someone signed in: their account's name and record.
+type Member = [name: string, account: accounts.Account]
+
+# The account signed in, or nothing.
+function member(state: registry.State, view: layout.Visitor) -> Member or nothing
+    name = clone(view.account)
+    if name == nothing
+        return nothing
+    all = accounts.accounts(state.data)
+    if not haskey(all, name)
+        return nothing
+    record = clone(all[name])
+    return Member(name = name, account = record)
+
+# Whether someone looks after the forum.
+function moderates(someone: Member or nothing) -> boolean
+    if someone == nothing
+        return false
+    return accounts.moderates(someone.account)
+
+# Why someone signed in may not post now, or "" when they may: once their
+# email is verified, unless the moderators suspended them, and `NEW_POSTS`
+# times a day at most in their account's first week.
+function posting_problem(state: registry.State, someone: Member) -> string
+    if not accounts.may_publish(someone.account)
+        return "Verify your email to post: open the link the website mailed you, or mail it again from your settings."
+    now = time.unix_seconds()
+    until = accounts.suspended_until(someone.account, now)
+    if until != nothing
+        return "The moderators keep your account from posting until {forum.day(until)}."
+    if accounts.is_new(someone.account, now) and forum.posted_lately(state.data, someone.name) >= NEW_POSTS
+        return "In its first week, an account posts {NEW_POSTS} times a day at most. Try again tomorrow."
+    return ""
+
+# A thread's address.
+function address_of(thread: forum.Thread) -> string
+    return "/community/{thread.category}/{thread.id}"
+
+# A number written in an address or a form, or nothing.
+function number_of(text: string) -> integer or nothing
+    if text == "" or length(text) > 9
+        return nothing
+    for symbol in strings.characters(text)
+        if symbol < "0" or symbol > "9"
+            return nothing
+    return strings.parse_integer(text)
+
+# A title as one line, its spaces trimmed.
+function one_line(text: string) -> string
+    return strings.trim(strings.replace(strings.replace(strings.replace(text, "\r", " "), "\n", " "), "\t", " "))
+
+# A post's text with its lines ended by `\n`, and nothing after its end.
+function post_text(text: string) -> string
+    return strings.trim_end(strings.replace(strings.replace(text, "\r\n", "\n"), "\r", "\n"))
+
+# What is wrong with a title, or "".
+function title_problem(title: string) -> string
+    if length(title) < forum.SHORTEST_TITLE
+        return "Give the thread a title of {forum.SHORTEST_TITLE} characters or more, which says what it is about."
+    if length(title) > forum.LONGEST_TITLE
+        return "A title has {forum.LONGEST_TITLE} characters at most."
+    return ""
+
+# What is wrong with a post's text, or "".
+function text_problem(text: string) -> string
+    if strings.trim(text) == ""
+        return "Write something to post."
+    if length(text) > forum.LONGEST_POST
+        return "A post has {forum.LONGEST_POST} characters at most."
+    return ""
+
+# The tags a thread shows in lists and on its page.
+function tags_of(thread: forum.Thread) -> string
+    out: Array<string> = []
+    if thread.pinned
+        push(out, "<span class=\"tag\">Pinned</span>")
+    if thread.solved != nothing
+        push(out, "<span class=\"tag solved\">Solved</span>")
+    if thread.locked
+        push(out, "<span class=\"tag\">Locked</span>")
+    if thread.hidden
+        push(out, "<span class=\"tag danger\">Hidden</span>")
+    return strings.join(out, "")
+
+# A thread in a list, with its category when the list holds every one.
+function thread_row(thread: forum.Thread, now: integer, with_category: boolean) -> Array<string>
+    out: Array<string> = ["<li><a class=\"row thread-row\" href=\"{address_of(thread)}\">"]
+    push(out, "  <span class=\"row-title\">{html.text(thread.title)}</span>")
+    tags = tags_of(thread)
+    if tags != ""
+        push(out, "  <span class=\"thread-tags\">{tags}</span>")
+    facts: Array<string> = []
+    if with_category
+        part = forum.find_category(thread.category)
+        if part != nothing
+            push(facts, "<span class=\"tag\">{html.text(part.label)}</span>")
+    push(facts, "<span>{html.text(thread.author)}</span>")
+    push(facts, "<span>{pages.count_of(thread.replies, "reply", "replies")}</span>")
+    push(facts, "<span>{forum.ago(thread.active, now)}</span>")
+    push(out, "  <span class=\"row-text thread-facts\">{strings.join(facts, "")}</span>")
+    push(out, "</a></li>")
+    return out
+
+private function current_if(yes: boolean) -> string
+    if yes
+        return " aria-current=\"page\""
+    return ""
+
+# The links to every category, with the one shown marked.
+private function tabs(key: string) -> Array<string>
+    out: Array<string> = ["<nav class=\"tabs\" aria-label=\"Categories\">"]
+    push(out, "  <a href=\"/community\"{current_if(key == "")}>Latest</a>")
+    for each in forum.categories()
+        push(out, "  <a href=\"/community/{each.key}\"{current_if(each.key == key)}>{html.text(each.label)}</a>")
+    push(out, "</nav>")
+    return out
+
+# The head's button that starts a thread: one that signs in first for
+# someone who is not, and none where only admins start threads.
+private function start_action(someone: Member or nothing, part: forum.Category or nothing, base: string) -> string
+    target = "/community/new"
+    if part != nothing
+        if part.admins_only
+            if someone == nothing
+                return ""
+            if not accounts.is_admin(someone.account)
+                return ""
+        target = "/community/new?category={part.key}"
+    if someone == nothing
+        return "<a class=\"button primary\" href=\"/sign-in?next={http.encode(base)}\">Sign in to post</a>"
+    return "<a class=\"button primary\" href=\"{target}\">Start a thread</a>"
+
+# The query of a list's address: its words and its page.
+private function query_part(query: string, page: integer) -> string
+    parts: Array<string> = []
+    if query != ""
+        push(parts, "q=" + http.encode(query))
+    if page > 1
+        push(parts, "page={page}")
+    if length(parts) == 0
+        return ""
+    return "?" + strings.join(parts, "&amp;")
+
+# The latest threads, of every category or of one, whose titles hold the
+# words of `query`, `PAGE_SIZE` at a time.
+function forum_page(state: registry.State, view: layout.Visitor, key: string, query: string, page_text: string) -> http.Response
+    part = forum.find_category(key)
+    if key != "" and part == nothing
+        return site.not_found(view)
+    someone = member(state, view)
+    page = 1
+    asked = number_of(page_text)
+    if asked != nothing and asked > 1
+        page = asked
+    found = forum.listed(forum.threads(state.data), key, query, moderates(someone), true)
+    now = time.unix_seconds()
+    base = "/community"
+    title = "Community"
+    lead = "Ask for help, show what you made, and talk about Sayon with the people who use it."
+    if part != nothing
+        base = "/community/{part.key}"
+        title = clone(part.label)
+        lead = clone(part.about)
+    body: Array<string> = ["<div class=\"wrap\">"]
+    push(body, "  <header class=\"forum-head\">")
+    push(body, "    <div>")
+    if part != nothing
+        push(body, "      <ol class=\"trail\"><li><a href=\"/community\">Community</a></li><li aria-current=\"page\">{html.text(title)}</li></ol>")
+    push(body, "      <h1>{html.text(title)}</h1>")
+    push(body, "      <p class=\"lead\">{html.text(lead)}</p>")
+    push(body, "    </div>")
+    action = start_action(someone, part, base)
+    if action != ""
+        push(body, "    <div class=\"buttons head-actions\">{action}</div>")
+    push(body, "  </header>")
+    for line in tabs(key)
+        push(body, "  " + line)
+    push(body, "  <form class=\"search forum-search\" action=\"{base}\" role=\"search\">{frame.SEARCH_ICON}<input class=\"input\" type=\"search\" name=\"q\" value=\"{html.escape(query)}\" placeholder=\"Search thread titles\" aria-label=\"Search thread titles\" autocomplete=\"off\"></form>")
+    first = (page - 1) * PAGE_SIZE
+    last = first + PAGE_SIZE
+    if last > length(found)
+        last = length(found)
+    if first >= length(found)
+        said = "No threads yet. Start the first one, and others will find it here."
+        if query != ""
+            said = "No thread's title holds those words. Try fewer of them."
+        elseif page > 1
+            said = "There are no older threads."
+        push(body, "  <div class=\"rows\"><p class=\"empty\">{html.text(said)}</p></div>")
+    else
+        push(body, "  <ul class=\"rows threads\">")
+        for position in range(first, last)
+            for line in thread_row(found[position], now, key == "")
+                push(body, "    " + line)
+        push(body, "  </ul>")
+    if page > 1 or last < length(found)
+        push(body, "  <nav class=\"forum-pager\" aria-label=\"More threads\">")
+        if page > 1
+            push(body, "    <a class=\"button newer\" href=\"{base}{query_part(query, page - 1)}\">Newer threads</a>")
+        if last < length(found)
+            push(body, "    <a class=\"button older\" href=\"{base}{query_part(query, page + 1)}\">Older threads</a>")
+        push(body, "  </nav>")
+    push(body, "</div>")
+    return layout.page(view, "{title} · Sayon", body, 200, true, "community", lead)
+
+# The roles of the accounts that have one, as posts show them.
+private function roles_of(state: registry.State) -> Dict<string, string>
+    out: Dict<string, string> = []
+    for name, account in accounts.accounts(state.data)
+        given = clone(account.role)
+        if given == "admin"
+            out[clone(name)] = "Admin"
+        elseif given == "moderator"
+            out[clone(name)] = "Moderator"
+    return out
+
+# A form of one button that sends a thread's and a post's numbers.
+private function post_button(action: string, thread: integer, number: integer, extra: string, label: string, kind: string) -> string
+    return "<form method=\"post\" action=\"{action}\"><input type=\"hidden\" name=\"thread\" value=\"{thread}\"><input type=\"hidden\" name=\"post\" value=\"{number}\">{extra}<button class=\"button small {kind}\" type=\"submit\">{label}</button></form>"
+
+# What the one looking may do to a post: change their own, mark the reply
+# that solved their question, hide a reply as a moderator, or report
+# someone else's.
+private function post_actions(thread: forum.Thread, post: forum.Post, viewer: string, moderator: boolean, solvable: boolean) -> Array<string>
+    out: Array<string> = []
+    if viewer == ""
+        return out
+    if viewer == post.author and not thread.locked
+        push(out, "<a class=\"button small quiet\" href=\"/community/edit?thread={thread.id}&amp;post={post.number}\">Edit</a>")
+    if solvable and post.number > 1 and not post.hidden
+        if viewer == thread.author or moderator
+            label = "Mark as the solution"
+            if thread.solved == post.number
+                label = "Unmark the solution"
+            push(out, post_button("/community/solve", thread.id, post.number, "", label, "quiet"))
+    if moderator and post.number > 1
+        if post.hidden
+            push(out, post_button("/community/moderate-post", thread.id, post.number, "<input type=\"hidden\" name=\"action\" value=\"show\">", "Show", "quiet"))
+        else
+            push(out, post_button("/community/moderate-post", thread.id, post.number, "<input type=\"hidden\" name=\"action\" value=\"hide\">", "Hide", "quiet"))
+    if viewer != post.author
+        report = "<details class=\"report\"><summary class=\"button small quiet\">Report</summary><form class=\"report-form\" method=\"post\" action=\"/community/report\"><input type=\"hidden\" name=\"thread\" value=\"{thread.id}\"><input type=\"hidden\" name=\"post\" value=\"{post.number}\">"
+        report = report + "<label for=\"reason-{post.number}\">What is wrong with this post?</label><input class=\"input\" id=\"reason-{post.number}\" name=\"reason\" required maxlength=\"{forum.LONGEST_REASON}\"><button class=\"button small\" type=\"submit\">Tell the moderators</button></form></details>"
+        push(out, report)
+    return out
+
+# A post in its thread. A hidden one shows only to moderators.
+private function post_article(thread: forum.Thread, post: forum.Post, viewer: string, moderator: boolean, roles: Dict<string, string>, now: integer, solvable: boolean) -> Array<string>
+    if post.hidden and not moderator
+        return ["<article class=\"post post-gone\" id=\"post-{post.number}\"><p>A moderator hid this reply.</p></article>"]
+    classes = "post"
+    if thread.solved == post.number
+        classes = classes + " post-solution"
+    if post.hidden
+        classes = classes + " post-hidden"
+    out: Array<string> = ["<article class=\"{classes}\" id=\"post-{post.number}\">"]
+    push(out, "  <header class=\"post-head\">")
+    push(out, "    <span class=\"initial\" aria-hidden=\"true\">{html.text(strings.slice(post.author, 0, 1))}</span>")
+    badge = ""
+    if haskey(roles, post.author)
+        badge = " <span class=\"tag accent\">{roles[post.author]}</span>"
+    push(out, "    <span class=\"post-who\"><a href=\"/users/{post.author}\">{html.text(post.author)}</a>{badge}</span>")
+    edited = ""
+    if post.edited != nothing
+        edited = ", edited"
+    push(out, "    <a class=\"post-when\" href=\"#post-{post.number}\">{forum.ago(post.created, now)}{edited}</a>")
+    if thread.solved == post.number
+        push(out, "    <span class=\"tag solved\">Solution</span>")
+    if post.hidden
+        push(out, "    <span class=\"tag danger\">Hidden</span>")
+    push(out, "  </header>")
+    push(out, "  <div class=\"prose post-body\">")
+    # As it is: indenting it would show inside code.
+    push(out, markdown.post(post.text))
+    push(out, "  </div>")
+    actions = post_actions(thread, post, viewer, moderator, solvable)
+    if length(actions) > 0
+        push(out, "  <footer class=\"post-actions\">")
+        for line in actions
+            push(out, "    " + line)
+        push(out, "  </footer>")
+    push(out, "</article>")
+    return out
+
+# The reply that solved a question, shown again under its start.
+private function answer_box(post: forum.Post) -> Array<string>
+    out: Array<string> = ["<section class=\"answer\" aria-labelledby=\"answer-title\">"]
+    push(out, "  <h2 class=\"answer-title\" id=\"answer-title\">{layout.CHECK_ICON}Solved by {html.text(post.author)}'s reply</h2>")
+    push(out, "  <div class=\"prose\">")
+    push(out, markdown.post(post.text))
+    push(out, "  </div>")
+    push(out, "  <a class=\"answer-link\" href=\"#post-{post.number}\">See the reply in the thread</a>")
+    push(out, "</section>")
+    return out
+
+# The tools moderators have on a thread's page.
+private function moderation_box(thread: forum.Thread) -> Array<string>
+    out: Array<string> = ["<section class=\"box moderation\" aria-labelledby=\"moderation-title\">"]
+    push(out, "  <div class=\"box-head\"><h2 id=\"moderation-title\">Moderation</h2><a class=\"tool-link\" href=\"/community/reports\">Reports</a></div>")
+    push(out, "  <div class=\"box-body moderation-tools\">")
+    choices = [["pin", "Pin to the top", "unpin", "Unpin"], ["lock", "Lock to replies", "unlock", "Unlock"], ["hide", "Hide the thread", "show", "Show the thread"]]
+    states = [thread.pinned, thread.locked, thread.hidden]
+    for position in range(length(choices))
+        words = clone(choices[position])
+        action = clone(words[0])
+        label = clone(words[1])
+        if states[position]
+            action = clone(words[2])
+            label = clone(words[3])
+        push(out, "    <form method=\"post\" action=\"/community/moderate\"><input type=\"hidden\" name=\"thread\" value=\"{thread.id}\"><input type=\"hidden\" name=\"action\" value=\"{action}\"><button class=\"button small\" type=\"submit\">{label}</button></form>")
+    push(out, "    <form class=\"move\" method=\"post\" action=\"/community/moderate\"><input type=\"hidden\" name=\"thread\" value=\"{thread.id}\"><input type=\"hidden\" name=\"action\" value=\"move\">")
+    push(out, "      <label for=\"move-to\">Move to</label><select class=\"input\" id=\"move-to\" name=\"category\">")
+    for each in forum.categories()
+        if each.key != thread.category
+            push(out, "        <option value=\"{each.key}\">{html.text(each.label)}</option>")
+    push(out, "      </select><button class=\"button small\" type=\"submit\">Move</button>")
+    push(out, "    </form>")
+    push(out, "  </div>")
+    push(out, "</section>")
+    return out
+
+# The form for a reply, or what keeps the one looking from replying.
+private function reply_box(state: registry.State, someone: Member or nothing, thread: forum.Thread, draft: string) -> Array<string>
+    out: Array<string> = ["<section class=\"box reply\" id=\"reply\" aria-labelledby=\"reply-title\">", "  <div class=\"box-head\"><h2 id=\"reply-title\">Reply</h2></div>"]
+    back = http.encode(address_of(thread))
+    if thread.locked
+        push(out, "  <p class=\"empty\">This thread is locked: it takes no more replies.</p>")
+    elseif someone == nothing
+        push(out, "  <div class=\"box-body\">")
+        push(out, "    <p>Sign in to reply. Making an account takes a minute, and it is the same one you publish packages with.</p>")
+        push(out, "    <div class=\"buttons\"><a class=\"button primary\" href=\"/sign-in?next={back}\">Sign in</a><a class=\"button\" href=\"/sign-up?next={back}\">Make an account</a></div>")
+        push(out, "  </div>")
+    else
+        reason = posting_problem(state, someone)
+        if reason != ""
+            push(out, "  <div class=\"box-body\"><p>{html.prose(reason)}</p></div>")
+        else
+            push(out, "  <form class=\"box-body\" method=\"post\" action=\"/community/reply\">")
+            push(out, "    <input type=\"hidden\" name=\"thread\" value=\"{thread.id}\">")
+            push(out, "    <div class=\"field\">")
+            push(out, "      <label for=\"field-text\">Your reply</label>")
+            push(out, "      <textarea class=\"input\" id=\"field-text\" name=\"text\" rows=\"7\" required maxlength=\"{forum.LONGEST_POST}\" aria-describedby=\"field-text-hint\">{html.text(draft)}</textarea>")
+            push(out, "      <p class=\"hint\" id=\"field-text-hint\">{MARKDOWN_HINT}</p>")
+            push(out, "    </div>")
+            push(out, "    <button class=\"button primary\" type=\"submit\">Post the reply</button>")
+            push(out, "  </form>")
+    push(out, "</section>")
+    return out
+
+# A thread: its start, the reply that solved it, the other replies, and the
+# form for one more.
+function thread_page(state: registry.State, view: layout.Visitor, key: string, id_text: string, done: string = "", problem: string = "", draft: string = "", status: integer = 200) -> http.Response
+    id = number_of(id_text)
+    if id == nothing
+        return site.not_found(view)
+    all = forum.threads(state.data)
+    if not haskey(all, "{id}")
+        return site.not_found(view)
+    thread = clone(all["{id}"])
+    someone = member(state, view)
+    moderator = moderates(someone)
+    if thread.hidden and not moderator
+        return site.not_found(view)
+    if thread.category != key
+        return http.redirect(address_of(thread), 308)
+    part = forum.find_category(thread.category)
+    if part == nothing
+        return site.not_found(view)
+    kept = forum.posts(state.data, thread.id)
+    now = time.unix_seconds()
+    viewer = ""
+    if someone != nothing
+        viewer = clone(someone.name)
+        if someone.name == thread.author
+            forum.saw(state.data, someone.name, thread.id, thread.replies)
+    roles = roles_of(state)
+    body: Array<string> = ["<div class=\"wrap thread\">"]
+    push(body, "  <header class=\"thread-head\">")
+    push(body, "    <ol class=\"trail\"><li><a href=\"/community\">Community</a></li><li><a href=\"/community/{part.key}\">{html.text(part.label)}</a></li></ol>")
+    push(body, "    <h1>{html.text(thread.title)}</h1>")
+    push(body, "    <p class=\"thread-facts\">{tags_of(thread)}<span>Started by <a href=\"/users/{thread.author}\">{html.text(thread.author)}</a> {forum.ago(thread.created, now)}</span><span>{pages.count_of(thread.replies, "reply", "replies")}</span></p>")
+    push(body, "  </header>")
+    if done == "reported"
+        push(body, "  " + layout.notice("success", "Thanks. The moderators will look at the post you reported."))
+    if problem != ""
+        push(body, "  " + layout.notice("error", problem))
+    if moderator
+        for line in moderation_box(thread)
+            push(body, "  " + line)
+    push(body, "  <div class=\"posts\">")
+    for post in kept
+        for line in post_article(thread, post, viewer, moderator, roles, now, part.solvable)
+            push(body, "    " + line)
+        solved = thread.solved
+        if post.number == 1 and solved != nothing
+            if solved >= 2 and solved <= length(kept)
+                if not kept[solved - 1].hidden
+                    for line in answer_box(kept[solved - 1])
+                        push(body, "    " + line)
+    push(body, "  </div>")
+    for line in reply_box(state, someone, thread, draft)
+        push(body, "  " + line)
+    push(body, "</div>")
+    return layout.page(view, "{thread.title} · Sayon", body, status, true, "community", "{thread.title}, in {part.label} of Sayon's community.")
+
+# The thread a form names, or nothing.
+private function thread_named(state: registry.State, text: string) -> forum.Thread or nothing
+    id = number_of(text)
+    if id == nothing
+        return nothing
+    all = forum.threads(state.data)
+    if not haskey(all, "{id}")
+        return nothing
+    return clone(all["{id}"])
+
+# The form that starts a thread, in the category asked for.
+function new_page(state: registry.State, view: layout.Visitor, key: string, title: string = "", text: string = "", problem: string = "", status: integer = 200) -> http.Response
+    someone = member(state, view)
+    if someone == nothing
+        target = "/community/new"
+        if key != ""
+            target = target + "?category=" + http.encode(key)
+        return http.redirect("/sign-in?next=" + http.encode(target))
+    body: Array<string> = ["<div class=\"wrap compose\">"]
+    push(body, "  <ol class=\"trail\"><li><a href=\"/community\">Community</a></li><li aria-current=\"page\">New thread</li></ol>")
+    push(body, "  <h1>Start a thread</h1>")
+    reason = posting_problem(state, someone)
+    if reason != ""
+        push(body, "  " + layout.notice("error", reason))
+        push(body, "</div>")
+        return layout.page(view, "Start a thread · Sayon", body, 403, true, "community")
+    if problem != ""
+        push(body, "  " + layout.notice("error", problem))
+    admin = accounts.is_admin(someone.account)
+    push(body, "  <form class=\"box\" method=\"post\" action=\"/community/new\">")
+    push(body, "    <div class=\"box-body\">")
+    push(body, "      <div class=\"field\">")
+    push(body, "        <label for=\"field-category\">Category</label>")
+    push(body, "        <select class=\"input\" id=\"field-category\" name=\"category\" aria-describedby=\"field-category-hint\">")
+    for each in forum.categories()
+        if each.admins_only and not admin
+            continue
+        chosen = ""
+        if each.key == key
+            chosen = " selected"
+        push(body, "          <option value=\"{each.key}\"{chosen}>{html.text(each.label)}</option>")
+    push(body, "        </select>")
+    push(body, "        <p class=\"hint\" id=\"field-category-hint\">Ask questions in Help: you mark the reply that solved yours.</p>")
+    push(body, "      </div>")
+    for line in layout.field("Title", "title", "text", title, "off", "What the thread is about, in a line.", false, " required minlength=\"{forum.SHORTEST_TITLE}\" maxlength=\"{forum.LONGEST_TITLE}\"")
+        push(body, "      " + line)
+    push(body, "      <div class=\"field\">")
+    push(body, "        <label for=\"field-text\">Post</label>")
+    push(body, "        <textarea class=\"input\" id=\"field-text\" name=\"text\" rows=\"12\" required maxlength=\"{forum.LONGEST_POST}\" aria-describedby=\"field-text-hint\">{html.text(text)}</textarea>")
+    push(body, "        <p class=\"hint\" id=\"field-text-hint\">{MARKDOWN_HINT}</p>")
+    push(body, "      </div>")
+    push(body, "    </div>")
+    push(body, "    <div class=\"box-foot buttons\"><button class=\"button primary\" type=\"submit\">Start the thread</button><a class=\"button quiet\" href=\"/community\">Cancel</a></div>")
+    push(body, "  </form>")
+    push(body, "</div>")
+    return layout.page(view, "Start a thread · Sayon", body, status, true, "community")
+
+function start_thread(request: http.Request, state: registry.State, view: layout.Visitor) -> http.Response
+    fields = http.form(request)
+    key = pages.value(fields, "category")
+    title = one_line(pages.value(fields, "title"))
+    text = post_text(pages.value(fields, "text"))
+    someone = member(state, view)
+    if someone == nothing
+        return http.redirect("/sign-in?next=%2Fcommunity%2Fnew")
+    if not pages.from_here(request, state)
+        return new_page(state, view, key, title, text, pages.FOREIGN, 403)
+    if posting_problem(state, someone) != ""
+        return new_page(state, view, key, title, text)
+    part = forum.find_category(key)
+    if part == nothing
+        return new_page(state, view, key, title, text, "Choose the category the thread goes in.", 400)
+    if part.admins_only and not accounts.is_admin(someone.account)
+        return new_page(state, view, key, title, text, "Only the website's admins start threads in {part.label}.", 403)
+    wrong = title_problem(title)
+    if wrong == ""
+        wrong = text_problem(text)
+    if wrong != ""
+        return new_page(state, view, key, title, text, wrong, 400)
+    id = forum.start(state.data, part.key, someone.name, title, text)
+    forum.note_post(state.data, someone.name)
+    return http.redirect("/community/{part.key}/{id}")
+
+# Mails a thread's author that someone replied, unless they replied
+# themselves, have no verified address, or turned such mail off.
+private function tell_author(state: registry.State, thread: forum.Thread, number: integer, replier: string)
+    if thread.author == replier
+        return
+    all = accounts.accounts(state.data)
+    if not haskey(all, thread.author)
+        return
+    record = clone(all[thread.author])
+    email = clone(record.email)
+    if email == nothing or record.verified == false or record.notify == false
+        return
+    link = state.address + address_of(thread) + "#post-{number}"
+    text = strings.join(["Hello {thread.author},", "", "{replier} replied to your thread on Sayon's website, \"{thread.title}\":", "", link, "", "To stop these mails, turn them off in your settings: {state.address}/account/settings#notify", "", "Sayon"], "\n")
+    mail.send(state.data, mail.Mail(to = email, subject = "A new reply to your thread", text = text))
+
+function post_reply(request: http.Request, state: registry.State, view: layout.Visitor) -> http.Response
+    fields = http.form(request)
+    text = post_text(pages.value(fields, "text"))
+    thread = thread_named(state, pages.value(fields, "thread"))
+    if thread == nothing
+        return site.not_found(view)
+    someone = member(state, view)
+    if someone == nothing
+        return http.redirect("/sign-in?next=" + http.encode(address_of(thread)))
+    if thread.hidden and not accounts.moderates(someone.account)
+        return site.not_found(view)
+    page = "{thread.id}"
+    if not pages.from_here(request, state)
+        return thread_page(state, view, thread.category, page, "", pages.FOREIGN, text, 403)
+    reason = posting_problem(state, someone)
+    if reason != ""
+        return thread_page(state, view, thread.category, page, "", reason, text, 403)
+    if thread.locked
+        return thread_page(state, view, thread.category, page, "", "This thread is locked: it takes no more replies.", text, 403)
+    wrong = text_problem(text)
+    if wrong != ""
+        return thread_page(state, view, thread.category, page, "", wrong, text, 400)
+    number = forum.reply(state.data, thread.id, someone.name, text)
+    forum.note_post(state.data, someone.name)
+    tell_author(state, thread, number, someone.name)
+    return http.redirect(address_of(thread) + "#post-{number}")
+
+# A post that someone may change: its thread, and itself.
+type Editing = [thread: forum.Thread, post: forum.Post]
+
+# The post a form or an address names, or nothing.
+private function editing(state: registry.State, thread_text: string, number_text: string) -> Editing or nothing
+    thread = thread_named(state, thread_text)
+    number = number_of(number_text)
+    if thread == nothing or number == nothing
+        return nothing
+    kept = forum.posts(state.data, thread.id)
+    if number < 1 or number > length(kept)
+        return nothing
+    return Editing(thread = thread, post = clone(kept[number - 1]))
+
+# Why someone may not change a post, or "".
+private function editing_problem(someone: Member, found: Editing) -> string
+    if found.post.author != someone.name
+        return "Only whoever wrote a post changes it."
+    if found.thread.locked
+        return "This thread is locked: its posts stay as they are."
+    return ""
+
+# The form that changes a post: with what it says, or with what was sent
+# when `given`.
+function edit_page(state: registry.State, view: layout.Visitor, thread_text: string, number_text: string, title: string = "", text: string = "", problem: string = "", status: integer = 200, given: boolean = false) -> http.Response
+    someone = member(state, view)
+    if someone == nothing
+        return http.redirect("/sign-in?next=" + http.encode("/community/edit?thread={thread_text}&post={number_text}"))
+    found = editing(state, thread_text, number_text)
+    if found == nothing
+        return site.not_found(view)
+    thread = clone(found.thread)
+    if thread.hidden and not accounts.moderates(someone.account)
+        return site.not_found(view)
+    first = found.post.number == 1
+    shown_title = clone(thread.title)
+    shown_text = clone(found.post.text)
+    if given
+        shown_title = clone(title)
+        shown_text = clone(text)
+    heading = "Change your reply"
+    if first
+        heading = "Change your thread"
+    body: Array<string> = ["<div class=\"wrap compose\">"]
+    push(body, "  <ol class=\"trail\"><li><a href=\"/community\">Community</a></li><li><a href=\"{address_of(thread)}#post-{found.post.number}\">{html.text(thread.title)}</a></li><li aria-current=\"page\">Edit</li></ol>")
+    push(body, "  <h1>{heading}</h1>")
+    refused = editing_problem(someone, found)
+    if refused != ""
+        push(body, "  " + layout.notice("error", refused))
+        push(body, "</div>")
+        return layout.page(view, "{heading} · Sayon", body, 403, true, "community")
+    if problem != ""
+        push(body, "  " + layout.notice("error", problem))
+    push(body, "  <form class=\"box\" method=\"post\" action=\"/community/edit\">")
+    push(body, "    <input type=\"hidden\" name=\"thread\" value=\"{thread.id}\"><input type=\"hidden\" name=\"post\" value=\"{found.post.number}\">")
+    push(body, "    <div class=\"box-body\">")
+    if first
+        for line in layout.field("Title", "title", "text", shown_title, "off", "", false, " required minlength=\"{forum.SHORTEST_TITLE}\" maxlength=\"{forum.LONGEST_TITLE}\"")
+            push(body, "      " + line)
+    push(body, "      <div class=\"field\">")
+    push(body, "        <label for=\"field-text\">Post</label>")
+    push(body, "        <textarea class=\"input\" id=\"field-text\" name=\"text\" rows=\"12\" required maxlength=\"{forum.LONGEST_POST}\" aria-describedby=\"field-text-hint\">{html.text(shown_text)}</textarea>")
+    push(body, "        <p class=\"hint\" id=\"field-text-hint\">{MARKDOWN_HINT}</p>")
+    push(body, "      </div>")
+    push(body, "    </div>")
+    push(body, "    <div class=\"box-foot buttons\"><button class=\"button primary\" type=\"submit\">Save the post</button><a class=\"button quiet\" href=\"{address_of(thread)}#post-{found.post.number}\">Cancel</a></div>")
+    push(body, "  </form>")
+    push(body, "</div>")
+    return layout.page(view, "{heading} · Sayon", body, status, true, "community")
+
+function save_edit(request: http.Request, state: registry.State, view: layout.Visitor) -> http.Response
+    fields = http.form(request)
+    thread_text = pages.value(fields, "thread")
+    number_text = pages.value(fields, "post")
+    title = one_line(pages.value(fields, "title"))
+    text = post_text(pages.value(fields, "text"))
+    someone = member(state, view)
+    if someone == nothing
+        return http.redirect("/sign-in?next=%2Fcommunity")
+    found = editing(state, thread_text, number_text)
+    if found == nothing
+        return site.not_found(view)
+    if not pages.from_here(request, state)
+        return edit_page(state, view, thread_text, number_text, title, text, pages.FOREIGN, 403, true)
+    if editing_problem(someone, found) != ""
+        return edit_page(state, view, thread_text, number_text, title, text)
+    wrong = text_problem(text)
+    if wrong == "" and found.post.number == 1
+        wrong = title_problem(title)
+    if wrong != ""
+        return edit_page(state, view, thread_text, number_text, title, text, wrong, 400, true)
+    forum.edit(state.data, found.thread.id, found.post.number, text, title)
+    return http.redirect(address_of(found.thread) + "#post-{found.post.number}")
+
+# Marks the reply that solved a question, or unmarks it: for whoever asked,
+# and for moderators.
+function solve(request: http.Request, state: registry.State, view: layout.Visitor) -> http.Response
+    fields = http.form(request)
+    someone = member(state, view)
+    if someone == nothing
+        return http.redirect("/sign-in?next=%2Fcommunity")
+    found = editing(state, pages.value(fields, "thread"), pages.value(fields, "post"))
+    if found == nothing
+        return site.not_found(view)
+    thread = clone(found.thread)
+    page = "{thread.id}"
+    if thread.hidden and not accounts.moderates(someone.account)
+        return site.not_found(view)
+    if not pages.from_here(request, state)
+        return thread_page(state, view, thread.category, page, "", pages.FOREIGN, "", 403)
+    part = forum.find_category(thread.category)
+    if part == nothing or found.post.number < 2 or found.post.hidden
+        return thread_page(state, view, thread.category, page, "", "Only a reply marks a question solved.", "", 400)
+    if not part.solvable
+        return thread_page(state, view, thread.category, page, "", "Only questions in Help are marked solved.", "", 400)
+    if someone.name != thread.author and not accounts.moderates(someone.account)
+        return thread_page(state, view, thread.category, page, "", "Only whoever asked marks the reply that solved it.", "", 403)
+    all = forum.threads(state.data)
+    if all[page].solved == found.post.number
+        all[page].solved = nothing
+    else
+        all[page].solved = found.post.number
+    forum.save_threads(state.data, all)
+    return http.redirect(address_of(thread) + "#post-{found.post.number}")
+
+# Reports a post to the moderators, with why.
+function report_post(request: http.Request, state: registry.State, view: layout.Visitor) -> http.Response
+    fields = http.form(request)
+    reason = one_line(pages.value(fields, "reason"))
+    someone = member(state, view)
+    if someone == nothing
+        return http.redirect("/sign-in?next=%2Fcommunity")
+    found = editing(state, pages.value(fields, "thread"), pages.value(fields, "post"))
+    if found == nothing
+        return site.not_found(view)
+    thread = clone(found.thread)
+    page = "{thread.id}"
+    if thread.hidden and not accounts.moderates(someone.account)
+        return site.not_found(view)
+    if not pages.from_here(request, state)
+        return thread_page(state, view, thread.category, page, "", pages.FOREIGN, "", 403)
+    if not accounts.may_publish(someone.account)
+        return thread_page(state, view, thread.category, page, "", "Verify your email to report a post.", "", 403)
+    if reason == "" or length(reason) > forum.LONGEST_REASON
+        return thread_page(state, view, thread.category, page, "", "Say in a line, {forum.LONGEST_REASON} characters at most, what is wrong with the post.", "", 400)
+    forum.report(state.data, thread.id, found.post.number, someone.name, reason)
+    return http.redirect(address_of(thread) + "?done=reported#post-{found.post.number}")
+
+test "numbers, titles, and posts are read as people write them"
+    assert(number_of("12") == 12 and number_of("") == nothing and number_of("1e3") == nothing and number_of("-1") == nothing)
+    assert(one_line("  A\r\ntitle\t") == "A  title")
+    assert(post_text("one\r\ntwo\rthree\n\n") == "one\ntwo\nthree")
+    assert(title_problem("Hi") != "" and title_problem("Hello there") == "")
+    assert(text_problem("  \n") != "" and text_problem("Some words") == "")

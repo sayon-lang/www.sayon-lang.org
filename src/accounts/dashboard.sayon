@@ -1,14 +1,18 @@
 # An account's own pages, for its owner: the dashboard at /account, with
-# the account's packages, tokens, and email; its tokens at /account/tokens,
-# made and revoked there; and its settings at /account/settings: a few
-# words about its owner, its email address, its password, and the browsers
-# signed in to it.
+# the account's packages, threads, tokens, and email; its tokens at
+# /account/tokens, made and revoked there; and its settings at
+# /account/settings: a few words about its owner, its email address, the
+# mail it gets about replies, its password, and the browsers signed in to
+# it.
 
 strings = import("standard/strings.sayon")
+time = import("standard/time.sayon")
 accounts = import("src/accounts/accounts.sayon")
 logins = import("src/accounts/logins.sayon")
 pages = import("src/accounts/pages.sayon")
 sessions = import("src/accounts/sessions.sayon")
+forum = import("src/community/forum.sayon")
+community = import("src/community/pages.sayon")
 registry = import("src/packages/registry.sayon")
 html = import("src/web/html.sayon")
 http = import("src/web/http.sayon")
@@ -68,6 +72,10 @@ function dashboard(state: registry.State, view: layout.Visitor, done: string) ->
         push(body, "  <div class=\"notice\" role=\"status\"><p>Verify <strong>{html.text(email)}</strong> to publish packages: open the link the website mailed it.</p><form class=\"notice-action\" method=\"post\" action=\"/account/email/again\"><button class=\"button small\" type=\"submit\">Mail the link again</button></form></div>")
     elseif email == nothing
         push(body, "  <div class=\"notice\" role=\"status\"><p>Add an email address in your <a href=\"/account/settings#email\">settings</a>, so that you can choose a new password if you forget this one.</p></div>")
+    now = time.unix_seconds()
+    until = accounts.suspended_until(record, now)
+    if until != nothing
+        push(body, "  " + layout.notice("error", "The moderators keep your account from posting in the community until {forum.day(until)}."))
     push(body, "  <div class=\"split\">")
     push(body, "    <div class=\"stack\">")
     packages = owned(state, account)
@@ -78,6 +86,27 @@ function dashboard(state: registry.State, view: layout.Visitor, done: string) ->
     else
         for line in package_rows(packages)
             push(body, "        " + line)
+    push(body, "      </section>")
+    started = forum.started_by(forum.threads(state.data), account, false)
+    seen = forum.seen(state.data)
+    push(body, "      <section class=\"box\" aria-labelledby=\"threads-title\">")
+    push(body, "        <div class=\"box-head\"><h2 id=\"threads-title\">Your threads</h2><span class=\"tag\">{length(started)}</span></div>")
+    if length(started) == 0
+        push(body, "        <p class=\"empty\">You started no threads yet. Ask a question or show what you made in the <a href=\"/community\">community</a>.</p>")
+    else
+        push(body, "        <ul class=\"rows\">")
+        shown = 0
+        for thread in started
+            if shown == 8
+                break
+            shown += 1
+            fresh = forum.unseen(seen, account, thread)
+            news = ""
+            if fresh > 0
+                news = "<span class=\"tag accent\">{fresh} new</span>"
+            push(body, "          <li><a class=\"row thread-row\" href=\"{community.address_of(thread)}\"><span class=\"row-title\">{html.text(thread.title)}</span><span class=\"thread-tags\">{community.tags_of(thread)}{news}</span><span class=\"row-text thread-facts\"><span>{pages.count_of(thread.replies, "reply", "replies")}</span><span>{forum.ago(thread.active, now)}</span></span></a></li>")
+        push(body, "        </ul>")
+        push(body, "        <div class=\"box-foot\"><a class=\"button\" href=\"/community\">Visit the community</a></div>")
     push(body, "      </section>")
     kept = accounts.tokens(state.data)
     count = 0
@@ -206,6 +235,8 @@ function settings_page(state: registry.State, view: layout.Visitor, done: string
             push(body, "    " + layout.notice("success", "Your password is changed, and every other browser is signed out."))
         case "signed-out"
             push(body, "    " + layout.notice("success", "Every other browser is signed out."))
+        case "notify"
+            push(body, "    " + layout.notice("success", "Your choice about mail is saved."))
         case _
             if problem != ""
                 push(body, "    " + layout.notice("error", problem))
@@ -242,6 +273,16 @@ function settings_page(state: registry.State, view: layout.Visitor, done: string
     push(body, "      </form>")
     if email != nothing and record.verified == false
         push(body, "      <form class=\"box-foot\" method=\"post\" action=\"/account/email/again\"><button class=\"button quiet\" type=\"submit\">Mail the link again</button></form>")
+    push(body, "    </section>")
+    checked = " checked"
+    if record.notify == false
+        checked = ""
+    push(body, "    <section class=\"box\" id=\"notify\" aria-labelledby=\"notify-title\">")
+    push(body, "      <div class=\"box-head\"><h2 id=\"notify-title\">Mail about replies</h2></div>")
+    push(body, "      <form class=\"box-body\" method=\"post\" action=\"/account/notify\">")
+    push(body, "        <label class=\"check\"><input type=\"checkbox\" name=\"replies\" value=\"yes\"{checked}><span>Mail me when someone replies to a thread I started</span></label>")
+    push(body, "        <button class=\"button\" type=\"submit\">Save the choice</button>")
+    push(body, "      </form>")
     push(body, "    </section>")
     push(body, "    <section class=\"box\" id=\"password\" aria-labelledby=\"password-title\">")
     push(body, "      <div class=\"box-head\"><h2 id=\"password-title\">Password</h2></div>")
@@ -301,6 +342,21 @@ function change_profile(request: http.Request, state: registry.State, view: layo
         all[account].bio = bio
     accounts.save_accounts(state.data, all)
     return http.redirect("/account/settings?done=profile")
+
+# Turns the mail about replies on or off.
+function change_notify(request: http.Request, state: registry.State, view: layout.Visitor) -> http.Response
+    account = signed_in_account(view)
+    if account == nothing
+        return http.redirect(SIGN_IN)
+    if not pages.from_here(request, state)
+        return settings_page(state, view, "", pages.FOREIGN, 403)
+    wanted = pages.value(http.form(request), "replies") == "yes"
+    all = accounts.accounts(state.data)
+    if not haskey(all, account)
+        return http.redirect(SIGN_IN)
+    all[account].notify = wanted
+    accounts.save_accounts(state.data, all)
+    return http.redirect("/account/settings?done=notify")
 
 function change_email(request: http.Request, state: registry.State, view: layout.Visitor) -> http.Response
     account = signed_in_account(view)

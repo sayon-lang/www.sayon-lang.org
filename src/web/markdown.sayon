@@ -2,7 +2,7 @@
 # ids GitHub gives them, paragraphs, lists, tables, fenced code (Sayon's
 # highlighted), and HTML passed through; in text, `code`, **strong**,
 # *emphasis*, and links, those to another guide pointing at its page
-# under /docs.
+# under /docs. Posts in the forum are made HTML safely instead (`post`).
 
 strings = import("standard/strings.sayon")
 html = import("src/web/html.sayon")
@@ -54,8 +54,18 @@ private function address(target: string) -> string
         return "/docs/" + name + rest
     return REPOSITORY + target
 
-# Text from `start` up to `end` as HTML, into `out`.
-private function inline_range(characters: Array<string>, start: integer, end: integer, update out: Array<string>)
+# Whether a post may link to an address: one on the web, over HTTP or
+# HTTPS, or one on this website.
+private function linkable(target: string) -> boolean
+    lowered = strings.lower(target)
+    if strings.contains(target, "\\") or strings.contains(target, " ")
+        return false
+    if strings.starts_with(lowered, "https://") or strings.starts_with(lowered, "http://")
+        return true
+    return strings.starts_with(target, "/") and not strings.starts_with(target, "//") or strings.starts_with(target, "#")
+
+# Text from `start` up to `end` as HTML, into `out`; `safe` for a post.
+private function inline_range(characters: Array<string>, start: integer, end: integer, update out: Array<string>, safe: boolean)
     index = start
     while index < end
         current = clone(characters[index])
@@ -69,7 +79,7 @@ private function inline_range(characters: Array<string>, start: integer, end: in
             close = find_double(characters, index + 2, end)
             if close != nothing
                 push(out, "<strong>")
-                inline_range(characters, index + 2, close, out)
+                inline_range(characters, index + 2, close, out, safe)
                 push(out, "</strong>")
                 index = close + 2
                 continue
@@ -77,7 +87,7 @@ private function inline_range(characters: Array<string>, start: integer, end: in
             close = find_from(characters, "*", index + 1, end)
             if close != nothing
                 push(out, "<em>")
-                inline_range(characters, index + 1, close, out)
+                inline_range(characters, index + 1, close, out, safe)
                 push(out, "</em>")
                 index = close + 1
                 continue
@@ -85,9 +95,19 @@ private function inline_range(characters: Array<string>, start: integer, end: in
             middle = find_from(characters, "]", index + 1, end)
             if middle != nothing and middle + 1 < end and characters[middle + 1] == "("
                 close = find_from(characters, ")", middle + 2, end)
+                target = ""
                 if close != nothing
-                    push(out, "<a href=\"" + html.escape(address(piece(characters, middle + 2, close))) + "\">")
-                    inline_range(characters, index + 1, middle, out)
+                    target = piece(characters, middle + 2, close)
+                # A post's link that goes elsewhere stays text, as written.
+                if close != nothing and safe and linkable(target)
+                    push(out, "<a href=\"" + html.escape(target) + "\" rel=\"nofollow ugc\">")
+                    inline_range(characters, index + 1, middle, out, safe)
+                    push(out, "</a>")
+                    index = close + 1
+                    continue
+                if close != nothing and not safe
+                    push(out, "<a href=\"" + html.escape(address(target)) + "\">")
+                    inline_range(characters, index + 1, middle, out, safe)
                     push(out, "</a>")
                     index = close + 1
                     continue
@@ -99,10 +119,10 @@ private function inline_range(characters: Array<string>, start: integer, end: in
         index += 1
 
 # A line of text as HTML.
-function inline(text: string) -> string
+function inline(text: string, safe: boolean = false) -> string
     characters = strings.characters(text)
     out: Array<string> = []
-    inline_range(characters, 0, length(characters), out)
+    inline_range(characters, 0, length(characters), out, safe)
     return strings.join(out, "")
 
 # A heading's id, as GitHub makes it: its text in lowercase, without the
@@ -140,9 +160,10 @@ private function heading_level(line: string) -> integer
         return 0
     return level
 
-# Whether a line starts a block other than a paragraph.
-private function starts_block(line: string) -> boolean
-    return strings.starts_with(line, "```") or heading_level(line) > 0 or strings.starts_with(line, "|") or strings.starts_with(line, "- ") or strings.starts_with(line, "<") or is_ordered_item(line)
+# Whether a line starts a block other than a paragraph: in a post, HTML
+# does not.
+private function starts_block(line: string, safe: boolean) -> boolean
+    return strings.starts_with(line, "```") or heading_level(line) > 0 or strings.starts_with(line, "|") or strings.starts_with(line, "- ") or strings.starts_with(line, "<") and not safe or is_ordered_item(line)
 
 # A table row's cells, split at the `|` outside code.
 private function cells(line: string) -> Array<string>
@@ -167,15 +188,21 @@ private function cells(line: string) -> Array<string>
         push(out, strings.trim(strings.join(current, "")))
     return out
 
-private function row(line: string, tag: string) -> string
+private function row(line: string, tag: string, safe: boolean) -> string
     out: Array<string> = ["<tr>"]
     for cell in cells(line)
-        push(out, "<{tag}>" + inline(cell) + "</{tag}>")
+        push(out, "<{tag}>" + inline(cell, safe) + "</{tag}>")
     push(out, "</tr>")
     return strings.join(out, "")
 
-# A page of Markdown as HTML.
-function convert(source: string) -> Document
+# A post's Markdown as HTML, safe to show among the website's own: HTML in
+# it shows as text, links go only to the web over HTTP or HTTPS or to this
+# website, marked as the poster's, and headings sit below the page's own.
+function post(source: string) -> string
+    return convert(source, true).body
+
+# A page of Markdown as HTML; `safe` for a post.
+function convert(source: string, safe: boolean = false) -> Document
     source_lines = strings.lines(source)
     count = length(source_lines)
     out: Array<string> = []
@@ -203,6 +230,13 @@ function convert(source: string) -> Document
                 push(out, "<pre><code>" + html.text(text) + "</code></pre>")
             else
                 push(out, "<pre><code class=\"language-{html.escape(language)}\">" + html.text(text) + "</code></pre>")
+        elseif level > 0 and safe
+            # A post's headings sit below the thread's title, without ids.
+            shown = level + 2
+            if shown > 6
+                shown = 6
+            push(out, "<h{shown}>" + inline(strings.slice(line, level + 1, length(line)), true) + "</h{shown}>")
+            index += 1
         elseif level > 0
             text = strings.slice(line, level + 1, length(line))
             id = slug(strings.replace(text, "`", ""))
@@ -218,11 +252,11 @@ function convert(source: string) -> Document
             index += 1
         elseif strings.starts_with(line, "|")
             push(out, "<div class=\"table\"><table>")
-            push(out, "<thead>" + row(line, "th") + "</thead>")
+            push(out, "<thead>" + row(line, "th", safe) + "</thead>")
             index += 2
             push(out, "<tbody>")
             while index < count and strings.starts_with(source_lines[index], "|")
-                push(out, row(source_lines[index], "td"))
+                push(out, row(source_lines[index], "td", safe))
                 index += 1
             push(out, "</tbody></table></div>")
         elseif strings.starts_with(line, "- ") or is_ordered_item(line)
@@ -231,22 +265,22 @@ function convert(source: string) -> Document
             while index < count and (ordered and is_ordered_item(source_lines[index]) or not ordered and strings.starts_with(source_lines[index], "- "))
                 item = if_text(ordered, ordered_text(source_lines[index]), strings.slice(source_lines[index], 2, length(source_lines[index])))
                 index += 1
-                while index < count and strings.trim(source_lines[index]) != "" and not starts_block(source_lines[index])
+                while index < count and strings.trim(source_lines[index]) != "" and not starts_block(source_lines[index], safe)
                     item = item + " " + strings.trim(source_lines[index])
                     index += 1
-                push(out, "<li>" + inline(item) + "</li>")
+                push(out, "<li>" + inline(item, safe) + "</li>")
             push(out, if_text(ordered, "</ol>", "</ul>"))
-        elseif strings.starts_with(line, "<")
+        elseif strings.starts_with(line, "<") and not safe
             # What is in the repository's `static` is at the site's top.
             while index < count and strings.trim(source_lines[index]) != ""
                 push(out, strings.replace(source_lines[index], "src=\"static/", "src=\"/"))
                 index += 1
         else
             paragraph: Array<string> = []
-            while index < count and strings.trim(source_lines[index]) != "" and (length(paragraph) == 0 or not starts_block(source_lines[index]))
+            while index < count and strings.trim(source_lines[index]) != "" and (length(paragraph) == 0 or not starts_block(source_lines[index], safe))
                 push(paragraph, strings.trim(source_lines[index]))
                 index += 1
-            push(out, "<p>" + inline(strings.join(paragraph, " ")) + "</p>")
+            push(out, "<p>" + inline(strings.join(paragraph, " "), safe) + "</p>")
     return Document(body = strings.join(out, "\n"), headings = headings, title = title)
 
 private function if_text(condition: boolean, yes: string, no: string) -> string
@@ -279,3 +313,11 @@ test "HTML goes through, with the files of static at the site's top"
 test "lists, paragraphs, and code"
     page = convert("Some\ntext.\n\n- one\n- two `x`\n\n1. first\n2. second\n\n```sayon\nx = 1\n```\n\n```text\n<raw>\n```\n")
     assert(page.body == "<p>Some text.</p>\n<ul>\n<li>one</li>\n<li>two <code>x</code></li>\n</ul>\n<ol>\n<li>first</li>\n<li>second</li>\n</ol>\n<pre><code class=\"language-sayon\">x = <span class=\"n\">1</span></code></pre>\n<pre><code class=\"language-text\">&lt;raw&gt;</code></pre>")
+
+test "a post's HTML shows as text, and its links go only where they may"
+    made = post("# Hi <b>\n\n<script>alert(1)</script>\n\n[ok](https://sayon-lang.org) [here](/docs) [bad](javascript:alert(1)) [odd](//evil.example) [x](data:text/html,1)")
+    assert(strings.contains(made, "<h3>Hi &lt;b&gt;</h3>"), made)
+    assert(strings.contains(made, "<p>&lt;script&gt;alert(1)&lt;/script&gt;</p>"), made)
+    assert(strings.contains(made, "<a href=\"https://sayon-lang.org\" rel=\"nofollow ugc\">ok</a> <a href=\"/docs\" rel=\"nofollow ugc\">here</a>"), made)
+    assert(strings.contains(made, "[bad](javascript:alert(1))") and strings.contains(made, "[odd](//evil.example)") and strings.contains(made, "[x](data:text/html,1)"), made)
+    assert(not strings.contains(made, "<script") and not strings.contains(made, "href=\"javascript"))

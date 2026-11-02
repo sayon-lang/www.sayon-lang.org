@@ -1,8 +1,8 @@
 # Answers each connection, each in a task of its own: the API and the
 # index (src/packages/api.sayon); the first page (src/pages/home.sayon),
 # the guides (src/pages/docs.sayon), and the pages about packages
-# (src/packages/pages.sayon) and accounts (src/accounts); and the files of
-# `static`.
+# (src/packages/pages.sayon), accounts (src/accounts), and the community's
+# forum (src/community); and the files of `static`.
 
 filesystem = import("standard/filesystem.sayon")
 io = import("standard/io.sayon")
@@ -13,6 +13,8 @@ time = import("standard/time.sayon")
 account = import("src/accounts/pages.sayon")
 dashboard = import("src/accounts/dashboard.sayon")
 profiles = import("src/accounts/profiles.sayon")
+community = import("src/community/pages.sayon")
+moderation = import("src/community/moderation.sayon")
 api = import("src/packages/api.sayon")
 docs = import("src/pages/docs.sayon")
 home = import("src/pages/home.sayon")
@@ -100,6 +102,26 @@ private function sent(request: http.Request, state: registry.State, view: layout
         return dashboard.change_profile(request, state, view)
     if path == "/account/sessions"
         return dashboard.sign_out_others(request, state, view)
+    if path == "/account/notify"
+        return dashboard.change_notify(request, state, view)
+    if path == "/community/new"
+        return community.start_thread(request, state, view)
+    if path == "/community/reply"
+        return community.post_reply(request, state, view)
+    if path == "/community/edit"
+        return community.save_edit(request, state, view)
+    if path == "/community/solve"
+        return community.solve(request, state, view)
+    if path == "/community/report"
+        return community.report_post(request, state, view)
+    if path == "/community/moderate"
+        return moderation.moderate(request, state, view)
+    if path == "/community/moderate-post"
+        return moderation.moderate_post(request, state, view)
+    if path == "/community/reports"
+        return moderation.dismiss(request, state, view)
+    if path == "/community/members"
+        return moderation.change_member(request, state, view)
     if length(parts) == 4 and parts[0] == "account" and parts[1] == "tokens" and parts[3] == "revoke"
         return dashboard.revoke_token(request, state, view, parts[2])
     if length(parts) == 2 and parts[0] == "login"
@@ -107,6 +129,30 @@ private function sent(request: http.Request, state: registry.State, view: layout
     if length(parts) == 2 and parts[0] == "reset"
         return account.reset_password(request, state, view, parts[1])
     return http.refuse(405, "pages are read with GET")
+
+# A part of an address's query, or "".
+private function asked(request: http.Request, name: string) -> string
+    if haskey(request.query, name)
+        return clone(request.query[name])
+    return ""
+
+# A page of the community's forum: the latest threads, a category's, a
+# thread, the forms that start a thread and change a post, and the
+# moderators' reports.
+private function community_page(request: http.Request, state: registry.State, view: layout.Visitor, parts: Array<string>) -> http.Response
+    if length(parts) == 1
+        return community.forum_page(state, view, "", asked(request, "q"), asked(request, "page"))
+    if length(parts) == 2 and parts[1] == "new"
+        return community.new_page(state, view, asked(request, "category"))
+    if length(parts) == 2 and parts[1] == "edit"
+        return community.edit_page(state, view, asked(request, "thread"), asked(request, "post"))
+    if length(parts) == 2 and parts[1] == "reports"
+        return moderation.reports_page(state, view, asked(request, "done"))
+    if length(parts) == 2
+        return community.forum_page(state, view, parts[1], asked(request, "q"), asked(request, "page"))
+    if length(parts) == 3
+        return community.thread_page(state, view, parts[1], parts[2], asked(request, "done"))
+    return site.not_found(view)
 
 # The answer to a request.
 function route(request: http.Request, state: registry.State) -> http.Response
@@ -143,6 +189,8 @@ function route(request: http.Request, state: registry.State) -> http.Response
             return http.redirect("/packages?q=" + http.encode(query), 308)
         view.query = clone(query)
         return site.packages(state, view, query)
+    if length(parts) > 0 and parts[0] == "community"
+        return community_page(request, state, view, parts)
     if path == "/sign-in" or path == "/sign-up"
         next = "/account"
         if haskey(request.query, "next")
@@ -190,7 +238,7 @@ type Rule = [count: integer, seconds: integer]
 type Window = [start: integer, count: integer]
 
 # The rule for a request, for those that make accounts, sign in, send
-# mail, change a password, or start a sign-in, or nothing.
+# mail, change a password, start a sign-in, or post, or nothing.
 function rule(method: string, path: string) -> Rule or nothing
     if method != "POST"
         return nothing
@@ -209,6 +257,14 @@ function rule(method: string, path: string) -> Rule or nothing
             return Rule(count = 10, seconds = 900)
         case "/api/v1/logins"
             return Rule(count = 30, seconds = 3600)
+        case "/community/new"
+            return Rule(count = 10, seconds = 3600)
+        case "/community/reply"
+            return Rule(count = 60, seconds = 3600)
+        case "/community/edit"
+            return Rule(count = 60, seconds = 3600)
+        case "/community/report"
+            return Rule(count = 20, seconds = 3600)
         case _
             return nothing
 
