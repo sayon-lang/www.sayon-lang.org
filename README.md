@@ -23,8 +23,9 @@ It serves the website at `http://127.0.0.1:4100`:
 | `/` | What Sayon is, a first program, and how to get started |
 | `/docs` | The guides, from the Markdown of [`docs`](docs) |
 | `/packages` | Every package, a search, and a page for each |
-| `/account` | Your account: its tokens, packages, and password |
-| `/sign-up`, `/sign-in` | Making an account, and signing in |
+| `/account` | Your dashboard; `/account/tokens` and `/account/settings` your tokens and settings |
+| `/users/<name>` | A person's profile, with their packages |
+| `/sign-up`, `/sign-in`, `/forgot` | Making an account, signing in, and a forgotten password |
 | `/api/v1`, `/index` | The registry's API and index, which `sayon` uses ([PROTOCOL.md](PROTOCOL.md)) |
 
 `sayon login` opens the website's page for the sign-in in your browser; approve it there, signed in or making an account on that page, and `sayon publish` publishes as you. The website keeps accounts, owners, and archives in the folder `data`, and the index in `data/index`, and prints one line of JSON with its addresses as it starts. Other options:
@@ -34,6 +35,7 @@ It serves the website at `http://127.0.0.1:4100`:
 - `--account <name>` makes an account without a password, or takes away an existing one's tokens, and gives it a new token, which the first line shows: for tests and scripts.
 - `--reset <name>`, instead of serving, prints a link that chooses an account's password, once, within an hour. The website serving that data folder at that port answers it.
 - `SAYON_REGISTRY_ADMIN_TOKEN` is the operator's token, for making accounts with `POST /api/v1/users`.
+- `SAYON_MAIL_HOST`, with `SAYON_MAIL_PORT`, `SAYON_MAIL_USER`, `SAYON_MAIL_PASSWORD`, and `SAYON_MAIL_FROM`, name the SMTP server the website mails through: links that verify an address and choose a new password. Without one it keeps each mail in `data/mail`, and says so in its log, so that everything works on your own computer.
 
 ## How it is made
 

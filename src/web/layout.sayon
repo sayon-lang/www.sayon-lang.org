@@ -32,7 +32,7 @@ function account_tool(view: Visitor) -> string
         return "<a class=\"button small\" href=\"/sign-in?next={http.encode(view.here)}\">Sign in</a>"
     first = html.text(strings.slice(account, 0, 1))
     menu = "<details class=\"menu\"><summary><span class=\"initial\" aria-hidden=\"true\">{first}</span><span class=\"hide-small\">{html.text(account)}</span></summary>"
-    menu = menu + "<div class=\"menu-items\"><a href=\"/account\">Your account</a><a href=\"/account#tokens\">Tokens</a><hr>"
+    menu = menu + "<div class=\"menu-items\"><a href=\"/account\">Your account</a><a href=\"/users/{account}\">Your profile</a><a href=\"/account/tokens\">Tokens</a><a href=\"/account/settings\">Settings</a><hr>"
     return menu + "<form method=\"post\" action=\"/sign-out\"><button type=\"submit\">Sign out</button></form></div></details>"
 
 # A page: its title, the bar for `view` (with a search unless the page

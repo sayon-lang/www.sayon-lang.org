@@ -1,0 +1,81 @@
+# What the website's tests share: a client that speaks HTTP as a browser
+# does and sees each answer as it comes, and clearing a test's folder.
+
+filesystem = import("standard/filesystem.sayon")
+io = import("standard/io.sayon")
+network = import("standard/network.sayon")
+strings = import("standard/strings.sayon")
+
+# An answer as the website wrote it: its status, its headers by lowercase
+# name, and its body.
+type Answer = [status: integer, headers: Dict<string, string>, body: string]
+
+function clear(folder: string)
+    if not filesystem.exists(folder)
+        return
+    entries = filesystem.walk(folder)
+    position = length(entries) - 1
+    while position >= 0
+        filesystem.remove(filesystem.join(folder, entries[position]))
+        position -= 1
+    filesystem.remove(folder)
+
+# A request on a connection of its own, as a browser sends it, and the
+# answer as it comes: a redirect, and the cookie it sets, are not followed.
+function send(port: integer, method: string, target: string, headers: Dict<string, string>, body: string) -> Answer
+    connection = network.connect("127.0.0.1", port)
+    connection.write("{method} {target} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Length: {bytelength(body)}\r\nConnection: close\r\n")
+    for name, value in headers
+        connection.write("{name}: {value}\r\n")
+    connection.write("\r\n" + body)
+    connection.flush()
+    text = connection.read()
+    end = strings.find(text, "\r\n\r\n")
+    if end == nothing
+        error("the website's answer has no end to its headers: {text}")
+    head = strings.split(strings.slice(text, 0, end), "\r\n")
+    status = strings.parse_integer(strings.split(head[0], " ")[1])
+    headers_read: Dict<string, string> = []
+    for position in range(1, length(head))
+        line = clone(head[position])
+        colon = strings.find(line, ":")
+        if colon != nothing
+            headers_read[strings.lower(strings.trim(strings.slice(line, 0, colon)))] = strings.trim(strings.slice(line, colon + 1, length(line)))
+    return Answer(status = status, headers = headers_read, body = strings.slice(text, end + 4, length(text)))
+
+function header_of(answer: Answer, name: string) -> string
+    if haskey(answer.headers, name)
+        return clone(answer.headers[name])
+    return ""
+
+# The cookie an answer sets, as a request sends it back.
+function cookie_of(answer: Answer) -> string
+    set = header_of(answer, "set-cookie")
+    end = strings.find(set, ";")
+    if end == nothing
+        return set
+    return strings.slice(set, 0, end)
+
+# The address of the link in the newest mail to `to` whose address holds
+# `part`, such as /verify/, as the website kept it in `<data>/mail`; the
+# mail is then put away, so that the next look finds the next one.
+function mail_link(data: string, to: string, part: string) -> string
+    folder = filesystem.join(data, "mail")
+    names = filesystem.walk(folder)
+    position = length(names) - 1
+    while position >= 0
+        file = filesystem.join(folder, names[position])
+        position -= 1
+        text = io.read_file(file)
+        if strings.contains(text, "To: <{to}>")
+            for line in strings.lines(text)
+                at = strings.find(line, part)
+                if at != nothing and strings.starts_with(line, "http")
+                    filesystem.remove(file)
+                    start = strings.find(line, "://")
+                    if start != nothing
+                        rest = strings.slice(line, start + 3, length(line))
+                        slash = strings.find(rest, "/")
+                        if slash != nothing
+                            return strings.slice(rest, slash, length(rest))
+    error("no mail to {to} holds a link with {part}")

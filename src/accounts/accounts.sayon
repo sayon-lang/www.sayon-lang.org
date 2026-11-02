@@ -12,13 +12,57 @@ strings = import("standard/strings.sayon")
 time = import("standard/time.sayon")
 files = import("src/web/files.sayon")
 
-# An account: when it was made, and its password, unless the operator made
-# it and no one has chosen one yet.
-type Account = [created: string, password: string or nothing]
+# An account: when it was made; its password, unless the operator made it
+# and no one has chosen one yet; its email address; whether it may publish
+# and post (`verified`: its email was verified, or the operator made it, or
+# it was made before accounts had email, which leaves it nothing); its
+# role, "admin" or "moderator", or nothing for anyone else; a few words
+# about its owner; and whether its owner is mailed news, such as replies
+# (nothing for yes).
+type Account = [created: string, password: string or nothing, email: string or nothing, verified: boolean or nothing, role: string or nothing, bio: string or nothing, notify: boolean or nothing]
 
 # A token: the account it belongs to, what it is for, such as the computer
 # `sayon login` ran on, and when it was made and last used.
 type Token = [account: string, name: string, created: string, used: string or nothing]
+
+# A new account, made now.
+function new_account(own password: string or nothing, own email: string or nothing, verified: boolean) -> Account
+    return Account(created = time.format(time.now()), password = password, email = email, verified = verified, role = nothing, bio = nothing, notify = nothing)
+
+# Whether an account may publish packages and post: unless it is waiting
+# for its email to be verified.
+function may_publish(account: Account) -> boolean
+    return account.verified != false
+
+# The most characters an email address, and a bio, have.
+constant LONGEST_EMAIL = 254
+constant LONGEST_BIO = 160
+
+# What is wrong with text as an email address, or nothing: it is one
+# address, `name@domain.tld`, without spaces or what a mail's header could
+# take for more.
+function email_problem(text: string) -> string or nothing
+    if text == ""
+        return "Give an email address, where the website can send you a link to choose a new password."
+    if length(text) > LONGEST_EMAIL
+        return "An email address has {LONGEST_EMAIL} characters at most."
+    for symbol in [" ", ",", ";", "<", ">", "\"", "(", ")", "[", "]", "\\", "\r", "\n", "\t"]
+        if strings.contains(text, symbol)
+            return "That is not an email address, such as ada@example.com."
+    parts = strings.split(text, "@")
+    if length(parts) != 2 or parts[0] == "" or parts[1] == ""
+        return "That is not an email address, such as ada@example.com."
+    domain = clone(parts[1])
+    if not strings.contains(domain, ".") or strings.starts_with(domain, ".") or strings.ends_with(domain, ".") or strings.contains(domain, "..")
+        return "That is not an email address, such as ada@example.com."
+    return nothing
+
+# The account an email address belongs to, or nothing.
+function with_email(all: Dict<string, Account>, email: string) -> string or nothing
+    for name, account in all
+        if account.email == email
+            return clone(name)
+    return nothing
 
 # How long a password is, in characters.
 constant SHORTEST_PASSWORD = 12
@@ -109,7 +153,7 @@ function make(update all: Dict<string, Account>, update tokens: Dict<string, Tok
             return nothing
         remove_tokens(tokens, name)
     else
-        all[clone(name)] = Account(created = time.format(time.now()), password = nothing)
+        all[clone(name)] = new_account(nothing, nothing, true)
     return add_token(tokens, name, OPERATOR)
 
 # What is wrong with a password for an account, or nothing.
@@ -181,7 +225,16 @@ test "passwords are long, and not the account's name"
     assert(password_problem("lovelace", "ada lovelace 1815") != nothing)
     assert(password_problem("ada", "ada") != nothing and password_problem("ada", "ada lovelace 1815") == nothing)
     assert(password_problem("ada", "correct horse battery staple") == nothing)
-    account = Account(created = "2026-11-02T00:00:00Z", password = crypto.hash_password("correct horse battery staple"))
+    account = new_account(crypto.hash_password("correct horse battery staple"), nothing, true)
     assert(password_is(account, "correct horse battery staple"))
     assert(not password_is(account, "correct horse battery stable"))
-    assert(not password_is(Account(created = "2026-11-02T00:00:00Z", password = nothing), ""))
+    assert(not password_is(new_account(nothing, nothing, true), ""))
+
+test "email addresses are one address each"
+    for good in ["ada@example.com", "a.b+c@mail.example.org"]
+        assert(email_problem(good) == nothing, good)
+    for bad in ["", "ada", "ada@", "@example.com", "ada@example", "ada@@example.com", "a da@example.com", "ada@example.com\r\nBcc: x@y.z", "ada@.com", "ada@example..com"]
+        assert(email_problem(bad) != nothing, bad)
+    all: Dict<string, Account> = ["ada" = new_account(nothing, "ada@example.com", true)]
+    assert(with_email(all, "ada@example.com") == "ada" and with_email(all, "bo@example.com") == nothing)
+    assert(may_publish(all["ada"]) and not may_publish(new_account(nothing, "bo@example.com", false)))

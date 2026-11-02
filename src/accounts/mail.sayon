@@ -1,0 +1,245 @@
+# The mail the website sends: links that verify an email address or choose
+# a new password, and news of replies.
+#
+# With SAYON_MAIL_HOST set, each mail goes to that SMTP server: over TLS
+# from the start at port 465 (SAYON_MAIL_PORT, 465 by default), or after
+# STARTTLS at another port; signing in with SAYON_MAIL_USER and
+# SAYON_MAIL_PASSWORD when they are set; from SAYON_MAIL_FROM. A server on
+# this computer is spoken to without TLS, for trying it. Without a server,
+# as where the website is tried, each mail is written to `<data>/mail/`
+# instead, and the log says where.
+
+crypto = import("standard/crypto.sayon")
+filesystem = import("standard/filesystem.sayon")
+network = import("standard/network.sayon")
+os = import("standard/os.sayon")
+strings = import("standard/strings.sayon")
+threads = import("standard/threads.sayon")
+time = import("standard/time.sayon")
+files = import("src/web/files.sayon")
+
+constant FROM = "Sayon <no-reply@sayon-lang.org>"
+constant ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+
+# A mail: who it goes to, its subject, and its text, in lines.
+type Mail = [to: string, subject: string, text: string]
+
+# Where mail goes, and who sends it.
+type Server = [host: string, port: integer, user: string, password: string, from: string]
+
+# The reply of an SMTP server: its code and its text.
+type Reply = [code: integer, text: string]
+
+private function setting(name: string) -> string
+    value = os.environment(name)
+    if value == nothing
+        return ""
+    return strings.trim(value)
+
+# The server SAYON_MAIL_HOST and the rest name, or nothing.
+function server() -> Server or nothing
+    host = setting("SAYON_MAIL_HOST")
+    if host == ""
+        return nothing
+    from = setting("SAYON_MAIL_FROM")
+    if from == ""
+        from = clone(FROM)
+    return Server(host = host, port = port_of(setting("SAYON_MAIL_PORT")), user = setting("SAYON_MAIL_USER"), password = setting("SAYON_MAIL_PASSWORD"), from = from)
+
+# The port SAYON_MAIL_PORT names, or 465.
+private function port_of(text: string) -> integer
+    given = try strings.parse_integer(text)
+    if given is error
+        return 465
+    return given
+
+# Bytes in base64, as AUTH PLAIN sends a name and a password.
+private function base64(bytes: Array<byte>) -> string
+    parts: Array<string> = []
+    count = length(bytes)
+    for at in range(0, count, 3)
+        first = integer(bytes[at])
+        second = 0
+        third = 0
+        if at + 1 < count
+            second = integer(bytes[at + 1])
+        if at + 2 < count
+            third = integer(bytes[at + 2])
+        group = first * 65536 + second * 256 + third
+        push(parts, ALPHABET[group / 262144])
+        push(parts, ALPHABET[group / 4096 % 64])
+        if at + 1 < count
+            push(parts, ALPHABET[group / 64 % 64])
+        else
+            push(parts, "=")
+        if at + 2 < count
+            push(parts, ALPHABET[group % 64])
+        else
+            push(parts, "=")
+    return strings.join(parts, "")
+
+# The address in `Name <address>`, or the text itself.
+private function address_of(text: string) -> string
+    start = strings.find(text, "<")
+    end = strings.find(text, ">")
+    if start != nothing and end != nothing
+        if end > start
+            return strings.slice(text, start + 1, end)
+    return strings.trim(text)
+
+# A moment as mail writes it (RFC 5322), such as `Mon, 02 Nov 2026 09:30:00 +0000`.
+function date(moment: time.DateTime) -> string
+    days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+    months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    day = strings.pad_start("{moment.day}", 2, "0")
+    clock = strings.pad_start("{moment.hour}", 2, "0") + ":" + strings.pad_start("{moment.minute}", 2, "0") + ":" + strings.pad_start("{moment.second}", 2, "0")
+    return "{days[time.weekday(moment) - 1]}, {day} {months[moment.month - 1]} {moment.year} {clock} +0000"
+
+# The whole message, its headers and its text, with lines ending in CRLF,
+# and those of the text that start with `.` given another, as DATA needs.
+function message(from: string, mail: Mail, moment: time.DateTime) -> string
+    lines: Array<string> = []
+    push(lines, "From: " + from)
+    push(lines, "To: <{mail.to}>")
+    push(lines, "Subject: " + mail.subject)
+    push(lines, "Date: " + date(moment))
+    push(lines, "Message-ID: <{crypto.hex(crypto.random_bytes(16))}@sayon-lang.org>")
+    push(lines, "MIME-Version: 1.0")
+    push(lines, "Content-Type: text/plain; charset=utf-8")
+    push(lines, "Content-Transfer-Encoding: 8bit")
+    push(lines, "")
+    for line in strings.lines(mail.text)
+        if strings.starts_with(line, ".")
+            push(lines, "." + line)
+        else
+            push(lines, clone(line))
+    return strings.join(lines, "\r\n") + "\r\n"
+
+# The next reply: its lines up to the one whose code is followed by a space.
+private function reply(update connection: network.Connection) -> Reply
+    text: Array<string> = []
+    while true
+        line = connection.read_line()
+        if line == nothing
+            error("the mail server closed the connection")
+        push(text, clone(line))
+        if length(line) < 4 or strings.slice(line, 3, 4) != "-"
+            code = try strings.parse_integer(strings.slice(line, 0, 3))
+            if code is error
+                error("the mail server answered {line}")
+            return Reply(code = code, text = strings.join(text, " "))
+
+# Waits for a reply of `code`, from what was sent for `step`.
+private function expect(update connection: network.Connection, code: integer, step: string)
+    answer = reply(connection)
+    if answer.code != code
+        error("the mail server refused {step}: {answer.text}")
+
+private function command(update connection: network.Connection, line: string, code: integer, step: string)
+    connection.write(line + "\r\n")
+    connection.flush()
+    expect(connection, code, step)
+
+# Whether a host is this computer, which mail reaches without TLS.
+private function local(host: string) -> boolean
+    return host == "127.0.0.1" or host == "localhost" or host == "::1"
+
+# Sends a mail to a server, raising the reason when it is refused.
+function deliver(server: Server, mail: Mail)
+    if strings.contains(mail.to, "\r") or strings.contains(mail.to, "\n") or strings.contains(mail.subject, "\n")
+        error("the address and the subject of a mail are one line each")
+    plain = local(server.host)
+    if server.port == 465 and not plain
+        connection = network.connect_secure(server.host, server.port)
+        send_on(connection, server, mail, plain)
+    else
+        connection = network.connect(server.host, server.port)
+        send_on(connection, server, mail, plain)
+
+private function send_on(update connection: network.Connection, server: Server, mail: Mail, plain: boolean)
+    expect(connection, 220, "the connection")
+    command(connection, "EHLO sayon-lang.org", 250, "EHLO")
+    if not plain and server.port != 465
+        command(connection, "STARTTLS", 220, "STARTTLS")
+        connection.secure(server.host)
+        command(connection, "EHLO sayon-lang.org", 250, "EHLO")
+    if server.user != ""
+        command(connection, "AUTH PLAIN " + base64(strings.bytes("\0" + server.user + "\0" + server.password)), 235, "signing in")
+    command(connection, "MAIL FROM:<{address_of(server.from)}>", 250, "the sender")
+    command(connection, "RCPT TO:<{mail.to}>", 250, "the address")
+    command(connection, "DATA", 354, "the message")
+    connection.write(message(server.from, mail, time.now()))
+    command(connection, ".", 250, "the message")
+    connection.write("QUIT\r\n")
+    connection.flush()
+
+# Keeps a mail in `<data>/mail/`, for where no server is set: the file.
+function keep(data: string, mail: Mail) -> string
+    folder = filesystem.join(data, "mail")
+    filesystem.create_directory(folder)
+    file = filesystem.join(folder, "{time.unix_seconds()}-{crypto.hex(crypto.random_bytes(4))}.txt")
+    files.save_text(file, message(FROM, mail, time.now()))
+    return file
+
+# Sends a mail, or keeps it when no server is set; why it was not sent, or
+# nothing.
+function send(data: string, mail: Mail) -> string or nothing
+    chosen = server()
+    if chosen == nothing
+        file = keep(data, mail)
+        print("mail to {mail.to} kept in {file}: {mail.subject}")
+        return nothing
+    outcome = try deliver(chosen, mail)
+    if outcome is error
+        print("mail to {mail.to} was not sent: {outcome.message}")
+        return clone(outcome.message)
+    return nothing
+
+test "messages end lines in CRLF and double leading dots"
+    moment = time.DateTime(year = 2026, month = 11, day = 2, hour = 9, minute = 5, second = 7, nanosecond = 0)
+    text = message(FROM, Mail(to = "ada@example.com", subject = "Hi", text = "one\n.two\nthree"), moment)
+    assert(strings.contains(text, "To: <ada@example.com>\r\nSubject: Hi\r\nDate: Mon, 02 Nov 2026 09:05:07 +0000\r\n"))
+    assert(strings.ends_with(text, "\r\n\r\none\r\n..two\r\nthree\r\n"))
+    assert(base64(strings.bytes("\0ada\0secret")) == "AGFkYQBzZWNyZXQ=")
+    assert(address_of(FROM) == "no-reply@sayon-lang.org" and address_of("me@example.com") == "me@example.com")
+
+test "mail goes to an SMTP server as SMTP has it"
+    listener = network.listen("127.0.0.1", 0)
+    port = listener.address().port
+    listening = threads.spawn(function() -> Array<string>
+        heard: Array<string> = []
+        connection = listener.accept()
+        connection.write("220 ready\r\n")
+        connection.flush()
+        data = false
+        while true
+            line = connection.read_line()
+            if line == nothing
+                break
+            push(heard, clone(line))
+            if data
+                if line == "."
+                    data = false
+                    connection.write("250 kept\r\n")
+            elseif strings.starts_with(line, "EHLO")
+                connection.write("250-test\r\n250 AUTH PLAIN\r\n")
+            elseif strings.starts_with(line, "AUTH")
+                connection.write("235 welcome\r\n")
+            elseif line == "DATA"
+                data = true
+                connection.write("354 go on\r\n")
+            elseif line == "QUIT"
+                connection.write("221 bye\r\n")
+                connection.flush()
+                break
+            else
+                connection.write("250 ok\r\n")
+            connection.flush()
+        return heard
+    )
+    deliver(Server(host = "127.0.0.1", port = port, user = "ada", password = "secret", from = clone(FROM)), Mail(to = "bo@example.com", subject = "Hello", text = "Hi.\n.done"))
+    heard = threads.join(listening)
+    assert(heard[0] == "EHLO sayon-lang.org" and heard[1] == "AUTH PLAIN AGFkYQBzZWNyZXQ=", heard[1])
+    assert(heard[2] == "MAIL FROM:<no-reply@sayon-lang.org>" and heard[3] == "RCPT TO:<bo@example.com>" and heard[4] == "DATA")
+    said = strings.join(heard, "\n")
+    assert(strings.contains(said, "\nSubject: Hello\n") and strings.contains(said, "\nHi.\n..done\n.\nQUIT"), said)

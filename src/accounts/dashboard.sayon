@@ -1,0 +1,373 @@
+# An account's own pages, for its owner: the dashboard at /account, with
+# the account's packages, tokens, and email; its tokens at /account/tokens,
+# made and revoked there; and its settings at /account/settings: a few
+# words about its owner, its email address, its password, and the browsers
+# signed in to it.
+
+crypto = import("standard/crypto.sayon")
+strings = import("standard/strings.sayon")
+accounts = import("src/accounts/accounts.sayon")
+logins = import("src/accounts/logins.sayon")
+pages = import("src/accounts/pages.sayon")
+sessions = import("src/accounts/sessions.sayon")
+registry = import("src/packages/registry.sayon")
+html = import("src/web/html.sayon")
+http = import("src/web/http.sayon")
+layout = import("src/web/layout.sayon")
+
+constant SIGN_IN = "/sign-in?next=%2Faccount"
+
+# The packages an account owns, as lists show them.
+function owned(state: registry.State, account: string) -> Array<registry.Summary>
+    names = accounts.packages_of(accounts.owners(state.data), account)
+    out: Array<registry.Summary> = []
+    for summary in registry.summaries(state)
+        for name in names
+            if name == summary.name
+                push(out, clone(summary))
+    return out
+
+# The head of an account's pages: its initial, its name, and since when it
+# exists, with the page's own title below when it has one.
+private function head(account: string, since: string, title: string) -> Array<string>
+    out: Array<string> = ["<header class=\"account-head\">"]
+    push(out, "  <span class=\"initial\" aria-hidden=\"true\">{html.text(strings.slice(account, 0, 1))}</span>")
+    if title == ""
+        push(out, "  <div><h1>{html.text(account)}</h1><p>An account since {html.text(since)}</p></div>")
+        push(out, "  <div class=\"buttons head-actions\"><a class=\"button\" href=\"/users/{account}\">Your profile</a><a class=\"button\" href=\"/account/settings\">Settings</a></div>")
+    else
+        push(out, "  <div><ol class=\"trail\"><li><a href=\"/account\">{html.text(account)}</a></li><li aria-current=\"page\">{html.text(title)}</li></ol><h1>{html.text(title)}</h1></div>")
+    push(out, "</header>")
+    return out
+
+# The rows of packages, with each one's latest version.
+private function package_rows(found: Array<registry.Summary>) -> Array<string>
+    out: Array<string> = ["<ul class=\"rows\">"]
+    for summary in found
+        push(out, "  <li><a class=\"row\" href=\"/packages/{summary.name}\"><span class=\"row-title\">{html.text(summary.name)}</span><span class=\"tag\">{html.text(summary.latest)}</span></a></li>")
+    push(out, "</ul>")
+    return out
+
+# The account's dashboard.
+function dashboard(state: registry.State, view: layout.Visitor, done: string) -> http.Response
+    account = clone(view.account)
+    if account == nothing
+        return http.redirect(SIGN_IN)
+    all = accounts.accounts(state.data)
+    if not haskey(all, account)
+        return http.redirect(SIGN_IN)
+    record = clone(all[account])
+    body: Array<string> = ["<div class=\"wrap\">"]
+    for line in head(account, layout.day(record.created), "")
+        push(body, "  " + line)
+    email = clone(record.email)
+    if done == "welcome"
+        push(body, "  " + layout.notice("success", "Your account is ready. Run `sayon login` on your computer to publish from it."))
+    elseif done == "sent"
+        push(body, "  " + layout.notice("success", "A new link is on its way to your email."))
+    if record.verified == false and email != nothing
+        push(body, "  <div class=\"notice\" role=\"status\"><p>Verify <strong>{html.text(email)}</strong> to publish packages: open the link the website mailed it.</p><form class=\"notice-action\" method=\"post\" action=\"/account/email/again\"><button class=\"button small\" type=\"submit\">Mail the link again</button></form></div>")
+    elseif email == nothing
+        push(body, "  <div class=\"notice\" role=\"status\"><p>Add an email address in your <a href=\"/account/settings#email\">settings</a>, so that you can choose a new password if you forget this one.</p></div>")
+    push(body, "  <div class=\"split\">")
+    push(body, "    <div class=\"stack\">")
+    packages = owned(state, account)
+    push(body, "      <section class=\"box\" aria-labelledby=\"packages-title\">")
+    push(body, "        <div class=\"box-head\"><h2 id=\"packages-title\">Your packages</h2><span class=\"tag\">{length(packages)}</span></div>")
+    if length(packages) == 0
+        push(body, "        <p class=\"empty\">You own no packages yet. Run <code>sayon publish</code> in a project to publish its package.</p>")
+    else
+        for line in package_rows(packages)
+            push(body, "        " + line)
+    push(body, "      </section>")
+    kept = accounts.tokens(state.data)
+    count = 0
+    for _key, token in kept
+        if token.account == account
+            count += 1
+    push(body, "      <section class=\"box\" aria-labelledby=\"tokens-title\">")
+    push(body, "        <div class=\"box-head\"><h2 id=\"tokens-title\">Tokens</h2><span class=\"tag\">{count}</span></div>")
+    push(body, "        <div class=\"box-body\">")
+    push(body, "          <p class=\"hint\">{pages.count_of(count, "token publishes", "tokens publish")} as you: one for each computer <code>sayon login</code> signed in on, and those you made for services.</p>")
+    push(body, "        </div>")
+    push(body, "        <div class=\"box-foot\"><a class=\"button\" href=\"/account/tokens\">Manage tokens</a></div>")
+    push(body, "      </section>")
+    push(body, "    </div>")
+    push(body, "    <aside class=\"box\" aria-labelledby=\"browser-title\">")
+    push(body, "      <div class=\"box-head\"><h2 id=\"browser-title\">This browser</h2></div>")
+    push(body, "      <div class=\"box-body\">")
+    push(body, "        <p>You're signed in as <strong>{html.text(account)}</strong> for 30 days, or until you sign out.</p>")
+    push(body, "        <form method=\"post\" action=\"/sign-out\"><button class=\"button wide\" type=\"submit\">Sign out</button></form>")
+    push(body, "      </div>")
+    push(body, "    </aside>")
+    push(body, "  </div>")
+    push(body, "</div>")
+    return layout.page(view, "{account} · Sayon", body, 200, true, "account")
+
+# The account's tokens, with a form that makes another.
+function tokens_page(state: registry.State, view: layout.Visitor, done: string, problem: string = "", status: integer = 200) -> http.Response
+    account = clone(view.account)
+    if account == nothing
+        return http.redirect("/sign-in?next=%2Faccount%2Ftokens")
+    kept = accounts.tokens(state.data)
+    mine: Array<string> = []
+    for key, token in kept
+        if token.account == account
+            push(mine, clone(key))
+    body: Array<string> = ["<div class=\"wrap\">"]
+    for line in head(account, "", "Tokens")
+        push(body, "  " + line)
+    push(body, "  <div class=\"stack narrow-stack\">")
+    if done == "revoked"
+        push(body, "    " + layout.notice("success", "The token is revoked: whatever used it can no longer publish."))
+    elseif done == "missing"
+        push(body, "    " + layout.notice("error", "That token was revoked already."))
+    if problem != ""
+        push(body, "    " + layout.notice("error", problem))
+    push(body, "    <p class=\"lead\">A token lets <code>sayon publish</code> act for you. <code>sayon login</code> makes one for each computer, and <code>sayon logout</code> revokes it. For a service, such as a build server, make one here and give it to <code>sayon login --token</code>, or set <code>SAYON_TOKEN</code>.</p>")
+    push(body, "    <section class=\"box\" aria-label=\"Your tokens\">")
+    if length(mine) == 0
+        push(body, "      <p class=\"empty\">You have no tokens. Run <code>sayon login</code> on your computer, or make one below.</p>")
+    else
+        push(body, "      <div class=\"table\"><table>")
+        push(body, "        <thead><tr><th scope=\"col\">For</th><th scope=\"col\" class=\"hide-small\">Made</th><th scope=\"col\">Last used</th><th scope=\"col\" class=\"end\"><span class=\"hidden\">Revoke</span></th></tr></thead>")
+        push(body, "        <tbody>")
+        for key in mine
+            token = clone(kept[key])
+            used = "Never"
+            when = clone(token.used)
+            if when != nothing
+                used = layout.day(when)
+            id = accounts.token_id(key)
+            push(body, "          <tr><td>{html.text(token.name)}</td><td class=\"hide-small\">{html.text(layout.day(token.created))}</td><td>{html.text(used)}</td><td class=\"end\"><form method=\"post\" action=\"/account/tokens/{id}/revoke\"><button class=\"button small danger\" type=\"submit\" aria-label=\"Revoke the token for {html.escape(token.name)}\">Revoke</button></form></td></tr>")
+        push(body, "        </tbody>")
+        push(body, "      </table></div>")
+    push(body, "      <form class=\"box-foot inline-form\" method=\"post\" action=\"/account/tokens\">")
+    push(body, "        <label class=\"hidden\" for=\"token-name\">What the new token is for</label>")
+    push(body, "        <input class=\"input\" id=\"token-name\" name=\"name\" required maxlength=\"64\" placeholder=\"What it is for, such as build server\">")
+    push(body, "        <button class=\"button primary\" type=\"submit\">Make a token</button>")
+    push(body, "      </form>")
+    push(body, "    </section>")
+    push(body, "  </div>")
+    push(body, "</div>")
+    return layout.page(view, "Tokens · Sayon", body, status, true, "account")
+
+# Makes a token, and shows it this once.
+function make_token(request: http.Request, state: registry.State, view: layout.Visitor) -> http.Response
+    account = clone(view.account)
+    if account == nothing
+        return http.redirect(SIGN_IN)
+    if not pages.from_here(request, state)
+        return tokens_page(state, view, "", pages.FOREIGN, 403)
+    raw = strings.trim(pages.value(http.form(request), "name"))
+    if raw == ""
+        return tokens_page(state, view, "", "Say what the token is for, such as `build server`, so that you know which to revoke later.", 400)
+    name = logins.machine_name(raw)
+    all = accounts.tokens(state.data)
+    token = accounts.add_token(all, account, name)
+    accounts.save_tokens(state.data, all)
+    inside = ["<div class=\"seal\">{layout.CHECK_ICON}</div>", "<h1 class=\"centered\">Your new token</h1>"]
+    push(inside, "<p class=\"lead centered\">For <strong>{html.text(name)}</strong>. Copy it now: the website keeps only its hash, so this is the one time it is shown.</p>")
+    push(inside, "<pre class=\"secret\"><code>{html.text(token)}</code></pre>")
+    push(inside, "<p class=\"hint\">Give it to <code>sayon login --token</code>, or set <code>SAYON_TOKEN</code> where <code>sayon publish</code> runs. Revoke it once it is no longer needed.</p>")
+    push(inside, "<p><a class=\"button wide\" href=\"/account/tokens\">Back to your tokens</a></p>")
+    return pages.boxed(view, "Your new token", inside, [], 200)
+
+function revoke_token(request: http.Request, state: registry.State, view: layout.Visitor, id: string) -> http.Response
+    account = clone(view.account)
+    if account == nothing
+        return http.redirect(SIGN_IN)
+    if not pages.from_here(request, state)
+        return tokens_page(state, view, "", pages.FOREIGN, 403)
+    all = accounts.tokens(state.data)
+    if not accounts.remove_tokens(all, account, clone(id))
+        return http.redirect("/account/tokens?done=missing")
+    accounts.save_tokens(state.data, all)
+    return http.redirect("/account/tokens?done=revoked")
+
+# The account's settings.
+function settings_page(state: registry.State, view: layout.Visitor, done: string, problem: string = "", status: integer = 200, cookie: string or nothing = nothing) -> http.Response
+    account = clone(view.account)
+    if account == nothing
+        return http.redirect("/sign-in?next=%2Faccount%2Fsettings")
+    all = accounts.accounts(state.data)
+    if not haskey(all, account)
+        return http.redirect(SIGN_IN)
+    record = clone(all[account])
+    body: Array<string> = ["<div class=\"wrap\">"]
+    for line in head(account, "", "Settings")
+        push(body, "  " + line)
+    push(body, "  <div class=\"stack narrow-stack\">")
+    match done
+        case "profile"
+            push(body, "    " + layout.notice("success", "Your profile is saved."))
+        case "email"
+            push(body, "    " + layout.notice("success", "A link is on its way to the new address. Your address changes once you open it."))
+        case "password"
+            push(body, "    " + layout.notice("success", "Your password is changed, and every other browser is signed out."))
+        case "signed-out"
+            push(body, "    " + layout.notice("success", "Every other browser is signed out."))
+        case _
+            if problem != ""
+                push(body, "    " + layout.notice("error", problem))
+    bio = ""
+    given = clone(record.bio)
+    if given != nothing
+        bio = given
+    push(body, "    <section class=\"box\" id=\"profile\" aria-labelledby=\"profile-title\">")
+    push(body, "      <div class=\"box-head\"><h2 id=\"profile-title\">Profile</h2><a class=\"tool-link\" href=\"/users/{account}\">See it</a></div>")
+    push(body, "      <form class=\"box-body\" method=\"post\" action=\"/account/profile\">")
+    push(body, "        <div class=\"field\">")
+    push(body, "          <label for=\"field-bio\">About you</label>")
+    push(body, "          <textarea class=\"input\" id=\"field-bio\" name=\"bio\" maxlength=\"{accounts.LONGEST_BIO}\" rows=\"3\" aria-describedby=\"field-bio-hint\">{html.text(bio)}</textarea>")
+    push(body, "          <p class=\"hint\" id=\"field-bio-hint\">A few words, {accounts.LONGEST_BIO} characters at most, shown on your profile as they are.</p>")
+    push(body, "        </div>")
+    push(body, "        <button class=\"button\" type=\"submit\">Save the profile</button>")
+    push(body, "      </form>")
+    push(body, "    </section>")
+    push(body, "    <section class=\"box\" id=\"email\" aria-labelledby=\"email-title\">")
+    email = clone(record.email)
+    state_tag = "<span class=\"tag\">None yet</span>"
+    shown = ""
+    if email != nothing
+        shown = clone(email)
+        if record.verified == false
+            state_tag = "<span class=\"tag\">Waiting to be verified</span>"
+        else
+            state_tag = "<span class=\"tag accent\">Verified</span>"
+    push(body, "      <div class=\"box-head\"><h2 id=\"email-title\">Email</h2>{state_tag}</div>")
+    push(body, "      <form class=\"box-body\" method=\"post\" action=\"/account/email\">")
+    for line in layout.field("Address", "email", "email", shown, "email", "The website mails a link to verify it, and one to choose a new password if you forget it. No one else sees it.", false, " required maxlength=\"{accounts.LONGEST_EMAIL}\" autocapitalize=\"none\" spellcheck=\"false\"")
+        push(body, "        " + line)
+    push(body, "        <div class=\"buttons\"><button class=\"button\" type=\"submit\">Save the address</button></div>")
+    push(body, "      </form>")
+    if email != nothing and record.verified == false
+        push(body, "      <form class=\"box-foot\" method=\"post\" action=\"/account/email/again\"><button class=\"button quiet\" type=\"submit\">Mail the link again</button></form>")
+    push(body, "    </section>")
+    push(body, "    <section class=\"box\" id=\"password\" aria-labelledby=\"password-title\">")
+    push(body, "      <div class=\"box-head\"><h2 id=\"password-title\">Password</h2></div>")
+    push(body, "      <form class=\"box-body\" method=\"post\" action=\"/account/password\">")
+    push(body, "        <input type=\"text\" name=\"name\" value=\"{html.escape(account)}\" autocomplete=\"username\" hidden>")
+    for line in layout.field("Current password", "current", "password", "", "current-password", "", false, " required")
+        push(body, "        " + line)
+    for line in layout.field("New password", "password", "password", "", "new-password", "At least {accounts.SHORTEST_PASSWORD} characters.", false, " required minlength=\"{accounts.SHORTEST_PASSWORD}\" maxlength=\"{accounts.LONGEST_PASSWORD}\"")
+        push(body, "        " + line)
+    for line in layout.field("New password again", "again", "password", "", "new-password", "", false, " required")
+        push(body, "        " + line)
+    push(body, "        <button class=\"button\" type=\"submit\">Change the password</button>")
+    push(body, "      </form>")
+    push(body, "    </section>")
+    here = ""
+    if cookie != nothing
+        here = accounts.hash(cookie)
+    signed: Array<string> = []
+    for key, session in sessions.sessions(state.data)
+        if session.account == account
+            note = ""
+            if key == here
+                note = " <span class=\"tag accent\">This browser</span>"
+            push(signed, "        <li class=\"row\"><span>Signed in {html.text(layout.day(session.created))}{note}</span></li>")
+    push(body, "    <section class=\"box\" id=\"browsers\" aria-labelledby=\"browsers-title\">")
+    push(body, "      <div class=\"box-head\"><h2 id=\"browsers-title\">Browsers signed in</h2><span class=\"tag\">{length(signed)}</span></div>")
+    push(body, "      <ul class=\"rows\">")
+    for line in signed
+        push(body, clone(line))
+    push(body, "      </ul>")
+    push(body, "      <form class=\"box-foot\" method=\"post\" action=\"/account/sessions\"><button class=\"button\" type=\"submit\">Sign out every other browser</button></form>")
+    push(body, "    </section>")
+    push(body, "  </div>")
+    push(body, "</div>")
+    return layout.page(view, "Settings · Sayon", body, status, true, "account")
+
+private function signed_in_account(view: layout.Visitor) -> string or nothing
+    return clone(view.account)
+
+function change_profile(request: http.Request, state: registry.State, view: layout.Visitor) -> http.Response
+    account = signed_in_account(view)
+    if account == nothing
+        return http.redirect(SIGN_IN)
+    if not pages.from_here(request, state)
+        return settings_page(state, view, "", pages.FOREIGN, 403)
+    words: Array<string> = []
+    for part in strings.split(strings.replace(pages.value(http.form(request), "bio"), "\r", " "), "\n")
+        if strings.trim(part) != ""
+            push(words, strings.trim(part))
+    bio = strings.join(words, " ")
+    if length(bio) > accounts.LONGEST_BIO
+        return settings_page(state, view, "", "A profile says {accounts.LONGEST_BIO} characters at most.", 400)
+    all = accounts.accounts(state.data)
+    if bio == ""
+        all[account].bio = nothing
+    else
+        all[account].bio = bio
+    accounts.save_accounts(state.data, all)
+    return http.redirect("/account/settings?done=profile")
+
+function change_email(request: http.Request, state: registry.State, view: layout.Visitor) -> http.Response
+    account = signed_in_account(view)
+    if account == nothing
+        return http.redirect(SIGN_IN)
+    if not pages.from_here(request, state)
+        return settings_page(state, view, "", pages.FOREIGN, 403)
+    email = strings.lower(strings.trim(pages.value(http.form(request), "email")))
+    wrong = accounts.email_problem(email)
+    if wrong != nothing
+        return settings_page(state, view, "", wrong, 400)
+    all = accounts.accounts(state.data)
+    holder = accounts.with_email(all, email)
+    if holder != nothing and holder != account
+        return settings_page(state, view, "", "Another account has that email address.", 409)
+    if holder == account and all[account].verified != false
+        return settings_page(state, view, "", "That is your address already.", 400)
+    pages.send_verification(state, account, email)
+    return http.redirect("/account/settings?done=email")
+
+# Mails the link that verifies the account's address again.
+function resend(request: http.Request, state: registry.State, view: layout.Visitor) -> http.Response
+    account = signed_in_account(view)
+    if account == nothing
+        return http.redirect(SIGN_IN)
+    if not pages.from_here(request, state)
+        return settings_page(state, view, "", pages.FOREIGN, 403)
+    all = accounts.accounts(state.data)
+    email = clone(all[account].email)
+    if email != nothing and all[account].verified == false
+        pages.send_verification(state, account, email)
+    return http.redirect("/account?done=sent")
+
+function change_password(request: http.Request, state: registry.State, view: layout.Visitor) -> http.Response
+    account = signed_in_account(view)
+    if account == nothing
+        return http.redirect(SIGN_IN)
+    if not pages.from_here(request, state)
+        return settings_page(state, view, "", pages.FOREIGN, 403)
+    fields = http.form(request)
+    password = pages.value(fields, "password")
+    all = accounts.accounts(state.data)
+    if not haskey(all, account)
+        return http.redirect("/sign-in")
+    if not accounts.password_is(all[account], pages.value(fields, "current"))
+        return settings_page(state, view, "", "The current password is wrong, so the password is unchanged.", 401)
+    weak = accounts.password_problem(account, password)
+    if weak != nothing
+        return settings_page(state, view, "", weak, 400)
+    if password != pages.value(fields, "again")
+        return settings_page(state, view, "", "The two new passwords differ. Type the same password in both.", 400)
+    all[account].password = crypto.hash_password(password)
+    accounts.save_accounts(state.data, all)
+    kept = sessions.sessions(state.data)
+    sessions.finish_others(kept, account, http.cookie(request, sessions.COOKIE))
+    sessions.save_sessions(state.data, kept)
+    return http.redirect("/account/settings?done=password")
+
+# Signs the account out of every browser but this one.
+function sign_out_others(request: http.Request, state: registry.State, view: layout.Visitor) -> http.Response
+    account = signed_in_account(view)
+    if account == nothing
+        return http.redirect(SIGN_IN)
+    if not pages.from_here(request, state)
+        return settings_page(state, view, "", pages.FOREIGN, 403)
+    kept = sessions.sessions(state.data)
+    sessions.finish_others(kept, account, http.cookie(request, sessions.COOKIE))
+    sessions.save_sessions(state.data, kept)
+    return http.redirect("/account/settings?done=signed-out")

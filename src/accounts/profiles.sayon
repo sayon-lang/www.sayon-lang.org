@@ -1,0 +1,50 @@
+# A person's public page, /users/<name>: since when their account exists,
+# the few words they wrote about themselves, and the packages they own.
+
+strings = import("standard/strings.sayon")
+accounts = import("src/accounts/accounts.sayon")
+dashboard = import("src/accounts/dashboard.sayon")
+index = import("src/packages/index.sayon")
+pages = import("src/packages/pages.sayon")
+registry = import("src/packages/registry.sayon")
+html = import("src/web/html.sayon")
+http = import("src/web/http.sayon")
+layout = import("src/web/layout.sayon")
+
+function profile(state: registry.State, view: layout.Visitor, name: string) -> http.Response
+    all = accounts.accounts(state.data)
+    if not index.valid_name(name) or not haskey(all, name)
+        return pages.not_found(view)
+    record = clone(all[name])
+    body: Array<string> = ["<div class=\"wrap\">"]
+    push(body, "  <header class=\"account-head\">")
+    push(body, "    <span class=\"initial\" aria-hidden=\"true\">{html.text(strings.slice(name, 0, 1))}</span>")
+    role = ""
+    given = clone(record.role)
+    if given == "admin"
+        role = " <span class=\"tag accent\">Admin</span>"
+    elseif given == "moderator"
+        role = " <span class=\"tag accent\">Moderator</span>"
+    push(body, "    <div><h1>{html.text(name)}{role}</h1><p>An account since {html.text(layout.day(record.created))}</p></div>")
+    if view.account == name
+        push(body, "    <div class=\"buttons head-actions\"><a class=\"button\" href=\"/account/settings#profile\">Edit your profile</a></div>")
+    push(body, "  </header>")
+    bio = clone(record.bio)
+    if bio != nothing
+        push(body, "  <p class=\"lead bio\">{html.text(bio)}</p>")
+    found = dashboard.owned(state, name)
+    push(body, "  <section class=\"section\" aria-labelledby=\"packages-title\">")
+    push(body, "    <div class=\"heading\"><h2 id=\"packages-title\">Packages</h2><span class=\"tag\">{length(found)}</span></div>")
+    if length(found) == 0
+        push(body, "    <div class=\"rows\"><p class=\"empty\">{html.text(name)} owns no packages yet.</p></div>")
+    else
+        push(body, "    <ul class=\"rows\">")
+        for summary in found
+            push(body, "      <li><a class=\"row\" href=\"/packages/{summary.name}\"><span class=\"row-title\">{html.text(summary.name)}</span><span class=\"tag\">{html.text(summary.latest)}</span>")
+            if summary.description != ""
+                push(body, "        <p class=\"row-text\">{html.text(summary.description)}</p>")
+            push(body, "      </a></li>")
+        push(body, "    </ul>")
+    push(body, "  </section>")
+    push(body, "</div>")
+    return layout.page(view, "{name} · Sayon", body, 200, true, "", "{name} on Sayon's website: their packages.")

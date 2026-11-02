@@ -10,6 +10,8 @@ io = import("standard/io.sayon")
 network = import("standard/network.sayon")
 strings = import("standard/strings.sayon")
 account = import("src/accounts/pages.sayon")
+dashboard = import("src/accounts/dashboard.sayon")
+profiles = import("src/accounts/profiles.sayon")
 api = import("src/packages/api.sayon")
 docs = import("src/pages/docs.sayon")
 home = import("src/pages/home.sayon")
@@ -77,12 +79,22 @@ private function sent(request: http.Request, state: registry.State, view: layout
         return account.sign_up(request, state, view)
     if path == "/sign-out"
         return account.sign_out(request, state, view)
+    if path == "/forgot"
+        return account.forgot(request, state, view)
     if path == "/account/tokens"
-        return account.make_token(request, state, view)
+        return dashboard.make_token(request, state, view)
     if path == "/account/password"
-        return account.change_password(request, state, view)
+        return dashboard.change_password(request, state, view)
+    if path == "/account/email"
+        return dashboard.change_email(request, state, view)
+    if path == "/account/email/again"
+        return dashboard.resend(request, state, view)
+    if path == "/account/profile"
+        return dashboard.change_profile(request, state, view)
+    if path == "/account/sessions"
+        return dashboard.sign_out_others(request, state, view)
     if length(parts) == 4 and parts[0] == "account" and parts[1] == "tokens" and parts[3] == "revoke"
-        return account.revoke_token(request, state, view, parts[2])
+        return dashboard.revoke_token(request, state, view, parts[2])
     if length(parts) == 2 and parts[0] == "login"
         return account.login_decision(request, state, view, parts[1])
     if length(parts) == 2 and parts[0] == "reset"
@@ -134,11 +146,23 @@ function route(request: http.Request, state: registry.State) -> http.Response
         if path == "/sign-in"
             return account.sign_in_page(view, next, "", "")
         return account.sign_up_page(view, next, "", "")
+    done = ""
+    if haskey(request.query, "done")
+        done = clone(request.query["done"])
     if path == "/account"
-        done = ""
-        if haskey(request.query, "done")
-            done = clone(request.query["done"])
-        return account.account_page(state, view, done)
+        return dashboard.dashboard(state, view, done)
+    if path == "/account/tokens"
+        return dashboard.tokens_page(state, view, done)
+    if path == "/account/settings"
+        return dashboard.settings_page(state, view, done, "", 200, http.cookie(request, sessions.COOKIE))
+    if path == "/forgot"
+        view.here = ""
+        return account.forgot_page(view, false)
+    if length(parts) == 2 and parts[0] == "users"
+        return profiles.profile(state, view, parts[1])
+    if length(parts) == 2 and parts[0] == "verify"
+        view.here = ""
+        return account.verify_page(state, view, parts[1])
     if length(parts) == 2 and parts[0] == "packages"
         return site.package(state, view, parts[1])
     if length(parts) == 2 and parts[0] == "login"

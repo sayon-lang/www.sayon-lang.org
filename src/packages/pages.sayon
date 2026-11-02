@@ -113,7 +113,7 @@ function package(state: registry.State, view: layout.Visitor, name: string) -> h
     owners = accounts.owners(state.data)
     owner = "nobody"
     if haskey(owners, name)
-        owner = clone(owners[name])
+        owner = "<a href=\"/users/{owners[name]}\">{html.text(owners[name])}</a>"
     body: Array<string> = []
     push(body, "<div class=\"wrap\">")
     push(body, "  <header class=\"package-head\">")
@@ -156,7 +156,7 @@ function package(state: registry.State, view: layout.Visitor, name: string) -> h
     push(body, "          <dt>Latest version</dt><dd>{html.text(latest.version)}</dd>")
     push(body, "          <dt>Published</dt><dd>{html.text(layout.day(latest.published))}</dd>")
     push(body, "          <dt>Versions</dt><dd>{length(versions)}</dd>")
-    push(body, "          <dt>Owner</dt><dd>{html.text(owner)}</dd>")
+    push(body, "          <dt>Owner</dt><dd>{owner}</dd>")
     push(body, "        </dl>")
     push(body, "      </div>")
     push(body, "    </aside>")

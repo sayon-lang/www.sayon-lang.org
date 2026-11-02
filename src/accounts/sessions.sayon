@@ -37,6 +37,13 @@ type Reset = [account: string, expires: integer]
 # How long such a link works, in seconds: an hour.
 constant RESET_LASTS = 3600
 
+# A link that verifies an email address: the account, the address it
+# verifies, and when it stops working, in seconds since 1970.
+type Verification = [account: string, email: string, expires: integer]
+
+# How long a link that verifies an address works, in seconds: a day.
+constant VERIFY_LASTS = 86400
+
 # The sessions, by the SHA-256 of each cookie, in hexadecimal.
 function sessions(data: string) -> Dict<string, Session>
     file = filesystem.join(data, "sessions.json")
@@ -130,6 +137,51 @@ function failed(update all: Dict<string, Failures>, account: string)
 function succeeded(update all: Dict<string, Failures>, account: string)
     remove(all, account)
 
+# Whether a link for choosing an account's password was made in the last
+# two minutes, so that asking again sends no more mail.
+function reset_recently(all: Dict<string, Reset>, account: string) -> boolean
+    since = time.unix_seconds() + RESET_LASTS - 120
+    for _key, reset in all
+        if reset.account == account and reset.expires > since
+            return true
+    return false
+
+# The links that verify email addresses, by the SHA-256 of each secret.
+function verifications(data: string) -> Dict<string, Verification>
+    file = filesystem.join(data, "verifications.json")
+    if not filesystem.is_file(file)
+        return []
+    return json.decode(io.read_file(file))
+
+# Keeps the links that still work.
+function save_verifications(data: string, all: Dict<string, Verification>)
+    now = time.unix_seconds()
+    kept: Dict<string, Verification> = []
+    for key, verification in all
+        if verification.expires > now
+            kept[clone(key)] = clone(verification)
+    files.save_text(filesystem.join(data, "verifications.json"), json.encode_value(kept))
+
+# A new link's secret, verifying `email` for an account; the account's
+# earlier links stop working.
+function new_verification(update all: Dict<string, Verification>, account: string, email: string) -> string
+    gone: Array<string> = []
+    for key, verification in all
+        if verification.account == account
+            push(gone, clone(key))
+    for key in gone
+        remove(all, key)
+    secret = crypto.hex(crypto.random_bytes(32))
+    all[accounts.hash(secret)] = Verification(account = clone(account), email = clone(email), expires = time.unix_seconds() + VERIFY_LASTS)
+    return secret
+
+# What a link's secret verifies, while it works, or nothing.
+function verification(all: Dict<string, Verification>, secret: string) -> Verification or nothing
+    key = accounts.hash(secret)
+    if haskey(all, key) and all[key].expires > time.unix_seconds()
+        return clone(all[key])
+    return nothing
+
 # The links for choosing passwords, by the SHA-256 of each secret.
 function resets(data: string) -> Dict<string, Reset>
     file = filesystem.join(data, "resets.json")
@@ -188,3 +240,17 @@ test "wrong passwords make an account wait"
     assert(wait_for(all, "ada") > 0 and wait_for(all, "bo") == 0)
     succeeded(all, "ada")
     assert(wait_for(all, "ada") == 0)
+
+test "a link verifies one address, for a day, and replaces the account's earlier ones"
+    all: Dict<string, Verification> = []
+    first = new_verification(all, "ada", "ada@example.com")
+    second = new_verification(all, "ada", "ada@example.org")
+    assert(verification(all, first) == nothing and length(all) == 1)
+    found = verification(all, second)
+    assert(found != nothing)
+    if found != nothing
+        assert(found.account == "ada" and found.email == "ada@example.org")
+    resets: Dict<string, Reset> = []
+    assert(not reset_recently(resets, "ada"))
+    new_reset(resets, "ada")
+    assert(reset_recently(resets, "ada") and not reset_recently(resets, "bo"))

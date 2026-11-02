@@ -1603,6 +1603,44 @@ th.end {
   color: var(--muted);
 }
 
+.head-actions {
+  margin-left: auto;
+}
+
+.narrow-stack {
+  max-width: 760px;
+  padding-top: 32px;
+}
+
+.bio {
+  max-width: 40em;
+  margin: 24px 0 0;
+}
+
+.notice-action {
+  margin-top: 10px;
+}
+
+textarea.input {
+  height: auto;
+  min-height: 88px;
+  padding: 10px 12px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.box-head .tool-link {
+  padding: 4px 8px;
+  font-size: 0.875rem;
+}
+
+.account-head h1 .tag {
+  height: 24px;
+  margin-left: 6px;
+  font-family: var(--text);
+  font-size: 0.8125rem;
+}
+
 .initial {
   display: grid;
   flex: none;
@@ -1863,6 +1901,15 @@ th.end {
 
   .inline-form {
     flex-direction: column;
+  }
+
+  .account-head {
+    flex-wrap: wrap;
+  }
+
+  .head-actions {
+    width: 100%;
+    margin-left: 0;
   }
 
   .hide-small {

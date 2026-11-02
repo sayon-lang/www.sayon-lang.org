@@ -5,6 +5,7 @@ strings = import("standard/strings.sayon")
 threads = import("standard/threads.sayon")
 registry = import("src/packages/registry.sayon")
 server = import("src/server.sayon")
+client = import("tests/client.sayon")
 
 constant DATA = "build/test-accounts"
 
@@ -12,58 +13,8 @@ type Started = [secret: string, code: string, interval: integer, expires: intege
 type Polled = [status: string, account: string or nothing, token: string or nothing]
 type Me = [name: string]
 
-# An answer as the registry wrote it: its status, its headers by lowercase
-# name, and its body.
-type Answer = [status: integer, headers: Dict<string, string>, body: string]
-
-function clear(folder: string)
-    if not filesystem.exists(folder)
-        return
-    entries = filesystem.walk(folder)
-    position = length(entries) - 1
-    while position >= 0
-        filesystem.remove(filesystem.join(folder, entries[position]))
-        position -= 1
-    filesystem.remove(folder)
-
-# A request on a connection of its own, as a browser sends it, and the
-# answer as it comes: a redirect, and the cookie it sets, are not followed.
-function send(port: integer, method: string, target: string, headers: Dict<string, string>, body: string) -> Answer
-    connection = network.connect("127.0.0.1", port)
-    connection.write("{method} {target} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Length: {bytelength(body)}\r\nConnection: close\r\n")
-    for name, value in headers
-        connection.write("{name}: {value}\r\n")
-    connection.write("\r\n" + body)
-    connection.flush()
-    text = connection.read()
-    end = strings.find(text, "\r\n\r\n")
-    if end == nothing
-        error("the registry's answer has no end to its headers: {text}")
-    head = strings.split(strings.slice(text, 0, end), "\r\n")
-    status = strings.parse_integer(strings.split(head[0], " ")[1])
-    headers_read: Dict<string, string> = []
-    for position in range(1, length(head))
-        line = clone(head[position])
-        colon = strings.find(line, ":")
-        if colon != nothing
-            headers_read[strings.lower(strings.trim(strings.slice(line, 0, colon)))] = strings.trim(strings.slice(line, colon + 1, length(line)))
-    return Answer(status = status, headers = headers_read, body = strings.slice(text, end + 4, length(text)))
-
-function header_of(answer: Answer, name: string) -> string
-    if haskey(answer.headers, name)
-        return clone(answer.headers[name])
-    return ""
-
-# The cookie an answer sets, as a request sends it back.
-function cookie_of(answer: Answer) -> string
-    set = header_of(answer, "set-cookie")
-    end = strings.find(set, ";")
-    if end == nothing
-        return set
-    return strings.slice(set, 0, end)
-
 test "accounts are made and signed in to, and approve the sign-ins sayon login starts"
-    clear(DATA)
+    client.clear(DATA)
     filesystem.create_directory(filesystem.join(DATA, "index"))
     listener = network.listen("127.0.0.1", 0)
     port = listener.address().port
@@ -74,61 +25,61 @@ test "accounts are made and signed in to, and approve the sign-ins sayon login s
     )
     form: Dict<string, string> = ["Content-Type" = "application/x-www-form-urlencoded", "Origin" = clone(address)]
     elsewhere: Dict<string, string> = ["Content-Type" = "application/x-www-form-urlencoded", "Origin" = "https://example.com"]
-    fields = "name=ada&password=correct+horse+battery+staple&again=correct+horse+battery+staple&next=%2Faccount"
+    fields = "name=ada&email=ada%40example.com&password=correct+horse+battery+staple&again=correct+horse+battery+staple&next=%2Faccount"
 
     # A form from another site does nothing.
-    refused = send(port, "POST", "/sign-up", elsewhere, fields)
-    assert(refused.status == 403 and cookie_of(refused) == "", refused.body)
+    refused = client.send(port, "POST", "/sign-up", elsewhere, fields)
+    assert(refused.status == 403 and client.cookie_of(refused) == "", refused.body)
 
-    made = send(port, "POST", "/sign-up", form, fields)
-    assert(made.status == 303 and header_of(made, "location") == "/account", made.body)
-    cookie = cookie_of(made)
+    made = client.send(port, "POST", "/sign-up", form, fields)
+    assert(made.status == 303 and client.header_of(made, "location") == "/account", made.body)
+    cookie = client.cookie_of(made)
     assert(strings.starts_with(cookie, "sayon_session=") and length(cookie) == 78, cookie)
-    assert(strings.contains(header_of(made, "set-cookie"), "HttpOnly; SameSite=Lax"))
+    assert(strings.contains(client.header_of(made, "set-cookie"), "HttpOnly; SameSite=Lax"))
     signed: Dict<string, string> = ["Cookie" = clone(cookie)]
-    page = send(port, "GET", "/account", signed, "")
+    page = client.send(port, "GET", "/account", signed, "")
     assert(page.status == 200 and strings.contains(page.body, "<h1>ada</h1>"), page.body)
-    assert(header_of(page, "x-frame-options") == "DENY" and header_of(page, "cache-control") == "no-store")
+    assert(client.header_of(page, "x-frame-options") == "DENY" and client.header_of(page, "cache-control") == "no-store")
 
     # sayon login starts a sign-in, which waits until it is approved.
-    begun = send(port, "POST", "/api/v1/logins", [], "{{\"machine\": \"test computer\"}}")
+    begun = client.send(port, "POST", "/api/v1/logins", [], "{{\"machine\": \"test computer\"}}")
     assert(begun.status == 201, begun.body)
     started: Started = json.decode(begun.body)
     asked = "{{\"secret\": \"{started.secret}\"}}"
-    waiting: Polled = json.decode(send(port, "POST", "/api/v1/logins/poll", [], asked).body)
+    waiting: Polled = json.decode(client.send(port, "POST", "/api/v1/logins/poll", [], asked).body)
     assert(waiting.status == "waiting" and waiting.token == nothing)
-    approval = send(port, "GET", "/login/" + started.code, signed, "")
+    approval = client.send(port, "GET", "/login/" + started.code, signed, "")
     assert(approval.status == 200 and strings.contains(approval.body, "Approve this sign-in?") and strings.contains(approval.body, "test computer"), approval.body)
     with_cookie: Dict<string, string> = clone(form)
     with_cookie["Cookie"] = clone(cookie)
-    approved = send(port, "POST", "/login/" + started.code, with_cookie, "decision=approve")
+    approved = client.send(port, "POST", "/login/" + started.code, with_cookie, "decision=approve")
     assert(approved.status == 303, approved.body)
-    given: Polled = json.decode(send(port, "POST", "/api/v1/logins/poll", [], asked).body)
+    given: Polled = json.decode(client.send(port, "POST", "/api/v1/logins/poll", [], asked).body)
     assert(given.status == "approved" and given.account == "ada", given.status)
-    assert(send(port, "POST", "/api/v1/logins/poll", [], asked).status == 404)
+    assert(client.send(port, "POST", "/api/v1/logins/poll", [], asked).status == 404)
     token = clone(given.token)
     if token == nothing
         assert(false, "the approved sign-in gave no token")
         return
     bearer: Dict<string, string> = ["Authorization" = "Bearer " + token]
-    me: Me = json.decode(send(port, "GET", "/api/v1/me", bearer, "").body)
+    me: Me = json.decode(client.send(port, "GET", "/api/v1/me", bearer, "").body)
     assert(me.name == "ada")
 
     # sayon logout revokes it.
-    assert(send(port, "DELETE", "/api/v1/tokens/current", bearer, "").status == 200)
-    assert(send(port, "GET", "/api/v1/me", bearer, "").status == 401)
+    assert(client.send(port, "DELETE", "/api/v1/tokens/current", bearer, "").status == 200)
+    assert(client.send(port, "GET", "/api/v1/me", bearer, "").status == 401)
 
-    wrong = send(port, "POST", "/sign-in", form, "name=ada&password=not+the+password")
-    assert(wrong.status == 401 and strings.contains(wrong.body, "is wrong") and cookie_of(wrong) == "")
+    wrong = client.send(port, "POST", "/sign-in", form, "name=ada&password=not+the+password")
+    assert(wrong.status == 401 and strings.contains(wrong.body, "is wrong") and client.cookie_of(wrong) == "")
 
     # From a sign-in's page, an account is made and the sign-in approved at once.
-    other: Started = json.decode(send(port, "POST", "/api/v1/logins", [], "").body)
-    joined = send(port, "POST", "/sign-up", form, "name=bo&password=bo+likes+long+passwords&again=bo+likes+long+passwords&approve=yes&next=%2Flogin%2F" + other.code)
-    assert(joined.status == 303 and header_of(joined, "location") == "/login/" + other.code, joined.body)
-    for_bo: Polled = json.decode(send(port, "POST", "/api/v1/logins/poll", [], "{{\"secret\": \"{other.secret}\"}}").body)
+    other: Started = json.decode(client.send(port, "POST", "/api/v1/logins", [], "").body)
+    joined = client.send(port, "POST", "/sign-up", form, "name=bo&email=bo%40example.com&password=bo+likes+long+passwords&again=bo+likes+long+passwords&approve=yes&next=%2Flogin%2F" + other.code)
+    assert(joined.status == 303 and client.header_of(joined, "location") == "/login/" + other.code, joined.body)
+    for_bo: Polled = json.decode(client.send(port, "POST", "/api/v1/logins/poll", [], "{{\"secret\": \"{other.secret}\"}}").body)
     assert(for_bo.status == "approved" and for_bo.account == "bo" and for_bo.token != nothing)
 
-    out = send(port, "POST", "/sign-out", with_cookie, "")
-    assert(out.status == 303 and strings.contains(header_of(out, "set-cookie"), "Max-Age=0"))
-    assert(send(port, "GET", "/account", signed, "").status == 303)
+    out = client.send(port, "POST", "/sign-out", with_cookie, "")
+    assert(out.status == 303 and strings.contains(client.header_of(out, "set-cookie"), "Max-Age=0"))
+    assert(client.send(port, "GET", "/account", signed, "").status == 303)
     threads.join(running)

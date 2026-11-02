@@ -99,6 +99,9 @@ private function publish(request: http.Request, state: registry.State, name: str
     account = authenticate(request, state)
     if typeof(account) != "string"
         return account
+    known = accounts.accounts(state.data)
+    if haskey(known, account) and not accounts.may_publish(known[account])
+        return http.refuse(403, "the account `{account}` has not verified its email yet: open the link the website mailed it, or mail it again from {state.address}/account/settings")
     if not index.valid_name(name)
         return http.refuse(400, "`{name}` is not a package name")
     if semver.parse(version) == nothing

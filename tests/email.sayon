@@ -1,0 +1,67 @@
+filesystem = import("standard/filesystem.sayon")
+network = import("standard/network.sayon")
+strings = import("standard/strings.sayon")
+threads = import("standard/threads.sayon")
+accounts = import("src/accounts/accounts.sayon")
+registry = import("src/packages/registry.sayon")
+server = import("src/server.sayon")
+client = import("tests/client.sayon")
+
+constant DATA = "build/test-email"
+
+test "an email is verified, a forgotten password chosen again, and settings kept"
+    client.clear(DATA)
+    filesystem.create_directory(filesystem.join(DATA, "index"))
+    listener = network.listen("127.0.0.1", 0)
+    port = listener.address().port
+    address = "http://127.0.0.1:{port}"
+    state = registry.State(data = clone(DATA), index = filesystem.join(DATA, "index"), address = clone(address), admin = "operator", guides = [])
+    running = threads.spawn(function()
+        server.serve(listener, state, 17)
+    )
+    form: Dict<string, string> = ["Content-Type" = "application/x-www-form-urlencoded", "Origin" = clone(address)]
+
+    # An account waits for its address to be verified before it publishes.
+    made = client.send(port, "POST", "/sign-up", form, "name=cleo&email=Cleo%40Example.com&password=a+quiet+river+at+noon&again=a+quiet+river+at+noon")
+    assert(made.status == 303, made.body)
+    signed: Dict<string, string> = clone(form)
+    signed["Cookie"] = client.cookie_of(made)
+    page = client.send(port, "GET", "/account", signed, "")
+    assert(page.status == 200 and strings.contains(page.body, "Verify <strong>cleo@example.com</strong>"), page.body)
+    assert(not accounts.may_publish(accounts.accounts(DATA)["cleo"]))
+    taken = client.send(port, "POST", "/sign-up", form, "name=cleo2&email=cleo%40example.com&password=another+quiet+river&again=another+quiet+river")
+    assert(taken.status == 409 and strings.contains(taken.body, "Another account has that email address"))
+
+    # The link in the mail verifies it, once.
+    link = client.mail_link(DATA, "cleo@example.com", "/verify/")
+    verified = client.send(port, "GET", link, [], "")
+    assert(verified.status == 200 and strings.contains(verified.body, "Your email is verified"), verified.body)
+    assert(client.send(port, "GET", link, [], "").status == 410)
+    assert(accounts.may_publish(accounts.accounts(DATA)["cleo"]))
+
+    # A forgotten password: the same answer for an account and for no one.
+    asked = client.send(port, "POST", "/forgot", form, "who=CLEO%40example.com")
+    nobody = client.send(port, "POST", "/forgot", form, "who=nobody%40example.com")
+    assert(asked.status == 200 and asked.body == nobody.body)
+    reset = client.mail_link(DATA, "cleo@example.com", "/reset/")
+    assert(client.send(port, "GET", reset, [], "").status == 200)
+    chosen = client.send(port, "POST", reset, form, "password=a+brand+new+morning&again=a+brand+new+morning")
+    assert(chosen.status == 303 and client.header_of(chosen, "location") == "/account/settings?done=password", chosen.body)
+    assert(client.send(port, "POST", "/sign-in", form, "name=cleo&password=a+quiet+river+at+noon").status == 401)
+    again = client.send(port, "POST", "/sign-in", form, "name=cleo&password=a+brand+new+morning")
+    assert(again.status == 303)
+    signed["Cookie"] = client.cookie_of(again)
+
+    # Settings: a new address waits for its link; a bio shows on the profile.
+    moved = client.send(port, "POST", "/account/email", signed, "email=cleo%40example.org")
+    assert(moved.status == 303 and accounts.accounts(DATA)["cleo"].email == "cleo@example.com")
+    assert(strings.contains(client.mail_link(DATA, "cleo@example.org", "/verify/"), "/verify/"))
+    said = client.send(port, "POST", "/account/profile", signed, "bio=Writes+%3Cb%3ESayon%3C%2Fb%3E")
+    assert(said.status == 303)
+    profile = client.send(port, "GET", "/users/cleo", [], "")
+    assert(profile.status == 200 and strings.contains(profile.body, "Writes &lt;b&gt;Sayon&lt;/b&gt;"), profile.body)
+    settings = client.send(port, "GET", "/account/settings", signed, "")
+    assert(settings.status == 200 and strings.contains(settings.body, "This browser"))
+    assert(client.send(port, "POST", "/account/sessions", signed, "").status == 303)
+    assert(client.send(port, "GET", "/users/nobody", [], "").status == 404)
+    threads.join(running)
