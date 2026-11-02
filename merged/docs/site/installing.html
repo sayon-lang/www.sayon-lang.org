@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Installing Sayon · Sayon docs</title>
+  <meta name="description" content="The guides to Sayon: installing it, and the language from values and ownership to projects, packages, and targets.">
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#12151b" media="(prefers-color-scheme: dark)">
+  <link rel="icon" href="favicon.ico" sizes="any">
+  <link rel="icon" href="images/logo.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="images/icon-256.png">
+  <link rel="stylesheet" href="style.css">
+  <script src="site.js"></script>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to the content</a>
+  <header class="bar">
+    <div class="bar-inner">
+      <a class="brand" href="index.html"><img src="images/logo.svg" alt="" width="28" height="28">Sayon</a>
+      <nav class="sites" aria-label="Sayon's sites">
+        <a href="https://github.com/sayon-lang/www.sayon-lang.org">Overview</a>
+        <a href="index.html" aria-current="page">Docs</a>
+        <a href="https://github.com/sayon-lang/packages.sayon-lang.org">Packages</a>
+      </nav>
+      <div class="tools">
+        <a class="tool-link hide-small" href="https://github.com/sayon-lang">GitHub</a>
+        <button class="icon-button theme" type="button" data-theme-switch aria-label="Switch the theme"><svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/></svg><svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/></svg></button>
+      </div>
+    </div>
+  </header>
+  <div class="docs narrow">
+    <nav class="guides" aria-label="Guides">
+      <h2>Guides</h2>
+      <ul>
+        <li><a href="index.html">Overview</a></li>
+        <li><a href="installing.html" aria-current="page">Installing</a></li>
+        <li><a href="language.html">The language</a></li>
+      </ul>
+    </nav>
+    <main id="main" class="prose">
+<h1 id="installing-sayon">Installing Sayon</h1>
+<p>Each release has an installer for each device it supports, named after the operating system and processor it is for:</p>
+<div class="table"><table>
+<thead><tr><th>Device</th><th>Download</th><th>State</th></tr></thead>
+<tbody>
+<tr><td>Windows, x64 processors (most PCs)</td><td><code>sayon-&lt;version&gt;-windows-x64-setup.exe</code></td><td>available</td></tr>
+<tr><td>Windows, ARM64 processors</td><td><code>sayon-&lt;version&gt;-windows-arm64-setup.exe</code></td><td>available</td></tr>
+<tr><td>Linux, x64 processors</td><td><code>sayon-&lt;version&gt;-linux-x64-setup</code></td><td>available</td></tr>
+<tr><td>Linux, ARM64 processors</td><td><code>sayon-&lt;version&gt;-linux-arm64-setup</code></td><td>available</td></tr>
+<tr><td>macOS</td><td><code>sayon-&lt;version&gt;-macos-arm64-setup</code></td><td>not yet; planned for milestone M7</td></tr>
+</tbody></table></div>
+<p>To find your processor on Windows, open Settings &gt; System &gt; About and look at "System type"; on Linux, <code>uname -m</code> prints <code>x86_64</code> for x64 and <code>aarch64</code> for ARM64. Downloads are published on the <a href="https://github.com/sayon-lang/sayon/releases">releases page</a>, together with a <code>SHA256SUMS.txt</code> file for checking them: <code>Get-FileHash &lt;file&gt;</code> in PowerShell prints the checksum to compare, and <code>sha256sum -c SHA256SUMS.txt</code> on Linux checks every file next to it. No release has been published yet; see <a href="#building-the-downloads">Building the downloads</a> to make the installer yourself.</p>
+<h2 id="windows">Windows</h2>
+<p>Run the installer and answer its question. It installs Sayon for your user account, so it needs no administrator rights, and it:</p>
+<ul>
+<li>puts Sayon in <code>%LOCALAPPDATA%\Programs\Sayon</code>;</li>
+<li>adds that folder's <code>bin</code> to your <code>PATH</code>, so <code>sayon</code> works in terminals opened afterwards;</li>
+<li>adds Sayon to Settings &gt; Apps, where it can be uninstalled;</li>
+<li>shows the Sayon icon on <code>.sayon</code> files, unless another program already opens them.</li>
+</ul>
+<p>At the end it runs <code>sayon doctor</code>, which shows whether native builds are ready. Running and testing programs works straight away; <code>sayon build</code> and <code>sayon run --native</code> also need clang from <a href="https://releases.llvm.org">LLVM</a>.</p>
+<p>Running a newer installer replaces the installed version. The new files are unpacked next to the old ones first, so an interrupted installation leaves the previous one working. When a program still has a file of the old version open, such as an editor running <code>sayon lsp</code>, the old files it cannot remove stay in <code>Sayon.previous</code> beside the installation; the next installation, or uninstalling, removes them.</p>
+<h3 id="options">Options</h3>
+<pre><code class="language-text">sayon-setup [options]              Install Sayon for the current user
+sayon-setup uninstall [options]    Remove Sayon
+
+--prefix &lt;folder&gt;    Install into (or remove from) this folder instead
+-y, --yes            Do not ask for confirmation
+--no-path            Do not add Sayon to PATH</code></pre>
+<p><code>--prefix</code> accepts only an empty folder or one that already holds Sayon, so it can never overwrite other files. For an unattended installation, pass <code>--yes</code>.</p>
+<h3 id="uninstalling">Uninstalling</h3>
+<p>Remove Sayon from Settings &gt; Apps, or run <code>uninstall.exe</code> in the installation folder. Uninstalling removes the installation folder and undoes each change listed above. Your own programs and projects are not touched.</p>
+<h3 id="without-the-installer">Without the installer</h3>
+<p>The <code>sayon-&lt;version&gt;-windows-x64.zip</code> archive holds the same files. Unpack it anywhere, add its <code>bin</code> folder to your <code>PATH</code>, and run <code>sayon doctor</code>.</p>
+<h3 id="programs-for-windows-on-arm64">Programs for Windows on ARM64</h3>
+<p>Sayon for Windows x64 also builds programs for Windows on ARM64 computers, such as laptops with Snapdragon processors, with <code>sayon build --target windows-arm64</code>. They link with Visual Studio's ARM64 libraries, which the Visual Studio Installer adds to Visual Studio or its Build Tools with the component "MSVC ARM64/ARM64EC build tools". <code>sayon target setup windows-arm64</code> says whether this computer has them, and <code>sayon doctor</code> lists them. An x64 computer cannot run ARM64 programs, so copy them to an ARM64 one to run them. Sayon's tests run its programs on ARM64 hardware, GitHub's Windows ARM64 runners, for each change.</p>
+<h2 id="linux">Linux</h2>
+<p>Make the installer executable and run it:</p>
+<pre><code class="language-text">chmod +x sayon-&lt;version&gt;-linux-x64-setup
+./sayon-&lt;version&gt;-linux-x64-setup</code></pre>
+<p>It installs Sayon for your user account, so it needs no root, and it:</p>
+<ul>
+<li>puts Sayon in <code>~/.local/share/sayon</code>;</li>
+<li>links <code>~/.local/bin/sayon</code> to it, unless something else is there already.</li>
+</ul>
+<p>It leaves your shell's profile alone. Most systems put <code>~/.local/bin</code> on <code>PATH</code> when it exists; when it is not on yours, the installer prints the line to add to <code>~/.profile</code>.</p>
+<p>At the end it runs <code>sayon doctor</code>. Running and testing programs works straight away; native builds also need clang, from your system's packages (for example <code>sudo apt install clang</code>) or from <a href="https://releases.llvm.org">LLVM</a>. TLS uses the system's OpenSSL 3, <code>libssl.so.3</code>, which most systems have. The download says in <code>INSTALL.txt</code> which version of the GNU C library it needs at least.</p>
+<p>The options are those of the Windows installer, and running a newer installer replaces the installed version the same way.</p>
+<h3 id="uninstalling-1">Uninstalling</h3>
+<p>Run <code>~/.local/share/sayon/uninstall</code>, or the installer with <code>uninstall</code>. Uninstalling removes the installation folder and the link. Your own programs and projects are not touched.</p>
+<h3 id="without-the-installer-1">Without the installer</h3>
+<p>The <code>sayon-&lt;version&gt;-linux-x64.tar.gz</code> archive holds the same files. Unpack it anywhere (<code>tar -xzf &lt;file&gt;</code>), add its <code>bin</code> folder to your <code>PATH</code>, and run <code>sayon doctor</code>.</p>
+<h3 id="programs-for-arm64-linux">Programs for ARM64 Linux</h3>
+<p>Sayon for Linux x64 also builds programs for ARM64 Linux, such as a Raspberry Pi's or an ARM server's, with <code>sayon build --target linux-arm64</code>. Clang links them with the ARM64 version of the GNU C library, which your system's cross packages install:</p>
+<pre><code class="language-text">sudo apt install gcc-aarch64-linux-gnu libc6-dev-arm64-cross</code></pre>
+<p><code>sayon target setup linux-arm64</code> says whether this computer has what it needs, and <code>sayon doctor</code> lists it. Copy the program to an ARM64 Linux computer to run it, or run it here under QEMU's emulator, from the <code>qemu-user</code> package: <code>qemu-aarch64 -L /usr/aarch64-linux-gnu ./program</code>. Sayon's tests run its programs that way, and on ARM64 hardware, GitHub's Linux ARM64 runners, for each change.</p>
+<h2 id="building-the-downloads">Building the downloads</h2>
+<p><code>scripts/package.ps1</code> on Windows, and <code>scripts/package.sh</code> on Linux, build a release of the compiler and runtime, pack it into the archive, and build the installer with the files inside it, for the device they run on:</p>
+<pre><code class="language-text">powershell -File scripts/package.ps1
+scripts/package.sh</code></pre>
+<p>The results are in <code>dist/</code>: the installer, the archive, and <code>SHA256SUMS.txt</code>. On Linux the installer carries the files as a zip archive, which <code>scripts/package.sh</code> writes with Python 3. A plain <code>cargo build</code> builds an installer with no files inside, which says so when run. The device is the one the Rust compiler builds for, so the scripts make the ARM64 downloads on an ARM64 computer.</p>
+<p>For each change, GitHub's ARM64 runners build the Windows ARM64 and Linux ARM64 downloads this way, install Sayon from the installer, run a program with it, interpreted and compiled, and uninstall it. The <a href="https://github.com/sayon-lang/sayon/actions/workflows/arm64.yml">workflow's runs</a> keep the downloads for 30 days; they are for trying, not a release.</p>
+      <div class="page-end"><span>Installing</span><a href="https://github.com/sayon-lang/docs.sayon-lang.org/blob/main/installing.md">Edit this page on GitHub</a></div>
+      <nav class="pager" aria-label="The guides before and after this one">
+        <a href="index.html"><small>Previous</small>Overview</a>
+        <a class="next" href="language.html"><small>Next</small>The language</a>
+      </nav>
+    </main>
+  </div>
+  <footer class="foot">
+    <div class="foot-inner">
+      <div class="foot-brand">
+        <a class="brand" href="index.html"><img src="images/logo.svg" alt="" width="28" height="28">Sayon</a>
+        <p>Programming made easy. Safety made automatic.</p>
+      </div>
+      <nav aria-label="Sites">
+        <h2>Sites</h2>
+        <ul>
+          <li><a href="https://github.com/sayon-lang/www.sayon-lang.org">Overview</a></li>
+          <li><a href="index.html">Docs</a></li>
+          <li><a href="https://github.com/sayon-lang/packages.sayon-lang.org">Packages</a></li>
+        </ul>
+      </nav>
+      <nav aria-label="Source">
+        <h2>Source</h2>
+        <ul>
+          <li><a href="https://github.com/sayon-lang/sayon">The language</a></li>
+          <li><a href="https://github.com/sayon-lang/sayon-vscode">The VS Code extension</a></li>
+          <li><a href="https://github.com/sayon-lang">Every repository</a></li>
+        </ul>
+      </nav>
+      <nav aria-label="License">
+        <h2>License</h2>
+        <ul>
+          <li><a href="https://github.com/sayon-lang/sayon/blob/main/LICENSE">Apache 2.0 with LLVM's exception</a></li>
+        </ul>
+      </nav>
+      <p class="fine">These pages are made from <a href="https://github.com/sayon-lang/docs.sayon-lang.org">their Markdown</a> by a Sayon program.</p>
+    </div>
+  </footer>
+</body>
+</html>

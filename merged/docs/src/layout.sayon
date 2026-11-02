@@ -1,0 +1,102 @@
+# What every page has around its text, in the frame of Sayon's websites
+# (src/frame.sayon): the guides beside it; for a long page, its sections;
+# and at its end, where to change it and the guides before and after it.
+
+strings = import("standard/strings.sayon")
+frame = import("src/frame.sayon")
+html = import("src/html.sayon")
+markdown = import("src/markdown.sayon")
+
+constant GITHUB = "https://github.com/sayon-lang"
+
+# A guide: its Markdown, the page it becomes, and its name among the guides.
+type Guide = [source: string, page: string, label: string]
+
+function guides() -> Array<Guide>
+    return [
+        Guide(source = "README.md", page = "index.html", label = "Overview"),
+        Guide(source = "installing.md", page = "installing.html", label = "Installing"),
+        Guide(source = "language.md", page = "language.html", label = "The language")
+    ]
+
+# A long page's sections and their subsections, as a list of links; none
+# for a page of fewer than four sections.
+private function contents(document: markdown.Document) -> Array<string>
+    out: Array<string> = []
+    sections = 0
+    for heading in document.headings
+        if heading.level == 2
+            sections += 1
+    if sections < 4
+        return out
+    push(out, "<ul>")
+    open = false
+    for heading in document.headings
+        entry = "<a href=\"#{heading.id}\">{html.text(heading.title)}</a>"
+        if heading.level == 2
+            if open
+                push(out, "  </ul></li>")
+            push(out, "  <li>" + entry + "<ul>")
+            open = true
+        elseif heading.level == 3 and open
+            push(out, "    <li>" + entry + "</li>")
+    if open
+        push(out, "  </ul></li>")
+    push(out, "</ul>")
+    return out
+
+# A page: the guide `document`, as `guide` makes it.
+function render(document: markdown.Document, guide: Guide) -> string
+    title = document.title + " · Sayon docs"
+    if guide.page == "index.html"
+        title = "Sayon's documentation"
+    framed = frame.Page(title = title, description = "The guides to Sayon: installing it, and the language from values and ownership to projects, packages, and targets.", site = "docs", root = "", tools = [], colophon = "These pages are made from <a href=\"{GITHUB}/docs.sayon-lang.org\">their Markdown</a> by a Sayon program.")
+    out = frame.top(framed)
+    sections = contents(document)
+    kind = "docs"
+    if length(sections) == 0
+        kind = "docs narrow"
+    push(out, "  <div class=\"{kind}\">")
+    push(out, "    <nav class=\"guides\" aria-label=\"Guides\">")
+    push(out, "      <h2>Guides</h2>")
+    push(out, "      <ul>")
+    all = guides()
+    position = 0
+    for index in range(length(all))
+        current = ""
+        if all[index].page == guide.page
+            current = " aria-current=\"page\""
+            position = index
+        push(out, "        <li><a href=\"{all[index].page}\"{current}>{html.text(all[index].label)}</a></li>")
+    push(out, "      </ul>")
+    push(out, "    </nav>")
+    push(out, "    <main id=\"main\" class=\"prose\">")
+    if length(sections) > 0
+        push(out, "      <details class=\"toc-inline\">")
+        push(out, "        <summary>On this page</summary>")
+        push(out, "        <nav class=\"toc\" aria-label=\"On this page\">")
+        for line in sections
+            push(out, "          " + line)
+        push(out, "        </nav>")
+        push(out, "      </details>")
+    push(out, clone(document.body))
+    push(out, "      <div class=\"page-end\"><span>{html.text(guide.label)}</span><a href=\"{GITHUB}/docs.sayon-lang.org/blob/main/{guide.source}\">Edit this page on GitHub</a></div>")
+    push(out, "      <nav class=\"pager\" aria-label=\"The guides before and after this one\">")
+    if position > 0
+        before = clone(all[position - 1])
+        push(out, "        <a href=\"{before.page}\"><small>Previous</small>{html.text(before.label)}</a>")
+    if position + 1 < length(all)
+        after = clone(all[position + 1])
+        push(out, "        <a class=\"next\" href=\"{after.page}\"><small>Next</small>{html.text(after.label)}</a>")
+    push(out, "      </nav>")
+    push(out, "    </main>")
+    if length(sections) > 0
+        push(out, "    <nav class=\"toc\" aria-label=\"On this page\">")
+        push(out, "      <h2>On this page</h2>")
+        for line in sections
+            push(out, "      " + line)
+        push(out, "    </nav>")
+    push(out, "  </div>")
+    for line in frame.bottom(framed)
+        push(out, clone(line))
+    return strings.join(out, "\n")

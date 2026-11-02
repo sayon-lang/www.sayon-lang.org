@@ -1,0 +1,131 @@
+# Sayon code as HTML, with each word marked by its kind for the page's
+# colors: keywords (`k`), types (`t`), the names of functions where they are
+# called or declared (`f`), numbers (`n`), strings (`s`) with what they
+# interpolate (`i`), and comments (`c`).
+#
+# www.sayon-lang.org highlights its code sample with the same code.
+
+strings = import("standard/strings.sayon")
+html = import("src/html.sayon")
+
+private function is_keyword(word: string) -> boolean
+    match word
+        case "and" or "break" or "case" or "catch" or "constant" or "continue" or "else" or "elseif" or "enum" or "false" or "finally" or "for" or "foreign" or "function" or "if" or "import" or "in" or "is" or "match" or "not" or "nothing" or "or" or "own" or "private" or "public" or "return" or "true" or "try" or "type" or "unsafe" or "update" or "variable" or "while" or "test"
+            return true
+        case _
+            return false
+
+private function is_type(word: string) -> boolean
+    match word
+        case "integer" or "integer8" or "integer16" or "integer32" or "integer64" or "unsigned" or "unsigned8" or "unsigned16" or "unsigned32" or "unsigned64" or "byte" or "float" or "float32" or "float64" or "boolean" or "string" or "pointer" or "c_string"
+            return true
+        case _
+            first = strings.slice(word, 0, 1)
+            return first >= "A" and first <= "Z"
+
+private function is_letter(character: string) -> boolean
+    return character >= "a" and character <= "z" or character >= "A" and character <= "Z" or character == "_"
+
+private function is_digit(character: string) -> boolean
+    return character >= "0" and character <= "9"
+
+private function span(kind: string, text: string) -> string
+    return "<span class=\"{kind}\">" + html.text(text) + "</span>"
+
+# The characters from `start` up to, but not including, `end`.
+private function piece(characters: Array<string>, start: integer, end: integer) -> string
+    parts: Array<string> = []
+    for index in range(start, end)
+        push(parts, clone(characters[index]))
+    return strings.join(parts, "")
+
+# A string literal as HTML, and the position after it.
+private type Literal = [html: string, end: integer]
+
+# The string literal starting at `start`.
+private function string_literal(characters: Array<string>, start: integer) -> Literal
+    count = length(characters)
+    out: Array<string> = ["<span class=\"s\">\""]
+    index = start + 1
+    plain = index
+    while index < count
+        current = clone(characters[index])
+        if current == "\\" and index + 1 < count
+            index += 2
+        elseif current == "{{" and index + 1 < count and characters[index + 1] == "{{"
+            index += 2
+        elseif current == "{{"
+            push(out, html.text(piece(characters, plain, index)))
+            close = index
+            while close < count and characters[close] != "}}"
+                close += 1
+            if close < count
+                close += 1
+            push(out, span("i", piece(characters, index, close)))
+            index = close
+            plain = index
+        elseif current == "\""
+            index += 1
+            break
+        else
+            index += 1
+    push(out, html.text(piece(characters, plain, index)))
+    push(out, "</span>")
+    return Literal(html = strings.join(out, ""), end = index)
+
+private function highlight_line(line: string) -> string
+    characters = strings.characters(line)
+    count = length(characters)
+    out: Array<string> = []
+    index = 0
+    while index < count
+        current = clone(characters[index])
+        if current == "#"
+            push(out, span("c", piece(characters, index, count)))
+            index = count
+        elseif current == "\""
+            literal = string_literal(characters, index)
+            push(out, clone(literal.html))
+            index = literal.end
+        elseif is_digit(current)
+            end = index
+            while end < count and (is_letter(characters[end]) or is_digit(characters[end]) or characters[end] == ".")
+                end += 1
+            push(out, span("n", piece(characters, index, end)))
+            index = end
+        elseif is_letter(current)
+            end = index
+            while end < count and (is_letter(characters[end]) or is_digit(characters[end]))
+                end += 1
+            word = piece(characters, index, end)
+            after = end
+            while after < count and characters[after] == " "
+                after += 1
+            if is_keyword(word)
+                push(out, span("k", word))
+            elseif is_type(word)
+                push(out, span("t", word))
+            elseif after < count and characters[after] == "("
+                push(out, span("f", word))
+            else
+                push(out, html.text(word))
+            index = end
+        else
+            push(out, html.text(current))
+            index += 1
+    return strings.join(out, "")
+
+# Sayon source as HTML, line by line.
+function highlight(source: string) -> string
+    out: Array<string> = []
+    for line in strings.split(source, "\n")
+        push(out, highlight_line(line))
+    return strings.join(out, "\n")
+
+test "each kind of word is marked"
+    assert(highlight("x = 1  # one") == "x = <span class=\"n\">1</span>  <span class=\"c\"># one</span>")
+    assert(highlight("function f(a: Array<integer>)") == "<span class=\"k\">function</span> <span class=\"f\">f</span>(a: <span class=\"t\">Array</span>&lt;<span class=\"t\">integer</span>&gt;)")
+
+test "strings show what they interpolate"
+    assert(highlight("print(\"Sum: {{total}}\")") == "<span class=\"f\">print</span>(<span class=\"s\">\"Sum: <span class=\"i\">{{total}}</span>\"</span>)")
+    assert(highlight("\"{{{{braces}}}}\"") == "<span class=\"s\">\"{{{{braces}}}}\"</span>")

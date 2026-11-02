@@ -1,0 +1,102 @@
+# Installing Sayon
+
+Each release has an installer for each device it supports, named after the operating system and processor it is for:
+
+| Device | Download | State |
+|---|---|---|
+| Windows, x64 processors (most PCs) | `sayon-<version>-windows-x64-setup.exe` | available |
+| Windows, ARM64 processors | `sayon-<version>-windows-arm64-setup.exe` | available |
+| Linux, x64 processors | `sayon-<version>-linux-x64-setup` | available |
+| Linux, ARM64 processors | `sayon-<version>-linux-arm64-setup` | available |
+| macOS | `sayon-<version>-macos-arm64-setup` | not yet; planned for milestone M7 |
+
+To find your processor on Windows, open Settings > System > About and look at "System type"; on Linux, `uname -m` prints `x86_64` for x64 and `aarch64` for ARM64. Downloads are published on the [releases page](https://github.com/sayon-lang/sayon/releases), together with a `SHA256SUMS.txt` file for checking them: `Get-FileHash <file>` in PowerShell prints the checksum to compare, and `sha256sum -c SHA256SUMS.txt` on Linux checks every file next to it. No release has been published yet; see [Building the downloads](#building-the-downloads) to make the installer yourself.
+
+## Windows
+
+Run the installer and answer its question. It installs Sayon for your user account, so it needs no administrator rights, and it:
+
+- puts Sayon in `%LOCALAPPDATA%\Programs\Sayon`;
+- adds that folder's `bin` to your `PATH`, so `sayon` works in terminals opened afterwards;
+- adds Sayon to Settings > Apps, where it can be uninstalled;
+- shows the Sayon icon on `.sayon` files, unless another program already opens them.
+
+At the end it runs `sayon doctor`, which shows whether native builds are ready. Running and testing programs works straight away; `sayon build` and `sayon run --native` also need clang from [LLVM](https://releases.llvm.org).
+
+Running a newer installer replaces the installed version. The new files are unpacked next to the old ones first, so an interrupted installation leaves the previous one working. When a program still has a file of the old version open, such as an editor running `sayon lsp`, the old files it cannot remove stay in `Sayon.previous` beside the installation; the next installation, or uninstalling, removes them.
+
+### Options
+
+```text
+sayon-setup [options]              Install Sayon for the current user
+sayon-setup uninstall [options]    Remove Sayon
+
+--prefix <folder>    Install into (or remove from) this folder instead
+-y, --yes            Do not ask for confirmation
+--no-path            Do not add Sayon to PATH
+```
+
+`--prefix` accepts only an empty folder or one that already holds Sayon, so it can never overwrite other files. For an unattended installation, pass `--yes`.
+
+### Uninstalling
+
+Remove Sayon from Settings > Apps, or run `uninstall.exe` in the installation folder. Uninstalling removes the installation folder and undoes each change listed above. Your own programs and projects are not touched.
+
+### Without the installer
+
+The `sayon-<version>-windows-x64.zip` archive holds the same files. Unpack it anywhere, add its `bin` folder to your `PATH`, and run `sayon doctor`.
+
+### Programs for Windows on ARM64
+
+Sayon for Windows x64 also builds programs for Windows on ARM64 computers, such as laptops with Snapdragon processors, with `sayon build --target windows-arm64`. They link with Visual Studio's ARM64 libraries, which the Visual Studio Installer adds to Visual Studio or its Build Tools with the component "MSVC ARM64/ARM64EC build tools". `sayon target setup windows-arm64` says whether this computer has them, and `sayon doctor` lists them. An x64 computer cannot run ARM64 programs, so copy them to an ARM64 one to run them. Sayon's tests run its programs on ARM64 hardware, GitHub's Windows ARM64 runners, for each change.
+
+## Linux
+
+Make the installer executable and run it:
+
+```text
+chmod +x sayon-<version>-linux-x64-setup
+./sayon-<version>-linux-x64-setup
+```
+
+It installs Sayon for your user account, so it needs no root, and it:
+
+- puts Sayon in `~/.local/share/sayon`;
+- links `~/.local/bin/sayon` to it, unless something else is there already.
+
+It leaves your shell's profile alone. Most systems put `~/.local/bin` on `PATH` when it exists; when it is not on yours, the installer prints the line to add to `~/.profile`.
+
+At the end it runs `sayon doctor`. Running and testing programs works straight away; native builds also need clang, from your system's packages (for example `sudo apt install clang`) or from [LLVM](https://releases.llvm.org). TLS uses the system's OpenSSL 3, `libssl.so.3`, which most systems have. The download says in `INSTALL.txt` which version of the GNU C library it needs at least.
+
+The options are those of the Windows installer, and running a newer installer replaces the installed version the same way.
+
+### Uninstalling
+
+Run `~/.local/share/sayon/uninstall`, or the installer with `uninstall`. Uninstalling removes the installation folder and the link. Your own programs and projects are not touched.
+
+### Without the installer
+
+The `sayon-<version>-linux-x64.tar.gz` archive holds the same files. Unpack it anywhere (`tar -xzf <file>`), add its `bin` folder to your `PATH`, and run `sayon doctor`.
+
+### Programs for ARM64 Linux
+
+Sayon for Linux x64 also builds programs for ARM64 Linux, such as a Raspberry Pi's or an ARM server's, with `sayon build --target linux-arm64`. Clang links them with the ARM64 version of the GNU C library, which your system's cross packages install:
+
+```text
+sudo apt install gcc-aarch64-linux-gnu libc6-dev-arm64-cross
+```
+
+`sayon target setup linux-arm64` says whether this computer has what it needs, and `sayon doctor` lists it. Copy the program to an ARM64 Linux computer to run it, or run it here under QEMU's emulator, from the `qemu-user` package: `qemu-aarch64 -L /usr/aarch64-linux-gnu ./program`. Sayon's tests run its programs that way, and on ARM64 hardware, GitHub's Linux ARM64 runners, for each change.
+
+## Building the downloads
+
+`scripts/package.ps1` on Windows, and `scripts/package.sh` on Linux, build a release of the compiler and runtime, pack it into the archive, and build the installer with the files inside it, for the device they run on:
+
+```text
+powershell -File scripts/package.ps1
+scripts/package.sh
+```
+
+The results are in `dist/`: the installer, the archive, and `SHA256SUMS.txt`. On Linux the installer carries the files as a zip archive, which `scripts/package.sh` writes with Python 3. A plain `cargo build` builds an installer with no files inside, which says so when run. The device is the one the Rust compiler builds for, so the scripts make the ARM64 downloads on an ARM64 computer.
+
+For each change, GitHub's ARM64 runners build the Windows ARM64 and Linux ARM64 downloads this way, install Sayon from the installer, run a program with it, interpreted and compiled, and uninstall it. The [workflow's runs](https://github.com/sayon-lang/sayon/actions/workflows/arm64.yml) keep the downloads for 30 days; they are for trying, not a release.

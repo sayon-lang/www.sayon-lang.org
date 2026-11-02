@@ -1,0 +1,66 @@
+# Makes the guides into the site in `site`: each page's Markdown as HTML in
+# the layout, with the files of `static` beside them.
+#
+#     sayon run                  makes the site
+#     sayon run -- serve [port]  makes it and serves it on this computer,
+#                                at http://localhost:8000/ by default
+
+filesystem = import("standard/filesystem.sayon")
+io = import("standard/io.sayon")
+network = import("standard/network.sayon")
+os = import("standard/os.sayon")
+markdown = import("src/markdown.sayon")
+layout = import("src/layout.sayon")
+serve = import("src/serve.sayon")
+
+constant SITE = "site"
+constant STATIC = "static"
+
+# The guides, in the order they are read.
+function guides() -> Array<layout.Guide>
+    return layout.guides()
+
+# A guide's page, as the site holds it.
+function page(guide: layout.Guide) -> string
+    return layout.render(markdown.convert(io.read_file(guide.source)), guide)
+
+# Removes a folder and everything in it.
+function clear(folder: string)
+    if not filesystem.exists(folder)
+        return
+    entries = filesystem.walk(folder)
+    # Each folder comes before what it holds, so the last entries go first.
+    index = length(entries) - 1
+    while index >= 0
+        filesystem.remove(filesystem.join(folder, entries[index]))
+        index -= 1
+    filesystem.remove(folder)
+
+function write_site()
+    clear(SITE)
+    filesystem.create_directory(SITE)
+    for entry in filesystem.walk(STATIC)
+        source = filesystem.join(STATIC, entry)
+        target = filesystem.join(SITE, entry)
+        if filesystem.is_directory(source)
+            filesystem.create_directory(target)
+        else
+            filesystem.copy(source, target)
+    for guide in guides()
+        io.write_file(filesystem.join(SITE, guide.page), page(guide))
+        print("wrote {SITE}/{guide.page}")
+
+function main()
+    write_site()
+    arguments = os.arguments()
+    if length(arguments) == 0 or arguments[0] != "serve"
+        return
+    port = 8000
+    if length(arguments) > 1
+        given = tonumber(arguments[1])
+        if typeof(given) != "integer"
+            error("the port is a whole number, not {arguments[1]}")
+        port = given
+    listener = network.listen("127.0.0.1", port)
+    print("serving {SITE} at http://localhost:{port}/; stop with Ctrl+C")
+    serve.serve(listener, SITE)

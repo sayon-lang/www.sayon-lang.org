@@ -1,0 +1,8 @@
+filesystem = import("standard/filesystem.sayon")
+io = import("standard/io.sayon")
+docs = import("src/main.sayon")
+
+test "the site holds each guide as the program makes it"
+    for guide in docs.guides()
+        written = io.read_file(filesystem.join("site", guide.page))
+        assert(written == docs.page(guide), "run `sayon run` to make {guide.page} again")

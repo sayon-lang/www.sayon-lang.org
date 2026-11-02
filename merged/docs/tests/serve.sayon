@@ -1,0 +1,17 @@
+network = import("standard/network.sayon")
+threads = import("standard/threads.sayon")
+serve = import("src/serve.sayon")
+
+test "the guides are served with their files' types"
+    listener = network.listen("127.0.0.1", 0)
+    base = "http://127.0.0.1:{listener.address().port}"
+    server = threads.spawn(function()
+        serve.serve(listener, "site", 4)
+    )
+    page = network.get(base + "/")
+    assert(page.status == 200 and page.header("content-type") == "text/html; charset=utf-8")
+    style = network.get(base + "/style.css?again")
+    assert(style.status == 200 and style.header("content-type") == "text/css; charset=utf-8")
+    assert(network.get(base + "/missing.html").status == 404)
+    assert(network.get(base + "/../sayon.toml").status == 404)
+    threads.join(server)

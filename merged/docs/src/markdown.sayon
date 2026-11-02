@@ -1,0 +1,273 @@
+# Markdown as the guides are written, made into HTML: headings with the
+# ids GitHub gives them, paragraphs, lists, tables, fenced code (Sayon's
+# highlighted), and HTML passed through; in text, `code`, **strong**,
+# *emphasis*, and links, those to the other pages pointing at their HTML.
+
+strings = import("standard/strings.sayon")
+html = import("src/html.sayon")
+highlight = import("src/highlight.sayon")
+
+# A heading, for a page's contents.
+type Heading = [level: integer, id: string, title: string]
+
+# A page made HTML: its body, its headings, and its title, the first
+# heading's text.
+type Document = [body: string, headings: Array<Heading>, title: string]
+
+# The characters from `start` up to, but not including, `end`.
+private function piece(characters: Array<string>, start: integer, end: integer) -> string
+    parts: Array<string> = []
+    for index in range(start, end)
+        push(parts, clone(characters[index]))
+    return strings.join(parts, "")
+
+# Where `target` is next, from `start` up to `end`.
+private function find_from(characters: Array<string>, target: string, start: integer, end: integer) -> integer or nothing
+    for index in range(start, end)
+        if characters[index] == target
+            return index
+    return nothing
+
+# Where `**` is next, from `start` up to `end`.
+private function find_double(characters: Array<string>, start: integer, end: integer) -> integer or nothing
+    for index in range(start, end - 1)
+        if characters[index] == "*" and characters[index + 1] == "*"
+            return index
+    return nothing
+
+# Where the guides' other files are, for links to them.
+constant REPOSITORY = "https://github.com/sayon-lang/docs.sayon-lang.org/blob/main/"
+
+# A link's address: another guide's `.md` made its page's `.html`, and
+# another file of the repository found on GitHub.
+private function address(target: string) -> string
+    if strings.contains(target, "://") or strings.starts_with(target, "#")
+        return clone(target)
+    if strings.contains(target, ".md")
+        return strings.replace(target, ".md", ".html")
+    return REPOSITORY + target
+
+# Text from `start` up to `end` as HTML, into `out`.
+private function inline_range(characters: Array<string>, start: integer, end: integer, update out: Array<string>)
+    index = start
+    while index < end
+        current = clone(characters[index])
+        if current == "`"
+            close = find_from(characters, "`", index + 1, end)
+            if close != nothing
+                push(out, "<code>" + html.text(piece(characters, index + 1, close)) + "</code>")
+                index = close + 1
+                continue
+        elseif current == "*" and index + 1 < end and characters[index + 1] == "*"
+            close = find_double(characters, index + 2, end)
+            if close != nothing
+                push(out, "<strong>")
+                inline_range(characters, index + 2, close, out)
+                push(out, "</strong>")
+                index = close + 2
+                continue
+        elseif current == "*" and index + 1 < end and characters[index + 1] != " "
+            close = find_from(characters, "*", index + 1, end)
+            if close != nothing
+                push(out, "<em>")
+                inline_range(characters, index + 1, close, out)
+                push(out, "</em>")
+                index = close + 1
+                continue
+        elseif current == "["
+            middle = find_from(characters, "]", index + 1, end)
+            if middle != nothing and middle + 1 < end and characters[middle + 1] == "("
+                close = find_from(characters, ")", middle + 2, end)
+                if close != nothing
+                    push(out, "<a href=\"" + html.escape(address(piece(characters, middle + 2, close))) + "\">")
+                    inline_range(characters, index + 1, middle, out)
+                    push(out, "</a>")
+                    index = close + 1
+                    continue
+        elseif current == "\\" and index + 1 < end
+            push(out, html.text(clone(characters[index + 1])))
+            index += 2
+            continue
+        push(out, html.text(current))
+        index += 1
+
+# A line of text as HTML.
+function inline(text: string) -> string
+    characters = strings.characters(text)
+    out: Array<string> = []
+    inline_range(characters, 0, length(characters), out)
+    return strings.join(out, "")
+
+# A heading's id, as GitHub makes it: its text in lowercase, without the
+# marks around code and the like, with `-` for each space.
+function slug(title: string) -> string
+    out: Array<string> = []
+    for current in strings.characters(strings.lower(title))
+        if current == " "
+            push(out, "-")
+        elseif current >= "a" and current <= "z" or current >= "0" and current <= "9" or current == "-" or current == "_" or strings.code(current) > 127
+            push(out, clone(current))
+    return strings.join(out, "")
+
+private function is_ordered_item(line: string) -> boolean
+    dot = strings.find(line, ". ")
+    if dot == nothing or dot == 0
+        return false
+    for current in strings.characters(strings.slice(line, 0, dot))
+        if current < "0" or current > "9"
+            return false
+    return true
+
+# The text of an ordered list's item.
+private function ordered_text(line: string) -> string
+    dot = strings.find(line, ". ")
+    if dot == nothing
+        return clone(line)
+    return strings.slice(line, dot + 2, length(line))
+
+private function heading_level(line: string) -> integer
+    level = 0
+    while level < length(line) and strings.slice(line, level, level + 1) == "#"
+        level += 1
+    if level == 0 or level > 6 or level >= length(line) or strings.slice(line, level, level + 1) != " "
+        return 0
+    return level
+
+# Whether a line starts a block other than a paragraph.
+private function starts_block(line: string) -> boolean
+    return strings.starts_with(line, "```") or heading_level(line) > 0 or strings.starts_with(line, "|") or strings.starts_with(line, "- ") or strings.starts_with(line, "<") or is_ordered_item(line)
+
+# A table row's cells, split at the `|` outside code.
+private function cells(line: string) -> Array<string>
+    characters = strings.characters(strings.trim(line))
+    out: Array<string> = []
+    current: Array<string> = []
+    in_code = false
+    start = 0
+    if length(characters) > 0 and characters[0] == "|"
+        start = 1
+    for index in range(start, length(characters))
+        symbol = clone(characters[index])
+        if symbol == "`"
+            in_code = not in_code
+            push(current, symbol)
+        elseif symbol == "|" and not in_code
+            push(out, strings.trim(strings.join(current, "")))
+            current = []
+        else
+            push(current, symbol)
+    if length(current) > 0
+        push(out, strings.trim(strings.join(current, "")))
+    return out
+
+private function row(line: string, tag: string) -> string
+    out: Array<string> = ["<tr>"]
+    for cell in cells(line)
+        push(out, "<{tag}>" + inline(cell) + "</{tag}>")
+    push(out, "</tr>")
+    return strings.join(out, "")
+
+# A page of Markdown as HTML.
+function convert(source: string) -> Document
+    source_lines = strings.lines(source)
+    count = length(source_lines)
+    out: Array<string> = []
+    headings: Array<Heading> = []
+    used: Dict<string, integer> = []
+    title = ""
+    index = 0
+    while index < count
+        line = clone(source_lines[index])
+        level = heading_level(line)
+        if strings.trim(line) == ""
+            index += 1
+        elseif strings.starts_with(line, "```")
+            language = strings.trim(strings.slice(line, 3, length(line)))
+            code: Array<string> = []
+            index += 1
+            while index < count and strings.trim(source_lines[index]) != "```"
+                push(code, clone(source_lines[index]))
+                index += 1
+            index += 1
+            text = strings.join(code, "\n")
+            if language == "sayon"
+                push(out, "<pre><code class=\"language-sayon\">" + highlight.highlight(text) + "</code></pre>")
+            elseif language == ""
+                push(out, "<pre><code>" + html.text(text) + "</code></pre>")
+            else
+                push(out, "<pre><code class=\"language-{html.escape(language)}\">" + html.text(text) + "</code></pre>")
+        elseif level > 0
+            text = strings.slice(line, level + 1, length(line))
+            id = slug(strings.replace(text, "`", ""))
+            if haskey(used, id)
+                used[id] += 1
+                id = id + "-" + tostring(used[id])
+            else
+                used[id] = 0
+            if title == ""
+                title = strings.replace(text, "`", "")
+            push(out, "<h{level} id=\"{id}\">" + inline(text) + "</h{level}>")
+            push(headings, Heading(level = level, id = clone(id), title = strings.replace(text, "`", "")))
+            index += 1
+        elseif strings.starts_with(line, "|")
+            push(out, "<div class=\"table\"><table>")
+            push(out, "<thead>" + row(line, "th") + "</thead>")
+            index += 2
+            push(out, "<tbody>")
+            while index < count and strings.starts_with(source_lines[index], "|")
+                push(out, row(source_lines[index], "td"))
+                index += 1
+            push(out, "</tbody></table></div>")
+        elseif strings.starts_with(line, "- ") or is_ordered_item(line)
+            ordered = is_ordered_item(line)
+            push(out, if_text(ordered, "<ol>", "<ul>"))
+            while index < count and (ordered and is_ordered_item(source_lines[index]) or not ordered and strings.starts_with(source_lines[index], "- "))
+                item = if_text(ordered, ordered_text(source_lines[index]), strings.slice(source_lines[index], 2, length(source_lines[index])))
+                index += 1
+                while index < count and strings.trim(source_lines[index]) != "" and not starts_block(source_lines[index])
+                    item = item + " " + strings.trim(source_lines[index])
+                    index += 1
+                push(out, "<li>" + inline(item) + "</li>")
+            push(out, if_text(ordered, "</ol>", "</ul>"))
+        elseif strings.starts_with(line, "<")
+            # What is in the repository's `static` is at the site's top.
+            while index < count and strings.trim(source_lines[index]) != ""
+                push(out, strings.replace(source_lines[index], "src=\"static/", "src=\""))
+                index += 1
+        else
+            paragraph: Array<string> = []
+            while index < count and strings.trim(source_lines[index]) != "" and (length(paragraph) == 0 or not starts_block(source_lines[index]))
+                push(paragraph, strings.trim(source_lines[index]))
+                index += 1
+            push(out, "<p>" + inline(strings.join(paragraph, " ")) + "</p>")
+    return Document(body = strings.join(out, "\n"), headings = headings, title = title)
+
+private function if_text(condition: boolean, yes: string, no: string) -> string
+    if condition
+        return clone(yes)
+    return clone(no)
+
+test "headings get GitHub's ids, numbered when repeated"
+    page = convert("# The language\n\n## C functions and `unsafe` code\n\n## Operators\n\n## Operators\n")
+    assert(page.title == "The language")
+    assert(strings.contains(page.body, "<h2 id=\"c-functions-and-unsafe-code\">C functions and <code>unsafe</code> code</h2>"))
+    assert(strings.contains(page.body, "<h2 id=\"operators\">Operators</h2>"))
+    assert(strings.contains(page.body, "<h2 id=\"operators-1\">Operators</h2>"))
+    assert(length(page.headings) == 4)
+
+test "text keeps its marks"
+    assert(inline("a `<b>` **c** *d* [e](language.md#f) [g](https://x.org/h.md)") == "a <code>&lt;b&gt;</code> <strong>c</strong> <em>d</em> <a href=\"language.html#f\">e</a> <a href=\"https://x.org/h.md\">g</a>")
+    assert(inline("2 * 3 < 4") == "2 * 3 &lt; 4")
+    assert(inline("[the license](LICENSE)") == "<a href=\"" + REPOSITORY + "LICENSE\">the license</a>")
+
+test "tables split at the bars outside code"
+    page = convert("| Code | Means |\n|---|---|\n| `a | b` | either |\n")
+    assert(page.body == "<div class=\"table\"><table>\n<thead><tr><th>Code</th><th>Means</th></tr></thead>\n<tbody>\n<tr><td><code>a | b</code></td><td>either</td></tr>\n</tbody></table></div>")
+
+test "HTML goes through, with the files of static at the top"
+    page = convert("<p align=\"center\">\n  <img src=\"static/images/logo.svg\">\n</p>\n")
+    assert(page.body == "<p align=\"center\">\n  <img src=\"images/logo.svg\">\n</p>")
+
+test "lists, paragraphs, and code"
+    page = convert("Some\ntext.\n\n- one\n- two `x`\n\n1. first\n2. second\n\n```sayon\nx = 1\n```\n\n```text\n<raw>\n```\n")
+    assert(page.body == "<p>Some text.</p>\n<ul>\n<li>one</li>\n<li>two <code>x</code></li>\n</ul>\n<ol>\n<li>first</li>\n<li>second</li>\n</ol>\n<pre><code class=\"language-sayon\">x = <span class=\"n\">1</span></code></pre>\n<pre><code class=\"language-text\">&lt;raw&gt;</code></pre>")

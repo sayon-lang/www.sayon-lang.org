@@ -1,0 +1,97 @@
+# Serves a folder over HTTP on this computer, to see a site as a host would
+# serve it: each file with its type, and a folder's `index.html`, with a
+# task for each connection.
+
+filesystem = import("standard/filesystem.sayon")
+io = import("standard/io.sayon")
+network = import("standard/network.sayon")
+strings = import("standard/strings.sayon")
+threads = import("standard/threads.sayon")
+
+type Request = [method: string, path: string]
+
+function kind_of(path: string) -> string
+    match filesystem.extension(path)
+        case "html"
+            return "text/html; charset=utf-8"
+        case "css"
+            return "text/css; charset=utf-8"
+        case "js"
+            return "text/javascript; charset=utf-8"
+        case "svg"
+            return "image/svg+xml"
+        case "png"
+            return "image/png"
+        case "ico"
+            return "image/x-icon"
+        case "json"
+            return "application/json"
+        case "txt" or "md"
+            return "text/plain; charset=utf-8"
+        case _
+            return "application/octet-stream"
+
+# The request line, such as `GET /style.css HTTP/1.1`; the headers after it
+# are read and left unused.
+private function read_request(update connection: network.Connection) -> Request or nothing
+    line = connection.read_line()
+    if line == nothing
+        return nothing
+    parts = strings.split(strings.trim(line), " ")
+    if length(parts) < 2
+        return nothing
+    while true
+        header = connection.read_line()
+        if header == nothing or strings.trim(header) == ""
+            break
+    return Request(method = clone(parts[0]), path = clone(parts[1]))
+
+private function respond(update connection: network.Connection, status: string, kind: string, body: Array<byte>)
+    connection.write("HTTP/1.1 {status}\r\n")
+    connection.write("Content-Type: {kind}\r\n")
+    connection.write("Content-Length: {length(body)}\r\n")
+    connection.write("Cache-Control: no-store\r\n")
+    connection.write("Connection: close\r\n\r\n")
+    connection.write_bytes(body)
+
+# The file a request's path names under `root`, or nothing for none.
+function file_for(root: string, address: string) -> string or nothing
+    path = clone(address)
+    query = strings.find(path, "?")
+    if query != nothing
+        path = strings.slice(path, 0, query)
+    if not strings.starts_with(path, "/") or strings.contains(path, "..") or strings.contains(path, "\\")
+        return nothing
+    file = root + path
+    if filesystem.is_directory(file)
+        file = filesystem.join(file, "index.html")
+    if filesystem.is_file(file)
+        return file
+    return nothing
+
+# Answers one request. The connection closes when its task ends.
+private function answer(update connection: network.Connection, root: string)
+    request = read_request(connection)
+    if request == nothing
+        return
+    if request.method != "GET"
+        respond(connection, "405 Method Not Allowed", "text/plain", strings.bytes("only GET\n"))
+        return
+    file = file_for(root, request.path)
+    if file == nothing
+        respond(connection, "404 Not Found", "text/plain", strings.bytes("not found\n"))
+        return
+    respond(connection, "200 OK", kind_of(file), io.read_file_bytes(file))
+
+# Answers `count` connections, or without end, each with a task of its own.
+function serve(update listener: network.Listener, root: string, count: integer or nothing = nothing)
+    served = 0
+    while count == nothing or served < count
+        connection = listener.accept()
+        folder = clone(root)
+        threads.detach(threads.spawn(function()
+            outcome = try answer(connection, folder)
+            if outcome is error
+                print("a request failed:", outcome.message)
+        ))
+        served += 1
