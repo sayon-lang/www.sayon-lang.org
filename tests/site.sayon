@@ -42,7 +42,7 @@ test "the first page, the guides, and the packages are one website"
     assert(overview.status == 200 and strings.contains(overview.text(), "<h1 id=\"sayons-documentation\">Sayon's documentation</h1>"), overview.text())
     assert(strings.contains(overview.text(), "<a href=\"/docs/installing\">Installing</a>"))
     language = network.get(address + "/docs/language/")
-    assert(language.status == 200 and strings.contains(language.text(), "<h2 id=\"source-files\">Source files</h2>"))
+    assert(language.status == 200 and strings.contains(language.text(), "<h2 id=\"source-files\">Source files<a class=\"anchor\" href=\"#source-files\""))
     assert(strings.contains(language.text(), "aria-current=\"page\">The language</a>") and strings.contains(language.text(), "On this page"))
     assert(network.get(address + "/docs/missing").status == 404)
     every = network.get(address + "/packages")

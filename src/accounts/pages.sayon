@@ -67,17 +67,22 @@ function send_reset(state: registry.State, account: string, email: string)
     text = strings.join(["Hello {account},", "", "Open this link to choose a new password for your account at Sayon's website:", "", state.address + "/reset/" + secret, "", "The link works once, for an hour. If you did not ask for it, ignore this mail: your password stays as it is.", "", "Sayon"], "\n")
     mail.send(state.data, mail.Mail(to = clone(email), subject = "Choose a new password for Sayon", text = text))
 
-# Where to go once signed in or out: a page of the registry, never another
-# site, nor back to signing in.
-function next_page(text: string, fallback: string) -> string
+# A page of the website to go to, never another site's: `text`, or
+# `fallback` when `text` is not the address of one.
+function own_page(text: string, fallback: string) -> string
     if not strings.starts_with(text, "/") or strings.starts_with(text, "//")
         return clone(fallback)
     for symbol in ["\\", "\r", "\n", "\""]
         if strings.contains(text, symbol)
             return clone(fallback)
+    return clone(text)
+
+# Where to go once signed in or out: a page of the website, but not back to
+# signing in.
+function next_page(text: string, fallback: string) -> string
     if strings.starts_with(text, "/sign-")
         return clone(fallback)
-    return clone(text)
+    return own_page(text, fallback)
 
 # The code of a sign-in's page, /login/<code>, or nothing.
 private function login_code(page: string) -> string or nothing
@@ -500,4 +505,5 @@ test "pages to go on stay on the website"
     assert(next_page("/login/BCDF-GHJK", "/") == "/login/BCDF-GHJK")
     for away in ["https://example.com", "//example.com", "/\\example.com", "", "packages", "/sign-in?next=/x", "/a\r\nSet-Cookie: x"]
         assert(next_page(away, "/account") == "/account", away)
+    assert(own_page("/sign-in?next=/x", "/") == "/sign-in?next=/x" and own_page("//example.com", "/") == "/")
     assert(login_code("/login/BCDF-GHJK") == "BCDF-GHJK" and login_code("/login/x") == nothing and login_code("/account") == nothing)

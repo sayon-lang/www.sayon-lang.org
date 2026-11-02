@@ -1,5 +1,5 @@
-/* The look of Sayon's website, www.sayon-lang.org, with site.js and
-   src/web/frame.sayon.
+/* The look of Sayon's website, www.sayon-lang.org, with
+   src/web/frame.sayon. No script runs on the website.
 
    Boxes with softened corners, white and mist grays, and the logo's
    vermilion for what to act on and where you are. */
@@ -342,33 +342,31 @@ hr {
   height: 18px;
 }
 
-/* The theme's switch works with site.js, which marks the page `.js`. */
-.theme {
+/* The theme's switch: a form with a button for each theme, of which only
+   the one for the theme not shown is seen. */
+.theme-switch {
+  display: flex;
+  flex: none;
+}
+
+.theme-switch .to-light {
   display: none;
 }
 
-.js .theme {
+:root[data-theme="dark"] .theme-switch .to-light {
   display: inline-grid;
 }
 
-.theme .sun {
-  display: none;
-}
-
-:root[data-theme="dark"] .theme .sun {
-  display: block;
-}
-
-:root[data-theme="dark"] .theme .moon {
+:root[data-theme="dark"] .theme-switch .to-dark {
   display: none;
 }
 
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .theme .sun {
-    display: block;
+  :root:not([data-theme="light"]) .theme-switch .to-light {
+    display: inline-grid;
   }
 
-  :root:not([data-theme="light"]) .theme .moon {
+  :root:not([data-theme="light"]) .theme-switch .to-dark {
     display: none;
   }
 }
@@ -393,21 +391,7 @@ hr {
 }
 
 .search .input {
-  padding-right: 40px;
   padding-left: 40px;
-}
-
-.search kbd {
-  position: absolute;
-  top: 50%;
-  right: 10px;
-  translate: 0 -50%;
-  pointer-events: none;
-}
-
-.search .input:focus + kbd,
-.search .input:not(:placeholder-shown) + kbd {
-  display: none;
 }
 
 .search.large {
@@ -839,61 +823,6 @@ th.end {
   text-decoration: underline;
 }
 
-/* Code with its copy button, which site.js adds. */
-
-.code {
-  position: relative;
-}
-
-.copy {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  display: grid;
-  place-items: center;
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: var(--corner);
-  background: var(--code-page);
-  color: var(--code-comment);
-  cursor: pointer;
-  opacity: 0;
-  transition: opacity 120ms, color 120ms;
-}
-
-.code:hover .copy,
-.copy:focus-visible,
-.copy.done {
-  opacity: 1;
-}
-
-.copy:hover {
-  color: var(--code-ink);
-}
-
-.copy svg {
-  width: 16px;
-  height: 16px;
-}
-
-.copy .check,
-.copy.done .clipboard {
-  display: none;
-}
-
-.copy.done .check {
-  display: block;
-  color: var(--code-string);
-}
-
-@media (hover: none) {
-  .copy {
-    opacity: 1;
-  }
-}
-
 /* The footer. */
 
 .foot {
@@ -1232,12 +1161,6 @@ th.end {
 
 .toc a:hover {
   color: var(--ink);
-}
-
-.toc a[aria-current="true"] {
-  margin-left: -0.5px;
-  border-left: 2px solid var(--vermilion);
-  color: var(--accent);
 }
 
 .toc-inline {
@@ -1854,10 +1777,6 @@ input[type="file"].input {
 
   .bar .search {
     flex: 1 1 auto;
-  }
-
-  .bar .search kbd {
-    display: none;
   }
 
   html {

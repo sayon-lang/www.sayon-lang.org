@@ -27,12 +27,13 @@ site = import("src/packages/pages.sayon")
 
 constant STATIC = "static"
 
+# The cookie that keeps the theme a browser chose.
+constant THEME_COOKIE = "sayon_theme"
+
 private function kind_of(path: string) -> string
     match filesystem.extension(path)
         case "css"
             return "text/css; charset=utf-8"
-        case "js"
-            return "text/javascript; charset=utf-8"
         case "svg"
             return "image/svg+xml"
         case "png"
@@ -80,9 +81,32 @@ private function moved(request: http.Request, state: registry.State) -> http.Res
         return http.redirect(state.address + request.target, 308)
     return nothing
 
+# Remembers the theme a browser chose, "light" or "dark", in a cookie for a
+# year, and goes back to the page it was chosen on.
+private function choose_theme(request: http.Request, state: registry.State) -> http.Response
+    fields = http.form(request)
+    response = http.redirect(account.own_page(account.value(fields, "back"), "/"))
+    chosen = account.value(fields, "theme")
+    if account.from_here(request, state) and (chosen == "light" or chosen == "dark")
+        secure = ""
+        if account.secure(state)
+            secure = "; Secure"
+        response.headers["Set-Cookie"] = "{THEME_COOKIE}={chosen}; Path=/; Max-Age=31536000; SameSite=Lax; HttpOnly{secure}"
+    return response
+
+# The theme a request's browser chose, "light" or "dark", or "" for its
+# system's.
+private function theme_of(request: http.Request) -> string
+    chosen = http.cookie(request, THEME_COOKIE)
+    if chosen != nothing and (chosen == "light" or chosen == "dark")
+        return chosen
+    return ""
+
 # The answer to a page's form.
 private function sent(request: http.Request, state: registry.State, view: layout.Visitor, parts: Array<string>) -> http.Response
     path = clone(request.path)
+    if path == "/theme"
+        return choose_theme(request, state)
     if path == "/sign-in"
         return account.sign_in(request, state, view)
     if path == "/sign-up"
@@ -173,7 +197,7 @@ function route(request: http.Request, state: registry.State) -> http.Response
         known = accounts.accounts(state.data)
         if haskey(known, viewer)
             picture = clone(known[viewer].picture)
-    view = layout.Visitor(account = viewer, picture = picture, here = clone(request.target), query = "")
+    view = layout.Visitor(account = viewer, picture = picture, here = clone(request.target), query = "", theme = theme_of(request), at = clone(request.target))
     parts = api.parts(path)
     if request.method == "POST"
         return sent(request, state, view, parts)
@@ -305,7 +329,7 @@ private function too_many(request: http.Request, rule: Rule) -> http.Response
     response = http.refuse(429, "this computer did that {rule.count} times in {minutes} minutes; try again later")
     if not strings.starts_with(request.path, "/api/")
         body = ["<div class=\"auth\">", "  <h1>Too many tries</h1>", "  <p class=\"lead\">This computer did that {rule.count} times in {minutes} minutes. Wait a while, then try again.</p>", "</div>"]
-        visitor = layout.Visitor(account = nothing, picture = nothing, here = "", query = "")
+        visitor = layout.Visitor(account = nothing, picture = nothing, here = "", query = "", theme = theme_of(request), at = "/")
         response = layout.page(visitor, "Too many tries · Sayon", body, 429)
     response.headers["Retry-After"] = "{rule.seconds}"
     return response

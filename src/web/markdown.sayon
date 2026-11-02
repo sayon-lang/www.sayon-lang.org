@@ -247,7 +247,11 @@ function convert(source: string, safe: boolean = false) -> Document
                 used[id] = 0
             if title == ""
                 title = strings.replace(text, "`", "")
-            push(out, "<h{level} id=\"{id}\">" + inline(text) + "</h{level}>")
+            # A section's heading links to itself, for sharing it.
+            anchor = ""
+            if level == 2 or level == 3
+                anchor = "<a class=\"anchor\" href=\"#{id}\" aria-label=\"Link to this section\">#</a>"
+            push(out, "<h{level} id=\"{id}\">" + inline(text) + anchor + "</h{level}>")
             push(headings, Heading(level = level, id = clone(id), title = strings.replace(text, "`", "")))
             index += 1
         elseif strings.starts_with(line, "|")
@@ -288,12 +292,12 @@ private function if_text(condition: boolean, yes: string, no: string) -> string
         return clone(yes)
     return clone(no)
 
-test "headings get GitHub's ids, numbered when repeated"
+test "headings get GitHub's ids, numbered when repeated, and link to themselves"
     page = convert("# The language\n\n## C functions and `unsafe` code\n\n## Operators\n\n## Operators\n")
-    assert(page.title == "The language")
-    assert(strings.contains(page.body, "<h2 id=\"c-functions-and-unsafe-code\">C functions and <code>unsafe</code> code</h2>"))
-    assert(strings.contains(page.body, "<h2 id=\"operators\">Operators</h2>"))
-    assert(strings.contains(page.body, "<h2 id=\"operators-1\">Operators</h2>"))
+    assert(page.title == "The language" and strings.contains(page.body, "<h1 id=\"the-language\">The language</h1>"))
+    assert(strings.contains(page.body, "<h2 id=\"c-functions-and-unsafe-code\">C functions and <code>unsafe</code> code<a class=\"anchor\" href=\"#c-functions-and-unsafe-code\" aria-label=\"Link to this section\">#</a></h2>"))
+    assert(strings.contains(page.body, "<h2 id=\"operators\">Operators<a class=\"anchor\" href=\"#operators\""))
+    assert(strings.contains(page.body, "<h2 id=\"operators-1\">Operators<a class=\"anchor\" href=\"#operators-1\""))
     assert(length(page.headings) == 4)
 
 test "text keeps its marks"

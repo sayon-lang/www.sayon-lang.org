@@ -63,8 +63,9 @@ function refuse(status: integer, message: string) -> Response
     return json_text(status, json.encode_value(Refusal(error = clone(message))))
 
 # What a page is sent with: it may not be put in another site's frame, run
-# what it did not come with, or be kept, since it shows who is signed in.
-constant PAGE_POLICY = "default-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
+# any script (the website has none), or be kept, since it shows who is
+# signed in.
+constant PAGE_POLICY = "default-src 'self'; script-src 'none'; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
 
 # A page of HTML.
 function page(status: integer, content: string) -> Response

@@ -101,6 +101,43 @@ test "tries sent together each count, and accounts made together both stay"
     known = accounts.accounts(data)
     assert(haskey(known, "dana") and haskey(known, "erin") and haskey(known, "finn"))
 
+test "pages run no script, and the theme a browser chooses stays"
+    data = "build/test-serving-theme"
+    client.clear(data)
+    filesystem.create_directory(filesystem.join(data, "index"))
+    listener = network.listen("127.0.0.1", 0)
+    port = listener.address().port
+    state = registry.State(data = clone(data), index = filesystem.join(data, "index"), address = "http://127.0.0.1:{port}", admin = "operator", guides = [])
+    running = threads.spawn(function()
+        server.serve(listener, state, 8)
+    )
+
+    # A page comes without a script, and may not run one.
+    plain = client.send(port, "GET", "/packages", [], "")
+    assert(plain.status == 200 and not strings.contains(plain.body, "<script"))
+    assert(strings.contains(client.header_of(plain, "content-security-policy"), "script-src 'none'"))
+    assert(strings.contains(plain.body, "<html lang=\"en\">") and strings.contains(plain.body, "<form class=\"theme-switch\" method=\"post\" action=\"/theme\">"))
+    assert(client.send(port, "GET", "/site.js", [], "").status == 404)
+
+    # The theme's switch is a form: the website keeps the theme chosen, and
+    # goes back to the page, even one that signs in.
+    chosen = client.send(port, "POST", "/theme", form_of(port), "theme=dark&back=%2Fsign-in%3Fnext%3D%252Fpackages")
+    assert(chosen.status == 303 and client.header_of(chosen, "location") == "/sign-in?next=%2Fpackages", chosen.body)
+    assert(client.cookie_of(chosen) == "sayon_theme=dark")
+    dark = client.send(port, "GET", "/packages", ["Cookie" = "sayon_theme=dark"], "")
+    assert(strings.contains(dark.body, "<html lang=\"en\" data-theme=\"dark\">") and strings.contains(dark.body, "<meta name=\"theme-color\" content=\"#12151b\">"))
+
+    # Another site's form and a theme not known change nothing, and a way
+    # back to another site goes to the first page.
+    outside: Dict<string, string> = ["Content-Type" = "application/x-www-form-urlencoded", "Origin" = "https://example.com"]
+    assert(client.header_of(client.send(port, "POST", "/theme", outside, "theme=dark&back=%2F"), "set-cookie") == "")
+    assert(client.header_of(client.send(port, "POST", "/theme", form_of(port), "theme=pink&back=%2F"), "set-cookie") == "")
+    away = client.send(port, "POST", "/theme", form_of(port), "theme=light&back=https%3A%2F%2Fexample.com%2F")
+    assert(client.header_of(away, "location") == "/" and client.cookie_of(away) == "sayon_theme=light")
+    odd = client.send(port, "GET", "/packages", ["Cookie" = "sayon_theme=pink"], "")
+    assert(strings.contains(odd.body, "<html lang=\"en\">"))
+    threads.join(running)
+
 # The headers of a form sent from the website's own page.
 function form_of(port: integer) -> Dict<string, string>
     return ["Content-Type" = "application/x-www-form-urlencoded", "Origin" = "http://127.0.0.1:{port}"]

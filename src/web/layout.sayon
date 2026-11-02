@@ -13,9 +13,11 @@ constant STOP_ICON = "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentC
 
 # Who is looking at a page: the account its browser is signed in to, or
 # nothing, and the version of its picture; the address of the page, for
-# coming back to it after signing in, or "" on the pages that sign in; and
-# the words the bar's search shows.
-type Visitor = [account: string or nothing, picture: string or nothing, here: string, query: string]
+# coming back to it after signing in, or "" on the pages that sign in; the
+# words the bar's search shows; the theme the browser chose, "light" or
+# "dark", or "" for its system's; and where the page is, for the theme's
+# switch to come back to.
+type Visitor = [account: string or nothing, picture: string or nothing, here: string, query: string, theme: string, at: string]
 
 # An account's picture, at its address for the picture's version, or the
 # account's initial on the logo's color when it has none: a box of the
@@ -34,7 +36,7 @@ function search_box(query: string, large: boolean) -> string
     kind = "search"
     if large
         kind = "search large"
-    return "<form class=\"{kind}\" action=\"/packages\" role=\"search\">{frame.SEARCH_ICON}<input class=\"input\" type=\"search\" name=\"q\" value=\"{html.escape(query)}\" placeholder=\"Search packages\" aria-label=\"Search packages\" autocomplete=\"off\" data-search><kbd aria-hidden=\"true\">/</kbd></form>"
+    return "<form class=\"{kind}\" action=\"/packages\" role=\"search\">{frame.SEARCH_ICON}<input class=\"input\" type=\"search\" name=\"q\" value=\"{html.escape(query)}\" placeholder=\"Search packages\" aria-label=\"Search packages\" autocomplete=\"off\"></form>"
 
 # The bar's account: a way to sign in, or the signed-in account's menu.
 function account_tool(view: Visitor) -> string
@@ -58,7 +60,7 @@ function page(view: Visitor, title: string, body: Array<string>, status: integer
     told = clone(description)
     if told == ""
         told = clone(DESCRIPTION)
-    framed = frame.Page(title = clone(title), description = told, section = clone(section), tools = tools)
+    framed = frame.Page(title = clone(title), description = told, section = clone(section), tools = tools, theme = clone(view.theme), at = clone(view.at))
     out = frame.top(framed)
     push(out, "  <main id=\"main\">")
     # As they are: indenting them would show inside code.

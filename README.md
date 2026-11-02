@@ -41,13 +41,13 @@ It serves the website at `http://127.0.0.1:4100`:
 
 ## How it is made
 
-`src/main.sayon` reads the options and the guides and starts `src/server.sayon`, which answers each connection in a task of its own, so that a slow one holds up no one, and tells a computer that makes too many accounts, sign-ins, mails, or posts to wait (429, by `server.rule`). Passwords are hashed on threads of their own, publications take turns since each runs Git, and the pages link the stylesheet and the script with their version in the address, so that browsers keep them until they change. The parts:
+`src/main.sayon` reads the options and the guides and starts `src/server.sayon`, which answers each connection in a task of its own, so that a slow one holds up no one, and tells a computer that makes too many accounts, sign-ins, mails, or posts to wait (429, by `server.rule`). Passwords are hashed on threads of their own, publications take turns since each runs Git, and the pages link the stylesheet with its version in the address, so that browsers keep it until it changes. No script runs on the website, and its pages forbid them: forms do what scripts would, the theme's switch among them, whose choice the website keeps in a cookie and puts on each page it sends. The parts:
 
 - `src/pages`: the first page, and the guides, made HTML once as the website starts;
 - `src/packages`: the registry's API and index, checking archives and manifests as `sayon` does, and its pages;
 - `src/accounts`: accounts with passwords kept by `crypto.hash_password`, tokens kept as their SHA-256, browsers signed in, the sign-ins `sayon login` starts, pictures (a PNG or JPEG image sent by a plain form, as multipart/form-data, decoded and turned as a photo's orientation says, its middle square made 256 pixels a side on a thread of its own, and kept in `data/pictures` as its pixels alone), and the pages for all of them;
 - `src/community`: the forum, with its threads in `data/community`: categories, posts in Markdown shown safely (HTML as text, links only to the web, marked as the poster's), solved questions in Help, reports, and the moderators' tools; a new account posts ten times a day in its first week, and a verified email posts;
-- `src/web`: HTTP with cookies and forms, Markdown, Sayon's highlighting, and the frame every page shares, in the look of `static/style.css` and `static/site.js`.
+- `src/web`: HTTP with cookies and forms, Markdown, Sayon's highlighting, and the frame every page shares, in the look of `static/style.css`.
 
 ## Tests
 
@@ -55,7 +55,7 @@ It serves the website at `http://127.0.0.1:4100`:
 sayon test
 ```
 
-The tests check versions, archives, manifests, the index, accounts, sessions, sign-ins, Markdown, and highlighting, and run the server: to publish, refuse, serve the index and archives, the first page, the guides, and the packages; and to make accounts, sign in and out, refuse forms from other sites, and approve and deny `sayon login`'s sign-ins, and to keep, show, refuse, and remove pictures; and to answer others while one computer is slow, answer HEAD, let browsers keep the stylesheet, and count tries and accounts sent at once; and in the forum, to ask, answer, and mark a question solved, keep HTML and other links out of posts, keep who may not post from posting, and moderate. The tests of [sayon-lang/sayon](https://github.com/sayon-lang/sayon) also run `sayon` itself against this website, `sayon login` in a browser's place among them, when this repository is checked out beside it, as `../www.sayon-lang.org`.
+The tests check versions, archives, manifests, the index, accounts, sessions, sign-ins, Markdown, and highlighting, and run the server: to publish, refuse, serve the index and archives, the first page, the guides, and the packages; and to make accounts, sign in and out, refuse forms from other sites, and approve and deny `sayon login`'s sign-ins, and to keep, show, refuse, and remove pictures; and to answer others while one computer is slow, answer HEAD, let browsers keep the stylesheet, send no script, keep the theme a browser chose, and count tries and accounts sent at once; and in the forum, to ask, answer, and mark a question solved, keep HTML and other links out of posts, keep who may not post from posting, and moderate. The tests of [sayon-lang/sayon](https://github.com/sayon-lang/sayon) also run `sayon` itself against this website, `sayon login` in a browser's place among them, when this repository is checked out beside it, as `../www.sayon-lang.org`.
 
 ## Writing the guides
 
