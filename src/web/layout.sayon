@@ -1,0 +1,98 @@
+# The pages of Sayon's website in its frame (src/web/frame.sayon): the
+# bar's search and account, and what the pages share.
+
+strings = import("standard/strings.sayon")
+frame = import("src/web/frame.sayon")
+html = import("src/web/html.sayon")
+http = import("src/web/http.sayon")
+
+constant DESCRIPTION = "Sayon is a readable programming language whose compiler checks ownership for you. Its guides, its packages, and your Sayon account."
+
+constant CHECK_ICON = "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M5 12.5l4.5 4.5L19 7.5\"/></svg>"
+constant STOP_ICON = "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.2\" stroke-linecap=\"round\" aria-hidden=\"true\"><path d=\"M7 7l10 10M17 7L7 17\"/></svg>"
+
+# Who is looking at a page: the account its browser is signed in to, or
+# nothing; the address of the page, for coming back to it after signing
+# in, or "" on the pages that sign in; and the words the bar's search shows.
+type Visitor = [account: string or nothing, here: string, query: string]
+
+# A search of the packages: the bar's, or `large`, the packages' page's.
+function search_box(query: string, large: boolean) -> string
+    kind = "search"
+    if large
+        kind = "search large"
+    return "<form class=\"{kind}\" action=\"/packages\" role=\"search\">{frame.SEARCH_ICON}<input class=\"input\" type=\"search\" name=\"q\" value=\"{html.escape(query)}\" placeholder=\"Search packages\" aria-label=\"Search packages\" autocomplete=\"off\" data-search><kbd aria-hidden=\"true\">/</kbd></form>"
+
+# The bar's account: a way to sign in, or the signed-in account's menu.
+function account_tool(view: Visitor) -> string
+    account = clone(view.account)
+    if account == nothing
+        if view.here == "" or view.here == "/"
+            return "<a class=\"button small\" href=\"/sign-in\">Sign in</a>"
+        return "<a class=\"button small\" href=\"/sign-in?next={http.encode(view.here)}\">Sign in</a>"
+    first = html.text(strings.slice(account, 0, 1))
+    menu = "<details class=\"menu\"><summary><span class=\"initial\" aria-hidden=\"true\">{first}</span><span class=\"hide-small\">{html.text(account)}</span></summary>"
+    menu = menu + "<div class=\"menu-items\"><a href=\"/account\">Your account</a><a href=\"/account#tokens\">Tokens</a><hr>"
+    return menu + "<form method=\"post\" action=\"/sign-out\"><button type=\"submit\">Sign out</button></form></div></details>"
+
+# A page: its title, the bar for `view` (with a search unless the page
+# has its own), the part of the site it is in (as `frame.sections` names
+# them), what its main part holds, and a description, or the site's.
+function page(view: Visitor, title: string, body: Array<string>, status: integer = 200, bar_search: boolean = true, section: string = "", description: string = "") -> http.Response
+    tools: Array<string> = []
+    if bar_search
+        push(tools, search_box(view.query, false))
+    push(tools, account_tool(view))
+    told = clone(description)
+    if told == ""
+        told = clone(DESCRIPTION)
+    framed = frame.Page(title = clone(title), description = told, section = clone(section), tools = tools)
+    out = frame.top(framed)
+    push(out, "  <main id=\"main\">")
+    # As they are: indenting them would show inside code.
+    for line in body
+        push(out, clone(line))
+    push(out, "  </main>")
+    for line in frame.bottom()
+        push(out, clone(line))
+    return http.page(status, strings.join(out, "\n"))
+
+# A notice: "error", "success", or "" for news.
+function notice(kind: string, message: string) -> string
+    role = "status"
+    if kind == "error"
+        role = "alert"
+    return "<div class=\"notice {kind}\" role=\"{role}\"><p>{html.prose(message)}</p></div>"
+
+# A field of a form, with its label and a hint.
+function field(label: string, name: string, kind: string, value: string, complete: string, hint: string, invalid: boolean = false, extra: string = "") -> Array<string>
+    id = "field-" + name
+    described = ""
+    if hint != ""
+        described = " aria-describedby=\"{id}-hint\""
+    wrong = ""
+    if invalid
+        wrong = " aria-invalid=\"true\""
+    out = ["<div class=\"field\">", "  <label for=\"{id}\">{html.text(label)}</label>"]
+    push(out, "  <input class=\"input\" id=\"{id}\" name=\"{name}\" type=\"{kind}\" value=\"{html.escape(value)}\" autocomplete=\"{complete}\"{described}{wrong}{extra}>")
+    if hint != ""
+        push(out, "  <p class=\"hint\" id=\"{id}-hint\">{html.prose(hint)}</p>")
+    push(out, "</div>")
+    return out
+
+# A day as pages show it, such as 2 November 2026, from ISO text.
+function day(moment: string) -> string
+    if length(moment) < 10
+        return clone(moment)
+    months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
+    month = try strings.parse_integer(strings.slice(moment, 5, 7))
+    number = try strings.parse_integer(strings.slice(moment, 8, 10))
+    if month is error or number is error
+        return strings.slice(moment, 0, 10)
+    if month < 1 or month > 12
+        return strings.slice(moment, 0, 10)
+    return "{number} {months[month - 1]} {strings.slice(moment, 0, 4)}"
+
+test "days are written out"
+    assert(day("2026-11-02T09:30:00Z") == "2 November 2026")
+    assert(day("2026-13-02") == "2026-13-02" and day("") == "")

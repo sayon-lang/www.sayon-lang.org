@@ -6,26 +6,55 @@
 
 <p align="center">Programming made easy. Safety made automatic.</p>
 
-The website of [Sayon](https://github.com/sayon-lang/sayon): what Sayon is, a first program, and how to get started, with links to the [documentation](https://github.com/sayon-lang/docs.sayon-lang.org), the [package registry](https://github.com/sayon-lang/packages.sayon-lang.org), and the [VS Code extension](https://github.com/sayon-lang/sayon-vscode). It will be published at `www.sayon-lang.org`; until then its links go to the repositories.
+Sayon's website, and the only one: what [Sayon](https://github.com/sayon-lang/sayon) is, its guides, its package registry, and the accounts people publish packages with, served by one Sayon program. It will be published at `www.sayon-lang.org`. Until then it runs on your own computer, where `sayon` finds its registry by default.
 
-## Written in Sayon
+## On this computer
 
-The site is made by a Sayon program. `src/page.sayon` holds what the page says, as Sayon data, and writes its HTML in the frame of Sayon's websites, `src/frame.sayon`; `src/highlight.sayon` colors the code it shows, reading Sayon as Sayon's own lexer does; `src/html.sayon` escapes text. `sayon run` writes the page into `site/`, with the files of `static/` (the stylesheet, the script, and the logo) beside it. `src/frame.sayon`, `static/style.css`, and `static/site.js` are the look that www.sayon-lang.org, docs.sayon-lang.org, and packages.sayon-lang.org share, each with a copy, so a change to one goes to all three:
+With Sayon, and nothing else, from this folder:
 
 ```bash
-sayon run
+sayon run -- --port 4100
+```
+
+It serves the website at `http://127.0.0.1:4100`:
+
+| Address | What |
+| --- | --- |
+| `/` | What Sayon is, a first program, and how to get started |
+| `/docs` | The guides, from the Markdown of [`docs`](docs) |
+| `/packages` | Every package, a search, and a page for each |
+| `/account` | Your account: its tokens, packages, and password |
+| `/sign-up`, `/sign-in` | Making an account, and signing in |
+| `/api/v1`, `/index` | The registry's API and index, which `sayon` uses ([PROTOCOL.md](PROTOCOL.md)) |
+
+`sayon login` opens the website's page for the sign-in in your browser; approve it there, signed in or making an account on that page, and `sayon publish` publishes as you. The website keeps accounts, owners, and archives in the folder `data`, and the index in `data/index`, and prints one line of JSON with its addresses as it starts. Other options:
+
+- `--data <folder>` keeps the data elsewhere, and `--index <folder>` the index. Given a clone of [packages-index](https://github.com/sayon-lang/packages-index), each publication becomes a commit there, with the operator's own Git identity.
+- `--port 0` takes a free port, as the tests of `sayon` do; `SAYON_REGISTRY` then tells `sayon` where the index is.
+- `--account <name>` makes an account without a password, or takes away an existing one's tokens, and gives it a new token, which the first line shows: for tests and scripts.
+- `--reset <name>`, instead of serving, prints a link that chooses an account's password, once, within an hour. The website serving that data folder at that port answers it.
+- `SAYON_REGISTRY_ADMIN_TOKEN` is the operator's token, for making accounts with `POST /api/v1/users`.
+
+## How it is made
+
+`src/main.sayon` reads the options and the guides and starts `src/server.sayon`, which answers one request at a time, so that publications never interleave:
+
+- `src/pages`: the first page, and the guides, made HTML once as the website starts;
+- `src/packages`: the registry's API and index, checking archives and manifests as `sayon` does, and its pages;
+- `src/accounts`: accounts with passwords kept by `crypto.hash_password`, tokens kept as their SHA-256, browsers signed in, the sign-ins `sayon login` starts, and the pages for all of them;
+- `src/web`: HTTP with cookies and forms, Markdown, Sayon's highlighting, and the frame every page shares, in the look of `static/style.css` and `static/site.js`.
+
+## Tests
+
+```bash
 sayon test
 ```
 
-`sayon test` runs the tests of the highlighter and the HTML, and checks that `site/` holds the page as the program writes it, so a change to the program goes with the page it writes.
+The tests check versions, archives, manifests, the index, accounts, sessions, sign-ins, Markdown, and highlighting, and run the server: to publish, refuse, serve the index and archives, the first page, the guides, and the packages; and to make accounts, sign in and out, refuse forms from other sites, and approve and deny `sayon login`'s sign-ins. The tests of [sayon-lang/sayon](https://github.com/sayon-lang/sayon) also run `sayon` itself against this website, `sayon login` in a browser's place among them, when this repository is checked out beside it, as `../www.sayon-lang.org`.
 
-`site/` is the whole website, plain HTML and CSS with no scripts, so any static host serves it as it is. It follows the reader's light or dark preference and fits a phone's width. To see it, Sayon serves it too, with `src/serve.sayon`:
+## Writing the guides
 
-```bash
-sayon run -- serve
-```
-
-Then open `http://localhost:8000`; `sayon run -- serve 8080` takes another port.
+The guides describe Sayon as it is implemented: a change to the language goes with a change to them. They are Markdown in [`docs`](docs), which GitHub shows as it is, and which the website reads when it starts.
 
 ## The logo
 

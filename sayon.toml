@@ -1,4 +1,4 @@
 [package]
 name = "www"
 version = "0.1.0"
-description = "Sayon's website, written by a Sayon program"
+description = "Sayon's website: its guides, its package registry, and accounts, served by a Sayon program"

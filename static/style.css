@@ -1,7 +1,5 @@
-/* Sayon's websites, www.sayon-lang.org, docs.sayon-lang.org, and
-   packages.sayon-lang.org, look alike through this file, site.js, and
-   src/frame.sayon. Each site keeps a copy of all three: change all of
-   them together.
+/* The look of Sayon's website, www.sayon-lang.org, with site.js and
+   src/web/frame.sayon.
 
    Boxes with softened corners, white and mist grays, and the logo's
    vermilion for what to act on and where you are. */
@@ -214,7 +212,7 @@ hr {
   padding: 0 24px;
 }
 
-/* The bar: the brand, the three sites, and the page's tools. */
+/* The bar: the brand, the site's parts, and the page's tools. */
 
 .skip {
   position: absolute;
@@ -270,13 +268,13 @@ hr {
   height: 28px;
 }
 
-.sites {
+.nav {
   display: flex;
   align-self: stretch;
   gap: 4px;
 }
 
-.sites a {
+.nav a {
   display: inline-flex;
   align-items: center;
   padding: 3px 10px 0;
@@ -287,11 +285,11 @@ hr {
   white-space: nowrap;
 }
 
-.sites a:hover {
+.nav a:hover {
   color: var(--ink);
 }
 
-.sites a[aria-current="page"] {
+.nav a[aria-current="page"] {
   border-bottom-color: var(--vermilion);
   color: var(--ink);
   font-weight: 600;
@@ -1292,17 +1290,8 @@ th.end {
   margin: 0.3em 0;
 }
 
-/* A README's centered logo and title are for GitHub; on the site, the bar
-   has the logo, and text starts at the left. */
-.prose p[align="center"]:has(> img) {
-  display: none;
-}
-
-.prose [align="center"] {
-  text-align: left;
-}
-
-.prose h1 + p[align] {
+/* A guide's first paragraph introduces it. */
+.prose h1 + p {
   color: var(--muted);
   font-size: 1.1875rem;
 }
@@ -1776,14 +1765,14 @@ th.end {
     padding: 10px 16px 0;
   }
 
-  .sites {
+  .nav {
     order: 3;
     width: 100%;
     margin: 0 -10px;
     overflow-x: auto;
   }
 
-  .sites a {
+  .nav a {
     height: 44px;
   }
 

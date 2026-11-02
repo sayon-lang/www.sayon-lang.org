@@ -1,8 +1,6 @@
-// Sayon's websites: the switch between the light and dark themes, a copy
+// Sayon's website: the switch between the light and dark themes, a copy
 // button on each block of code, `/` to search, a link on each heading of a
-// guide, and the section in view in its contents. www.sayon-lang.org,
-// docs.sayon-lang.org, and packages.sayon-lang.org each keep a copy of this
-// file, style.css, and src/frame.sayon: change all of them together.
+// guide, and the section in view in its contents.
 //
 // It runs in the page's head, so that a chosen theme applies before the
 // page is drawn, and the rest once the page is read.

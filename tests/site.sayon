@@ -1,5 +1,55 @@
-io = import("standard/io.sayon")
-page = import("src/page.sayon")
+filesystem = import("standard/filesystem.sayon")
+network = import("standard/network.sayon")
+strings = import("standard/strings.sayon")
+threads = import("standard/threads.sayon")
+time = import("standard/time.sayon")
+docs = import("src/pages/docs.sayon")
+registry = import("src/packages/registry.sayon")
+server = import("src/server.sayon")
 
-test "the site holds the page as the program writes it"
-    assert(io.read_file("site/index.html") == page.render(), "run `sayon run` to write the site again")
+constant DATA = "build/test-site"
+
+function clear(folder: string)
+    if not filesystem.exists(folder)
+        return
+    entries = filesystem.walk(folder)
+    position = length(entries) - 1
+    while position >= 0
+        filesystem.remove(filesystem.join(folder, entries[position]))
+        position -= 1
+    filesystem.remove(folder)
+
+test "the guides are read from docs, each with its address"
+    guides = docs.load("docs")
+    assert(length(guides) == 3)
+    assert(docs.address(guides[0]) == "/docs" and docs.address(guides[2]) == "/docs/language")
+    assert(docs.find(guides, "installing") == 1 and docs.find(guides, "missing") == nothing)
+    assert(guides[2].document.title == "The Sayon language")
+
+test "the first page, the guides, and the packages are one website"
+    clear(DATA)
+    filesystem.create_directory(filesystem.join(DATA, "index"))
+    listener = network.listen("127.0.0.1", 0)
+    address = "http://127.0.0.1:{listener.address().port}"
+    state = registry.State(data = clone(DATA), index = filesystem.join(DATA, "index"), address = clone(address), admin = "operator", guides = docs.load("docs"))
+    running = threads.spawn(function()
+        server.serve(listener, state, 9)
+    )
+    first = network.get(address + "/")
+    assert(first.status == 200 and strings.contains(first.text(), "Programming made easy. Safety made automatic."))
+    assert(strings.contains(first.text(), "href=\"/docs\"") and strings.contains(first.text(), "href=\"/packages\""))
+    overview = network.get(address + "/docs")
+    assert(overview.status == 200 and strings.contains(overview.text(), "<h1 id=\"sayons-documentation\">Sayon's documentation</h1>"), overview.text())
+    assert(strings.contains(overview.text(), "<a href=\"/docs/installing\">Installing</a>"))
+    language = network.get(address + "/docs/language/")
+    assert(language.status == 200 and strings.contains(language.text(), "<h2 id=\"source-files\">Source files</h2>"))
+    assert(strings.contains(language.text(), "aria-current=\"page\">The language</a>") and strings.contains(language.text(), "On this page"))
+    assert(network.get(address + "/docs/missing").status == 404)
+    every = network.get(address + "/packages")
+    assert(every.status == 200 and strings.contains(every.text(), "Packages for Sayon"))
+    moved = network.request("GET", address + "/search?q=json", [], [], time.seconds(30), 1)
+    assert(moved.status == 200 and moved.url == address + "/packages?q=json")
+    style = network.get(address + "/style.css")
+    assert(style.status == 200 and style.header("content-type") == "text/css; charset=utf-8")
+    assert(network.get(address + "/../sayon.toml").status == 404)
+    threads.join(running)

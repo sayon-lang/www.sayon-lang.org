@@ -1,4 +1,0 @@
-[package]
-name = "registry"
-version = "0.1.0"
-description = "Sayon's package registry: its website, its API, and its index, served by a Sayon program"

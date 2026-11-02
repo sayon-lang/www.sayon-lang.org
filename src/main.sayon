@@ -1,56 +1,110 @@
-# Writes the website into `site`: the page, from src/page.sayon, and the
-# files of `static` beside it.
+# Runs Sayon's website: its first page, the guides of `docs`, the package
+# registry with its API and its index, and accounts, on this computer.
 #
-#     sayon run                  writes the site
-#     sayon run -- serve [port]  writes it and serves it on this computer,
-#                                at http://localhost:8000/ by default
+#     sayon run -- [--port 4100] [--data data] [--index <folder>] [--account <name>]...
+#     sayon run -- [--port 4100] [--data data] --reset <name>
+#
+# Run it from this folder. It serves at http://127.0.0.1:<port> (`--port 0`
+# takes a free one), which at port 4100 is `sayon`'s registry by default;
+# reads the guides of `docs` once, as it starts; and keeps accounts,
+# owners, and archives in `--data`, and the index in `--index` (by default
+# `index` inside the data folder; a clone of packages-index gets a commit
+# for each publication). Once it listens it prints one line of JSON: its
+# address, its index's address, and a token for each `--account`, which it
+# makes, or whose tokens it replaces with that one. The operator's token,
+# for making accounts later, is SAYON_REGISTRY_ADMIN_TOKEN. People make
+# their own accounts on its pages.
+#
+# `--reset <name>` serves nothing: it prints a line of JSON with a link
+# that chooses the account's password, once, within an hour, for an
+# account made with `--account` or a password forgotten. The website
+# serving that data folder at that port answers it.
 
 filesystem = import("standard/filesystem.sayon")
-io = import("standard/io.sayon")
+json = import("standard/json.sayon")
 network = import("standard/network.sayon")
 os = import("standard/os.sayon")
-page = import("src/page.sayon")
-serve = import("src/serve.sayon")
+accounts = import("src/accounts/accounts.sayon")
+docs = import("src/pages/docs.sayon")
+registry = import("src/packages/registry.sayon")
+server = import("src/server.sayon")
+sessions = import("src/accounts/sessions.sayon")
 
-constant SITE = "site"
-constant STATIC = "static"
+type Options = [port: integer, data: string, index: string, accounts: Array<string>, reset: string]
 
-# Removes a folder and everything in it.
-function clear(folder: string)
-    if not filesystem.exists(folder)
-        return
-    entries = filesystem.walk(folder)
-    # Each folder comes before what it holds, so the last entries go first.
-    index = length(entries) - 1
-    while index >= 0
-        filesystem.remove(filesystem.join(folder, entries[index]))
-        index -= 1
-    filesystem.remove(folder)
+type Started = [url: string, index: string, data: string, accounts: Dict<string, string>]
 
-function write_site()
-    clear(SITE)
-    filesystem.create_directory(SITE)
-    for entry in filesystem.walk(STATIC)
-        source = filesystem.join(STATIC, entry)
-        target = filesystem.join(SITE, entry)
-        if filesystem.is_directory(source)
-            filesystem.create_directory(target)
+type ResetLink = [account: string, link: string]
+
+function options(arguments: Array<string>) -> Options
+    port = 4100
+    data = "data"
+    index = ""
+    reset = ""
+    names: Array<string> = []
+    position = 0
+    while position < length(arguments)
+        option = clone(arguments[position])
+        if position + 1 >= length(arguments)
+            error("{option} needs a value")
+        value = clone(arguments[position + 1])
+        if option == "--port"
+            given = tonumber(value)
+            if typeof(given) != "integer" or given < 0 or given > 65535
+                error("the port is a number from 0 to 65535, not {value}")
+            port = given
+        elseif option == "--data"
+            data = value
+        elseif option == "--index"
+            index = value
+        elseif option == "--account"
+            push(names, value)
+        elseif option == "--reset"
+            reset = value
         else
-            filesystem.copy(source, target)
-    io.write_file(filesystem.join(SITE, "index.html"), page.render())
-    print("wrote {SITE}/index.html")
+            error("unknown option {option}; the options are --port, --data, --index, --account, and --reset")
+        position += 2
+    if index == ""
+        index = filesystem.join(data, "index")
+    return Options(port = port, data = data, index = index, accounts = names, reset = reset)
+
+# Prints a link that chooses an account's password.
+function print_reset(chosen: Options)
+    if not filesystem.is_directory(chosen.data)
+        error("there is no data folder {chosen.data}")
+    accounts.upgrade(chosen.data)
+    if not haskey(accounts.accounts(chosen.data), chosen.reset)
+        error("there is no account `{chosen.reset}` in {chosen.data}")
+    if chosen.port == 0
+        error("the link needs the port the registry serves at, such as --port 4100")
+    all = sessions.resets(chosen.data)
+    secret = sessions.new_reset(all, chosen.reset)
+    sessions.save_resets(chosen.data, all)
+    print(json.encode_value(ResetLink(account = clone(chosen.reset), link = "http://127.0.0.1:{chosen.port}/reset/{secret}")))
 
 function main()
-    write_site()
-    arguments = os.arguments()
-    if length(arguments) == 0 or arguments[0] != "serve"
+    chosen = options(os.arguments())
+    if chosen.reset != ""
+        print_reset(chosen)
         return
-    port = 8000
-    if length(arguments) > 1
-        given = tonumber(arguments[1])
-        if typeof(given) != "integer"
-            error("the port is a whole number, not {arguments[1]}")
-        port = given
-    listener = network.listen("127.0.0.1", port)
-    print("serving {SITE} at http://localhost:{port}/; stop with Ctrl+C")
-    serve.serve(listener, SITE)
+    filesystem.create_directory(chosen.data)
+    filesystem.create_directory(chosen.index)
+    accounts.upgrade(chosen.data)
+    admin = accounts.new_token()
+    given = os.environment("SAYON_REGISTRY_ADMIN_TOKEN")
+    if given != nothing and given != ""
+        admin = given
+    all = accounts.accounts(chosen.data)
+    kept = accounts.tokens(chosen.data)
+    made: Dict<string, string> = []
+    for name in chosen.accounts
+        token = accounts.make(all, kept, name, true)
+        if token != nothing
+            made[clone(name)] = token
+    accounts.save_tokens(chosen.data, kept)
+    accounts.save_accounts(chosen.data, all)
+    listener = network.listen("127.0.0.1", chosen.port)
+    address = "http://127.0.0.1:{listener.address().port}"
+    state = registry.State(data = clone(chosen.data), index = clone(chosen.index), address = clone(address), admin = admin, guides = docs.load("docs"))
+    print(json.encode_value(Started(url = clone(address), index = address + "/index", data = clone(chosen.data), accounts = made)))
+    server.serve(listener, state)
