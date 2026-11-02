@@ -1,0 +1,106 @@
+filesystem = import("standard/filesystem.sayon")
+network = import("standard/network.sayon")
+strings = import("standard/strings.sayon")
+threads = import("standard/threads.sayon")
+time = import("standard/time.sayon")
+accounts = import("src/accounts/accounts.sayon")
+registry = import("src/packages/registry.sayon")
+server = import("src/server.sayon")
+client = import("tests/client.sayon")
+
+constant DATA = "build/test-serving"
+
+test "a slow computer holds up no one, and one asking too often is told to wait"
+    client.clear(DATA)
+    filesystem.create_directory(filesystem.join(DATA, "index"))
+    listener = network.listen("127.0.0.1", 0)
+    port = listener.address().port
+    address = "http://127.0.0.1:{port}"
+    state = registry.State(data = clone(DATA), index = filesystem.join(DATA, "index"), address = clone(address), admin = "operator", guides = [])
+    running = threads.spawn(function()
+        server.serve(listener, state, 16)
+    )
+
+    # A computer that starts a request and stops waits alone.
+    slow = network.connect("127.0.0.1", port)
+    slow.write("GET /missing HTTP/1.1\r\n")
+    slow.flush()
+    started = time.start()
+    quick = client.send(port, "GET", "/packages", [], "")
+    assert(quick.status == 200 and time.in_seconds(time.elapsed(started)) < 10.0)
+    slow.write("Host: 127.0.0.1\r\n\r\n")
+    slow.flush()
+    assert(strings.starts_with(slow.read(), "HTTP/1.1 404"))
+
+    # HEAD is GET without the body.
+    head = client.send(port, "HEAD", "/packages", [], "")
+    assert(head.status == 200 and head.body == "" and client.header_of(head, "content-length") != "0")
+
+    # The stylesheet at its version's address is kept for a year.
+    versioned = client.send(port, "GET", "/style.css?v=1", [], "")
+    assert(strings.contains(client.header_of(versioned, "cache-control"), "immutable"))
+    assert(client.header_of(client.send(port, "GET", "/style.css", [], ""), "cache-control") == "public, max-age=300")
+
+    # Asking for mail ten times in an hour is all one computer may.
+    form: Dict<string, string> = ["Content-Type" = "application/x-www-form-urlencoded", "Origin" = clone(address)]
+    for _count in range(10)
+        assert(client.send(port, "POST", "/forgot", form, "who=nobody").status == 200)
+    told = client.send(port, "POST", "/forgot", form, "who=nobody")
+    assert(told.status == 429 and client.header_of(told, "retry-after") == "3600", told.body)
+    threads.join(running)
+
+test "rules count each computer apart, and forget what is over"
+    windows: Dict<string, server.Window> = []
+    rule = server.Rule(count = 2, seconds = 60)
+    assert(not server.limited(windows, "a /sign-up", rule, 100) and not server.limited(windows, "a /sign-up", rule, 101))
+    assert(server.limited(windows, "a /sign-up", rule, 102) and not server.limited(windows, "b /sign-up", rule, 102))
+    assert(not server.limited(windows, "a /sign-up", rule, 161))
+    assert(server.rule("POST", "/sign-up") != nothing and server.rule("GET", "/sign-up") == nothing and server.rule("POST", "/packages") == nothing)
+
+test "tries sent together each count, and accounts made together both stay"
+    data = "build/test-serving-accounts"
+    client.clear(data)
+    filesystem.create_directory(filesystem.join(data, "index"))
+    listener = network.listen("127.0.0.1", 0)
+    port = listener.address().port
+    state = registry.State(data = clone(data), index = filesystem.join(data, "index"), address = "http://127.0.0.1:{port}", admin = "operator", guides = [])
+    running = threads.spawn(function()
+        server.serve(listener, state, 15)
+    )
+    made = client.send(port, "POST", "/sign-up", form_of(port), "name=dana&email=dana%40example.com&password=quiet+harbor+lantern&again=quiet+harbor+lantern")
+    assert(made.status == 303, made.body)
+
+    # Twelve wrong passwords at once: ten are checked, and two are told to
+    # wait, as twelve in a row would be.
+    tries: Array<Task<integer>> = []
+    for _count in range(12)
+        push(tries, threads.spawn(function() -> integer
+            return client.send(port, "POST", "/sign-in", form_of(port), "name=dana&password=not+the+password").status
+        ))
+    refused = 0
+    waited = 0
+    while length(tries) > 0
+        task = pop(tries)
+        if task != nothing
+            answered = threads.join(task)
+            if answered == 401
+                refused += 1
+            elseif answered == 429
+                waited += 1
+    assert(refused == 10 and waited == 2, "{refused} refused and {waited} told to wait")
+
+    # Two accounts made at the same moment are both kept.
+    first = threads.spawn(function() -> integer
+        return client.send(port, "POST", "/sign-up", form_of(port), "name=erin&email=erin%40example.com&password=quiet+harbor+lantern&again=quiet+harbor+lantern").status
+    )
+    second = threads.spawn(function() -> integer
+        return client.send(port, "POST", "/sign-up", form_of(port), "name=finn&email=finn%40example.com&password=quiet+harbor+lantern&again=quiet+harbor+lantern").status
+    )
+    assert(threads.join(first) == 303 and threads.join(second) == 303)
+    threads.join(running)
+    known = accounts.accounts(data)
+    assert(haskey(known, "dana") and haskey(known, "erin") and haskey(known, "finn"))
+
+# The headers of a form sent from the website's own page.
+function form_of(port: integer) -> Dict<string, string>
+    return ["Content-Type" = "application/x-www-form-urlencoded", "Origin" = "http://127.0.0.1:{port}"]

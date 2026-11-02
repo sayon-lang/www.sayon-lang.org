@@ -10,8 +10,9 @@ strings = import("standard/strings.sayon")
 constant LARGEST = 10486784
 
 # A request: its method, its target as it came, and the target's path and
-# query; its headers, by lowercase names; and its body.
-type Request = [method: string, target: string, path: string, query: Dict<string, string>, headers: Dict<string, string>, body: Array<byte>]
+# query; its headers, by lowercase names; its body; and the address of the
+# computer that sent it.
+type Request = [method: string, target: string, path: string, query: Dict<string, string>, headers: Dict<string, string>, body: Array<byte>, client: string]
 
 type Response = [status: integer, kind: string, headers: Dict<string, string>, body: Array<byte>]
 
@@ -173,7 +174,7 @@ function read(update connection: network.Connection) -> Request or Response or n
     if mark != nothing
         path = strings.slice(target, 0, mark)
         query = parse_query(strings.slice(target, mark + 1, length(target)))
-    return Request(method = clone(parts[0]), target = target, path = path, query = query, headers = headers, body = body)
+    return Request(method = clone(parts[0]), target = target, path = path, query = query, headers = headers, body = body, client = connection.peer_address().host)
 
 # A cookie the request carries, or nothing.
 function cookie(request: Request, name: string) -> string or nothing
@@ -204,15 +205,20 @@ function bearer(request: Request) -> string or nothing
             return token
     return nothing
 
-function write(update connection: network.Connection, response: Response)
+# Writes a response, with its body unless the request was HEAD, and
+# finishes sending, since a connection carries one response: the other
+# side reads to its end at once, before the connection is let go.
+function write(update connection: network.Connection, response: Response, with_body: boolean = true)
     connection.write("HTTP/1.1 {response.status} {reason(response.status)}\r\n")
     connection.write("Content-Type: {response.kind}\r\n")
     connection.write("Content-Length: {length(response.body)}\r\n")
     for name, value in response.headers
         connection.write("{name}: {value}\r\n")
     connection.write("Connection: close\r\n\r\n")
-    connection.write_bytes(response.body)
+    if with_body
+        connection.write_bytes(response.body)
     connection.flush()
+    connection.finish_sending()
 
 test "addresses are decoded"
     assert(decode("json+parser%2Fa%C3%A9") == "json parser/aé")
@@ -223,6 +229,6 @@ test "addresses are decoded"
 
 test "cookies are found by name"
     headers: Dict<string, string> = ["cookie" = "theme=dark; sayon_session=ab12 ;other=x=y"]
-    request = Request(method = "GET", target = "/", path = "/", query = [], headers = headers, body = [])
+    request = Request(method = "GET", target = "/", path = "/", query = [], headers = headers, body = [], client = "127.0.0.1")
     assert(cookie(request, "sayon_session") == "ab12" and cookie(request, "other") == "x=y")
     assert(cookie(request, "session") == nothing)

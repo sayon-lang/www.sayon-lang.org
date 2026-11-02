@@ -9,6 +9,7 @@ filesystem = import("standard/filesystem.sayon")
 io = import("standard/io.sayon")
 json = import("standard/json.sayon")
 strings = import("standard/strings.sayon")
+threads = import("standard/threads.sayon")
 time = import("standard/time.sayon")
 files = import("src/web/files.sayon")
 
@@ -167,12 +168,28 @@ function password_problem(name: string, password: string) -> string or nothing
         return "Choose a password that does not hold the account's name."
     return nothing
 
-# Whether a password is the account's own.
+# Whether a password is the account's own. The check takes a second on
+# purpose, so it runs on a thread of its own, and the website answers
+# others meanwhile.
 function password_is(account: Account, password: string) -> boolean
-    kept = clone(account.password)
-    if kept == nothing
+    stored = clone(account.password)
+    if stored == nothing
         return false
-    return crypto.check_password(password, kept)
+    kept: string = stored
+    given = clone(password)
+    checking = threads.spawn_parallel(function() -> boolean
+        return crypto.check_password(given, kept)
+    )
+    return threads.join(checking)
+
+# A password made safe to keep, as `crypto.hash_password` makes it, on a
+# thread of its own, for the same reason.
+function hash_password(password: string) -> string
+    given = clone(password)
+    hashing = threads.spawn_parallel(function() -> string
+        return crypto.hash_password(given)
+    )
+    return threads.join(hashing)
 
 # An account as an older registry kept it: with one token, by its hash.
 private type Former = [created: string, token: string or nothing]

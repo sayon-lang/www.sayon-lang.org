@@ -1,14 +1,15 @@
-# Answers each connection in turn: the API and the index
-# (src/packages/api.sayon); the first page (src/pages/home.sayon), the
-# guides (src/pages/docs.sayon), and the pages about packages
-# (src/packages/pages.sayon) and accounts (src/accounts/pages.sayon); and
-# the files of `static`. One request at a time, so that publications never
-# interleave.
+# Answers each connection, each in a task of its own: the API and the
+# index (src/packages/api.sayon); the first page (src/pages/home.sayon),
+# the guides (src/pages/docs.sayon), and the pages about packages
+# (src/packages/pages.sayon) and accounts (src/accounts); and the files of
+# `static`.
 
 filesystem = import("standard/filesystem.sayon")
 io = import("standard/io.sayon")
 network = import("standard/network.sayon")
 strings = import("standard/strings.sayon")
+threads = import("standard/threads.sayon")
+time = import("standard/time.sayon")
 account = import("src/accounts/pages.sayon")
 dashboard = import("src/accounts/dashboard.sayon")
 profiles = import("src/accounts/profiles.sayon")
@@ -38,8 +39,10 @@ private function kind_of(path: string) -> string
         case _
             return "application/octet-stream"
 
-# A file of `static`, or nothing.
-private function static_file(path: string) -> http.Response or nothing
+# A file of `static`, or nothing. One asked for with its version, `?v=`, as
+# the pages ask, is kept for a year, since a new version has a new address;
+# others for five minutes.
+private function static_file(path: string, versioned: boolean) -> http.Response or nothing
     if strings.contains(path, "..") or strings.contains(path, "\\") or path == "/"
         return nothing
     file = STATIC + path
@@ -47,6 +50,10 @@ private function static_file(path: string) -> http.Response or nothing
         return nothing
     response = http.respond(200, kind_of(file), io.read_file_bytes(file))
     response.headers["X-Content-Type-Options"] = "nosniff"
+    if versioned
+        response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    else
+        response.headers["Cache-Control"] = "public, max-age=300"
     return response
 
 # The host and port of an address, such as 127.0.0.1:4100.
@@ -170,31 +177,132 @@ function route(request: http.Request, state: registry.State) -> http.Response
     if length(parts) == 2 and parts[0] == "reset"
         view.here = ""
         return account.reset_page(state, view, parts[1])
-    found = static_file(path)
+    found = static_file(path, haskey(request.query, "v"))
     if found != nothing
         return found
     return site.not_found(view)
 
-# Answers `count` connections, or without end.
+# How often one computer may do a thing: at most `count` times in
+# `seconds`.
+type Rule = [count: integer, seconds: integer]
+
+# How often a computer did a thing lately: since when, and how many times.
+type Window = [start: integer, count: integer]
+
+# The rule for a request, for those that make accounts, sign in, send
+# mail, change a password, or start a sign-in, or nothing.
+function rule(method: string, path: string) -> Rule or nothing
+    if method != "POST"
+        return nothing
+    match path
+        case "/sign-up"
+            return Rule(count = 10, seconds = 3600)
+        case "/sign-in"
+            return Rule(count = 30, seconds = 900)
+        case "/forgot"
+            return Rule(count = 10, seconds = 3600)
+        case "/account/email"
+            return Rule(count = 10, seconds = 3600)
+        case "/account/email/again"
+            return Rule(count = 10, seconds = 3600)
+        case "/account/password"
+            return Rule(count = 10, seconds = 900)
+        case "/api/v1/logins"
+            return Rule(count = 30, seconds = 3600)
+        case _
+            return nothing
+
+# Counts one more use of a rule by `key`; whether it went past the rule.
+# Windows long over are forgotten once there are many.
+function limited(update windows: Dict<string, Window>, key: string, rule: Rule, now: integer) -> boolean
+    if haskey(windows, key) and windows[key].start + rule.seconds > now
+        windows[key].count += 1
+        return windows[key].count > rule.count
+    if length(windows) > 10000
+        old: Array<string> = []
+        for name, window in windows
+            if window.start + 3600 <= now
+                push(old, clone(name))
+        for name in old
+            remove(windows, name)
+    windows[clone(key)] = Window(start = now, count = 1)
+    return false
+
+# The answer to a computer that went past a rule.
+private function too_many(request: http.Request, rule: Rule) -> http.Response
+    minutes = (rule.seconds + 59) / 60
+    response = http.refuse(429, "this computer did that {rule.count} times in {minutes} minutes; try again later")
+    if not strings.starts_with(request.path, "/api/")
+        body = ["<div class=\"auth\">", "  <h1>Too many tries</h1>", "  <p class=\"lead\">This computer did that {rule.count} times in {minutes} minutes. Wait a while, then try again.</p>", "</div>"]
+        visitor = layout.Visitor(account = nothing, here = "", query = "")
+        response = layout.page(visitor, "Too many tries · Sayon", body, 429)
+    response.headers["Retry-After"] = "{rule.seconds}"
+    return response
+
+# Answers `count` connections, or without end: each in a task of its own,
+# so that one slow to send its request holds up no one else. The tasks
+# share one thread and a file is read or saved without waiting, so each
+# change to the data is whole when another task looks; a task that waits
+# meanwhile, for a password's hash, mail, or Git, reads the data again
+# after. With `count`, it returns once every one is answered.
 function serve(update listener: network.Listener, state: registry.State, count: integer or nothing = nothing)
+    shared = share(clone(state))
+    empty: Dict<string, Window> = []
+    windows = share(cell(empty))
+    # Changes through the API take turns: a publication runs Git, which
+    # other publications must not run at the same time.
+    publishing: Channel<boolean> = threads.new_channel(1)
+    answering: Array<Task<nothing>> = []
     served = 0
     while count == nothing or served < count
         connection = listener.accept()
         served += 1
-        outcome = try answer(connection, state)
-        if outcome is error
-            print("a request failed:", outcome.message)
+        seen = shared
+        limits = windows
+        turn = publishing
+        task = threads.spawn(function()
+            outcome = try answer(connection, seen.value, limits, turn)
+            if outcome is error
+                print("a request failed:", outcome.message)
+        )
+        if count == nothing
+            threads.detach(task)
+        else
+            push(answering, task)
+    while length(answering) > 0
+        task = pop(answering)
+        if task != nothing
+            threads.join(task)
 
-private function answer(update connection: network.Connection, state: registry.State)
+private function answer(update connection: network.Connection, state: registry.State, limits: Shared<Cell<Dict<string, Window>>>, turn: Channel<boolean>)
+    # A computer that sends nothing for this long is let go.
+    connection.set_timeout(time.seconds(30))
     request = http.read(connection)
     if request == nothing
         return
     if typeof(request) == "Response"
         http.write(connection, request)
         return
+    # HEAD is answered as GET would be, without the body.
+    with_body = request.method != "HEAD"
+    if not with_body
+        request.method = "GET"
+    found = rule(request.method, request.path)
+    if found != nothing
+        windows = limits.value.get()
+        over = limited(windows, "{request.client} {request.path}", found, time.unix_seconds())
+        limits.value.set(windows)
+        if over
+            http.write(connection, too_many(request, found), with_body)
+            return
+    alone = request.method != "GET" and strings.starts_with(request.path, "/api/")
+    if alone
+        threads.send(turn, true)
     response = try route(request, state)
+    if alone
+        threads.receive(turn)
     if response is error
         print("a request failed:", response.message)
-        http.write(connection, http.refuse(500, "the registry failed to answer; try again later"))
+        http.write(connection, http.refuse(500, "the website failed to answer; try again later"), with_body)
         return
-    http.write(connection, response)
+    http.write(connection, response, with_body)

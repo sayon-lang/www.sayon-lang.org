@@ -4,7 +4,6 @@
 # words about its owner, its email address, its password, and the browsers
 # signed in to it.
 
-crypto = import("standard/crypto.sayon")
 strings = import("standard/strings.sayon")
 accounts = import("src/accounts/accounts.sayon")
 logins = import("src/accounts/logins.sayon")
@@ -353,7 +352,13 @@ function change_password(request: http.Request, state: registry.State, view: lay
         return settings_page(state, view, "", weak, 400)
     if password != pages.value(fields, "again")
         return settings_page(state, view, "", "The two new passwords differ. Type the same password in both.", 400)
-    all[account].password = crypto.hash_password(password)
+    # Other requests are answered while the passwords are checked and
+    # hashed, so the accounts are read again before saving.
+    hashed = accounts.hash_password(password)
+    all = accounts.accounts(state.data)
+    if not haskey(all, account)
+        return http.redirect("/sign-in")
+    all[account].password = hashed
     accounts.save_accounts(state.data, all)
     kept = sessions.sessions(state.data)
     sessions.finish_others(kept, account, http.cookie(request, sessions.COOKIE))

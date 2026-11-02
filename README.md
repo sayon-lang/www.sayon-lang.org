@@ -39,7 +39,7 @@ It serves the website at `http://127.0.0.1:4100`:
 
 ## How it is made
 
-`src/main.sayon` reads the options and the guides and starts `src/server.sayon`, which answers one request at a time, so that publications never interleave:
+`src/main.sayon` reads the options and the guides and starts `src/server.sayon`, which answers each connection in a task of its own, so that a slow one holds up no one, and tells a computer that makes too many accounts, sign-ins, or mails to wait (429, by `server.rule`). Passwords are hashed on threads of their own, publications take turns since each runs Git, and the pages link the stylesheet and the script with their version in the address, so that browsers keep them until they change. The parts:
 
 - `src/pages`: the first page, and the guides, made HTML once as the website starts;
 - `src/packages`: the registry's API and index, checking archives and manifests as `sayon` does, and its pages;
@@ -52,7 +52,7 @@ It serves the website at `http://127.0.0.1:4100`:
 sayon test
 ```
 
-The tests check versions, archives, manifests, the index, accounts, sessions, sign-ins, Markdown, and highlighting, and run the server: to publish, refuse, serve the index and archives, the first page, the guides, and the packages; and to make accounts, sign in and out, refuse forms from other sites, and approve and deny `sayon login`'s sign-ins. The tests of [sayon-lang/sayon](https://github.com/sayon-lang/sayon) also run `sayon` itself against this website, `sayon login` in a browser's place among them, when this repository is checked out beside it, as `../www.sayon-lang.org`.
+The tests check versions, archives, manifests, the index, accounts, sessions, sign-ins, Markdown, and highlighting, and run the server: to publish, refuse, serve the index and archives, the first page, the guides, and the packages; and to make accounts, sign in and out, refuse forms from other sites, and approve and deny `sayon login`'s sign-ins; and to answer others while one computer is slow, answer HEAD, let browsers keep the stylesheet, and count tries and accounts sent at once. The tests of [sayon-lang/sayon](https://github.com/sayon-lang/sayon) also run `sayon` itself against this website, `sayon login` in a browser's place among them, when this repository is checked out beside it, as `../www.sayon-lang.org`.
 
 ## Writing the guides
 

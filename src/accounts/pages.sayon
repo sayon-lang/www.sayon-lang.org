@@ -9,7 +9,6 @@
 # from one of the website's pages, as browsers say in `Origin`, so that no
 # other site can make a signed-in browser act.
 
-crypto = import("standard/crypto.sayon")
 strings = import("standard/strings.sayon")
 accounts = import("src/accounts/accounts.sayon")
 mail = import("src/accounts/mail.sayon")
@@ -278,11 +277,16 @@ function sign_in(request: http.Request, state: registry.State, view: layout.Visi
     if waiting > 0
         minutes = (waiting + 59) / 60
         return again(state, view, next, false, name, "Too many wrong passwords were given for this account. Try again in {count_of(minutes, "minute", "minutes")}.", 429)
-    if not haskey(all, name) or not accounts.password_is(all[name], password)
-        if haskey(all, name)
-            sessions.failed(failures, name)
-            sessions.save_failures(state.data, failures)
-        return again(state, view, next, false, name, "The account's name or the password is wrong.", 401)
+    mistaken = "The account's name or the password is wrong."
+    if not haskey(all, name)
+        return again(state, view, next, false, name, mistaken, 401)
+    # Other requests are answered while the password is checked, so the try
+    # counts as wrong until it proves right: tries sent together count each.
+    sessions.failed(failures, name)
+    sessions.save_failures(state.data, failures)
+    if not accounts.password_is(all[name], password)
+        return again(state, view, next, false, name, mistaken, 401)
+    failures = sessions.failures(state.data)
     if haskey(failures, name)
         sessions.succeeded(failures, name)
         sessions.save_failures(state.data, failures)
@@ -301,17 +305,15 @@ function sign_up(request: http.Request, state: registry.State, view: layout.Visi
     problem = ""
     status = 400
     address_problem = accounts.email_problem(email)
+    clash = taken(all, name, email)
     if not index.valid_name(name)
         problem = "An account's name is lowercase letters, digits, and `_`, starting with a letter, 64 characters at most."
     elseif collections_has(reserved(), name)
         problem = "The name `{name}` is kept for the website. Choose another."
-    elseif haskey(all, name)
-        problem = "The name `{name}` is taken. Choose another, or sign in if the account is yours."
-        status = 409
     elseif address_problem != nothing
         problem = address_problem
-    elseif accounts.with_email(all, email) != nothing
-        problem = "Another account has that email address. Sign in to it, or choose a new password for it from the page for a forgotten password."
+    elseif clash != ""
+        problem = clash
         status = 409
     else
         weak = accounts.password_problem(name, password)
@@ -321,10 +323,27 @@ function sign_up(request: http.Request, state: registry.State, view: layout.Visi
             problem = "The two passwords differ. Type the same password in both."
     if problem != ""
         return again(state, view, next, true, name, problem, status, email)
-    all[clone(name)] = accounts.new_account(crypto.hash_password(password), clone(email), false)
+    # Other requests are answered while the password is hashed, so the
+    # accounts are read again after: another may have taken the name or the
+    # address meanwhile.
+    hashed = accounts.hash_password(password)
+    all = accounts.accounts(state.data)
+    clash = taken(all, name, email)
+    if clash != ""
+        return again(state, view, next, true, name, clash, 409, email)
+    all[clone(name)] = accounts.new_account(hashed, clone(email), false)
     accounts.save_accounts(state.data, all)
     send_verification(state, name, email)
     return signed_in(state, name, next, approve)
+
+# Why another account keeps this one from being made, since it has the
+# name or the address, or "".
+private function taken(all: Dict<string, accounts.Account>, name: string, email: string) -> string
+    if haskey(all, name)
+        return "The name `{name}` is taken. Choose another, or sign in if the account is yours."
+    if accounts.with_email(all, email) != nothing
+        return "Another account has that email address. Sign in to it, or choose a new password for it from the page for a forgotten password."
+    return ""
 
 private function collections_has(names: Array<string>, name: string) -> boolean
     for each in names
@@ -460,13 +479,17 @@ function reset_password(request: http.Request, state: registry.State, view: layo
         return reset_page(state, view, secret, weak, 400)
     if password != value(fields, "again")
         return reset_page(state, view, secret, "The two passwords differ. Type the same password in both.", 400)
+    # The link is used up first, so that it works once, and the accounts
+    # read after the password is hashed, since other requests are answered
+    # meanwhile.
+    remove(resets, accounts.hash(secret))
+    sessions.save_resets(state.data, resets)
+    hashed = accounts.hash_password(password)
     all = accounts.accounts(state.data)
     if not haskey(all, account)
         return reset_page(state, view, secret)
-    all[account].password = crypto.hash_password(password)
+    all[account].password = hashed
     accounts.save_accounts(state.data, all)
-    remove(resets, accounts.hash(secret))
-    sessions.save_resets(state.data, resets)
     kept = sessions.sessions(state.data)
     sessions.finish_others(kept, account, nothing)
     sessions.save_sessions(state.data, kept)
