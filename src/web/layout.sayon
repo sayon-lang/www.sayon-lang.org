@@ -12,9 +12,22 @@ constant CHECK_ICON = "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"current
 constant STOP_ICON = "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.2\" stroke-linecap=\"round\" aria-hidden=\"true\"><path d=\"M7 7l10 10M17 7L7 17\"/></svg>"
 
 # Who is looking at a page: the account its browser is signed in to, or
-# nothing; the address of the page, for coming back to it after signing
-# in, or "" on the pages that sign in; and the words the bar's search shows.
-type Visitor = [account: string or nothing, here: string, query: string]
+# nothing, and the version of its picture; the address of the page, for
+# coming back to it after signing in, or "" on the pages that sign in; and
+# the words the bar's search shows.
+type Visitor = [account: string or nothing, picture: string or nothing, here: string, query: string]
+
+# An account's picture, at its address for the picture's version, or the
+# account's initial on the logo's color when it has none: a box of the
+# class `initial`, and of `kind` too, when given.
+function avatar(name: string, picture: string or nothing, kind: string = "") -> string
+    classes = "initial"
+    if kind != ""
+        classes = classes + " " + kind
+    version = clone(picture)
+    if version != nothing
+        return "<img class=\"{classes}\" src=\"/users/{name}/picture?v={version}\" alt=\"\">"
+    return "<span class=\"{classes}\" aria-hidden=\"true\">{html.text(strings.slice(name, 0, 1))}</span>"
 
 # A search of the packages: the bar's, or `large`, the packages' page's.
 function search_box(query: string, large: boolean) -> string
@@ -30,8 +43,7 @@ function account_tool(view: Visitor) -> string
         if view.here == "" or view.here == "/"
             return "<a class=\"button small\" href=\"/sign-in\">Sign in</a>"
         return "<a class=\"button small\" href=\"/sign-in?next={http.encode(view.here)}\">Sign in</a>"
-    first = html.text(strings.slice(account, 0, 1))
-    menu = "<details class=\"menu\"><summary><span class=\"initial\" aria-hidden=\"true\">{first}</span><span class=\"hide-small\">{html.text(account)}</span></summary>"
+    menu = "<details class=\"menu\"><summary>{avatar(account, view.picture)}<span class=\"hide-small\">{html.text(account)}</span></summary>"
     menu = menu + "<div class=\"menu-items\"><a href=\"/account\">Your account</a><a href=\"/users/{account}\">Your profile</a><a href=\"/account/tokens\">Tokens</a><a href=\"/account/settings\">Settings</a><hr>"
     return menu + "<form method=\"post\" action=\"/sign-out\"><button type=\"submit\">Sign out</button></form></div></details>"
 

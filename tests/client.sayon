@@ -1,14 +1,71 @@
 # What the website's tests share: a client that speaks HTTP as a browser
-# does and sees each answer as it comes, and clearing a test's folder.
+# does and sees each answer as it comes, accounts signed in without their
+# pages, and clearing a test's folder.
 
 filesystem = import("standard/filesystem.sayon")
 io = import("standard/io.sayon")
 network = import("standard/network.sayon")
 strings = import("standard/strings.sayon")
+accounts = import("src/accounts/accounts.sayon")
+sessions = import("src/accounts/sessions.sayon")
+registry = import("src/packages/registry.sayon")
 
 # An answer as the website wrote it: its status, its headers by lowercase
 # name, and its body.
 type Answer = [status: integer, headers: Dict<string, string>, body: string]
+
+# An answer whose body is bytes, such as an image.
+type Bytes = [status: integer, headers: Dict<string, string>, body: Array<byte>]
+
+# A request with a body of bytes, and the answer: its head read line by
+# line, and its body as long as its `Content-Length` says.
+function send_bytes(port: integer, method: string, target: string, headers: Dict<string, string>, body: Array<byte>) -> Bytes
+    connection = network.connect("127.0.0.1", port)
+    connection.write("{method} {target} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Length: {length(body)}\r\nConnection: close\r\n")
+    for name, value in headers
+        connection.write("{name}: {value}\r\n")
+    connection.write("\r\n")
+    connection.write_bytes(body)
+    connection.flush()
+    first = connection.read_line()
+    if first == nothing
+        error("the website closed the connection without an answer")
+    status = strings.parse_integer(strings.split(first, " ")[1])
+    headers_read: Dict<string, string> = []
+    while true
+        line = connection.read_line()
+        if line == nothing or line == ""
+            break
+        colon = strings.find(line, ":")
+        if colon != nothing
+            headers_read[strings.lower(strings.trim(strings.slice(line, 0, colon)))] = strings.trim(strings.slice(line, colon + 1, length(line)))
+    size = 0
+    if haskey(headers_read, "content-length")
+        size = strings.parse_integer(headers_read["content-length"])
+    return Bytes(status = status, headers = headers_read, body = connection.read_exactly(size))
+
+# A fresh data folder, and the state of a website serving it at `port`.
+function website(data: string, port: integer) -> registry.State
+    clear(data)
+    filesystem.create_directory(filesystem.join(data, "index"))
+    return registry.State(data = clone(data), index = filesystem.join(data, "index"), address = "http://127.0.0.1:{port}", admin = "operator", guides = [])
+
+# Makes verified accounts, a year old, each signed in: the headers that
+# its forms are sent with, by name.
+function people(data: string, port: integer, names: Array<string>) -> Dict<string, Dict<string, string>>
+    all = accounts.accounts(data)
+    kept = sessions.sessions(data)
+    out: Dict<string, Dict<string, string>> = []
+    for name in names
+        record = accounts.new_account(nothing, "{name}@example.com", true)
+        record.created = "2025-11-01T00:00:00Z"
+        all[clone(name)] = record
+        id = sessions.start(kept, name)
+        headers: Dict<string, string> = ["Content-Type" = "application/x-www-form-urlencoded", "Origin" = "http://127.0.0.1:{port}", "Cookie" = "{sessions.COOKIE}={id}"]
+        out[clone(name)] = headers
+    accounts.save_accounts(data, all)
+    sessions.save_sessions(data, kept)
+    return out
 
 function clear(folder: string)
     if not filesystem.exists(folder)
@@ -51,6 +108,11 @@ type Talk = [port: integer, sent: integer]
 function ask(update talk: Talk, method: string, target: string, headers: Dict<string, string>, body: string) -> Answer
     talk.sent += 1
     return send(talk.port, method, target, headers, body)
+
+# A request as `send_bytes` makes it, counted.
+function ask_bytes(update talk: Talk, method: string, target: string, headers: Dict<string, string>, body: Array<byte>) -> Bytes
+    talk.sent += 1
+    return send_bytes(talk.port, method, target, headers, body)
 
 # Sends quick requests until `count` were sent, so that a server given
 # that count returns.

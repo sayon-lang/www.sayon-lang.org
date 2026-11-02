@@ -1,0 +1,95 @@
+# Profile pictures: a PNG for each account that chose one, kept in
+# `<data>/pictures/<name>.png`. The settings page's script cuts the image
+# to a square in the browser and sends it as PNG; the website checks its
+# header, decodes it, and keeps it encoded again from its pixels alone, so
+# that nothing else it held, such as where a photo was taken, stays.
+
+crypto = import("standard/crypto.sayon")
+filesystem = import("standard/filesystem.sayon")
+graphics = import("standard/graphics.sayon")
+io = import("standard/io.sayon")
+strings = import("standard/strings.sayon")
+files = import("src/web/files.sayon")
+
+# The most bytes a picture is sent in, and its sides' lengths in pixels.
+constant LARGEST = 1048576
+constant SMALLEST_SIDE = 32
+constant LARGEST_SIDE = 512
+
+# What every PNG starts with.
+private constant SIGNATURE = [137, 80, 78, 71, 13, 10, 26, 10]
+
+# A number of four bytes, the first the highest, as PNG writes them.
+private function big_endian(bytes: Array<byte>, start: integer) -> integer
+    value = 0
+    for index in range(start, start + 4)
+        value = value * 256 + integer(bytes[index])
+    return value
+
+# Why bytes are not a picture the website keeps, or "", from their header
+# alone, before anything is decoded: a PNG image, square, `SMALLEST_SIDE`
+# to `LARGEST_SIDE` pixels a side, in `LARGEST` bytes at most.
+function problem(bytes: Array<byte>) -> string
+    if length(bytes) > LARGEST
+        return "A picture is sent in 1 MiB at most."
+    if length(bytes) < 33
+        return "That is not a PNG image."
+    for index in range(8)
+        if integer(bytes[index]) != SIGNATURE[index]
+            return "That is not a PNG image."
+    # The first chunk is IHDR, which holds the width and the height.
+    if strings.from_bytes_lossy([bytes[12], bytes[13], bytes[14], bytes[15]]) != "IHDR"
+        return "That is not a PNG image."
+    width = big_endian(bytes, 16)
+    height = big_endian(bytes, 20)
+    if width != height
+        return "A picture is square."
+    if width < SMALLEST_SIDE or width > LARGEST_SIDE
+        return "A picture is {SMALLEST_SIDE} to {LARGEST_SIDE} pixels a side."
+    return ""
+
+# The PNG to keep for a picture: its pixels, decoded and encoded again.
+# Fails with ImageError for what does not decode.
+function cleaned(bytes: Array<byte>) -> Array<byte>
+    return graphics.canvas_png(graphics.decode_image(bytes))
+
+private function file_of(data: string, account: string) -> string
+    return filesystem.join(filesystem.join(data, "pictures"), account + ".png")
+
+# Keeps an account's picture, and gives its version: the start of its
+# SHA-256, which its address carries, so that browsers keep each version.
+function keep(data: string, account: string, png: Array<byte>) -> string
+    filesystem.create_directory(filesystem.join(data, "pictures"))
+    files.save_bytes(file_of(data, account), png)
+    return strings.slice(crypto.hex(crypto.sha256(png)), 0, 12)
+
+# An account's picture, or nothing.
+function read(data: string, account: string) -> Array<byte> or nothing
+    file = file_of(data, account)
+    if not filesystem.is_file(file)
+        return nothing
+    return io.read_file_bytes(file)
+
+# Forgets an account's picture.
+function forget(data: string, account: string)
+    file = file_of(data, account)
+    if filesystem.is_file(file)
+        filesystem.remove(file)
+
+private function square(side: integer) -> Array<byte>
+    canvas = graphics.canvas(side, side)
+    canvas.clear(graphics.rgb(219, 87, 53))
+    return canvas.png()
+
+test "pictures are square PNG images of a size, judged by their header"
+    assert(problem(square(64)) == "")
+    assert(problem(square(16)) != "" and problem(square(600)) != "")
+    oblong = graphics.canvas(64, 32)
+    assert(problem(oblong.png()) == "A picture is square.")
+    assert(problem(strings.bytes("<svg xmlns=\"http://www.w3.org/2000/svg\"></svg> and more bytes")) == "That is not a PNG image.")
+
+test "a picture is kept as its pixels, encoded again"
+    sent = square(48)
+    kept = cleaned(sent)
+    again = graphics.decode_image(kept)
+    assert(again.width == 48 and again.height == 48 and again.pixel(10, 10) == graphics.rgb(219, 87, 53))

@@ -1,12 +1,13 @@
 # What the forum's moderators do: pin, lock, move, and hide threads; hide
-# replies; look at the posts people reported; and keep an account from
-# posting for some days. The website's admins also make accounts
-# moderators, and moderators again members.
+# replies; look at the posts people reported; keep an account from
+# posting for some days; and remove an account's picture. The website's
+# admins also make accounts moderators, and moderators again members.
 
 strings = import("standard/strings.sayon")
 time = import("standard/time.sayon")
 accounts = import("src/accounts/accounts.sayon")
 pages = import("src/accounts/pages.sayon")
+pictures = import("src/accounts/pictures.sayon")
 community = import("src/community/pages.sayon")
 forum = import("src/community/forum.sayon")
 site = import("src/packages/pages.sayon")
@@ -168,13 +169,14 @@ function dismiss(request: http.Request, state: registry.State, view: layout.Visi
 
 # What a moderator may do to an account, by the profile's tools: none to
 # their own; an admin makes members moderators, and moderators members;
-# a moderator keeps a member from posting, and an admin a moderator too.
+# a moderator keeps a member from posting and removes their picture, and
+# an admin a moderator's too.
 function may_change(actor: accounts.Account, actor_name: string, target: accounts.Account, target_name: string, action: string) -> boolean
     if actor_name == target_name or not accounts.moderates(actor) or accounts.is_admin(target)
         return false
     if action == "moderator" or action == "member"
         return accounts.is_admin(actor)
-    if action == "suspend" or action == "restore"
+    if action == "suspend" or action == "restore" or action == "remove-picture"
         return accounts.is_admin(actor) or not accounts.moderates(target)
     return false
 
@@ -203,6 +205,8 @@ function member_tools(actor: accounts.Account, actor_name: string, target: accou
             if days == 1
                 label = "Suspend for a day"
             push(out, "      " + member_button(target_name, "suspend", "<input type=\"hidden\" name=\"days\" value=\"{days}\">", label))
+        if target.picture != nothing
+            push(out, "      " + member_button(target_name, "remove-picture", "", "Remove their picture"))
     if can_appoint
         if target.role == "moderator"
             push(out, "      " + member_button(target_name, "member", "", "Make them a member again"))
@@ -237,6 +241,9 @@ function change_member(request: http.Request, state: registry.State, view: layou
         all[name].role = nothing
     elseif action == "restore"
         all[name].suspended = nothing
+    elseif action == "remove-picture"
+        pictures.forget(state.data, name)
+        all[name].picture = nothing
     else
         days = community.number_of(pages.value(fields, "days"))
         if days == nothing or days < 1 or days > 365

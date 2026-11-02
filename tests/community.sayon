@@ -1,50 +1,24 @@
-filesystem = import("standard/filesystem.sayon")
 network = import("standard/network.sayon")
 strings = import("standard/strings.sayon")
 threads = import("standard/threads.sayon")
 time = import("standard/time.sayon")
 accounts = import("src/accounts/accounts.sayon")
-sessions = import("src/accounts/sessions.sayon")
-registry = import("src/packages/registry.sayon")
 server = import("src/server.sayon")
 client = import("tests/client.sayon")
 
 # How many requests each test's server answers.
 constant REQUESTS = 100
 
-# Makes verified accounts, a year old, each signed in: the headers that
-# its forms are sent with, by name.
-function people(data: string, port: integer, names: Array<string>) -> Dict<string, Dict<string, string>>
-    all = accounts.accounts(data)
-    kept = sessions.sessions(data)
-    out: Dict<string, Dict<string, string>> = []
-    for name in names
-        record = accounts.new_account(nothing, "{name}@example.com", true)
-        record.created = "2025-11-01T00:00:00Z"
-        all[clone(name)] = record
-        id = sessions.start(kept, name)
-        headers: Dict<string, string> = ["Content-Type" = "application/x-www-form-urlencoded", "Origin" = "http://127.0.0.1:{port}", "Cookie" = "{sessions.COOKIE}={id}"]
-        out[clone(name)] = headers
-    accounts.save_accounts(data, all)
-    sessions.save_sessions(data, kept)
-    return out
-
-# A fresh data folder, and the state of a website serving it at `port`.
-function website(data: string, port: integer) -> registry.State
-    client.clear(data)
-    filesystem.create_directory(filesystem.join(data, "index"))
-    return registry.State(data = clone(data), index = filesystem.join(data, "index"), address = "http://127.0.0.1:{port}", admin = "operator", guides = [])
-
 test "a question is asked, answered, and marked solved"
     data = "build/test-community-help"
     listener = network.listen("127.0.0.1", 0)
     port = listener.address().port
-    state = website(data, port)
+    state = client.website(data, port)
     running = threads.spawn(function()
         server.serve(listener, state, REQUESTS)
     )
     talk = client.Talk(port = port, sent = 0)
-    who = people(data, port, ["ada", "bob"])
+    who = client.people(data, port, ["ada", "bob"])
     ada = clone(who["ada"])
     bob = clone(who["bob"])
 
@@ -105,12 +79,12 @@ test "who may post, and what a post may hold"
     data = "build/test-community-posting"
     listener = network.listen("127.0.0.1", 0)
     port = listener.address().port
-    state = website(data, port)
+    state = client.website(data, port)
     running = threads.spawn(function()
         server.serve(listener, state, REQUESTS)
     )
     talk = client.Talk(port = port, sent = 0)
-    who = people(data, port, ["cy", "dee", "eve"])
+    who = client.people(data, port, ["cy", "dee", "eve"])
     cy = clone(who["cy"])
     dee = clone(who["dee"])
     eve = clone(who["eve"])
@@ -156,12 +130,12 @@ test "moderators hide, pin, move, lock, and suspend; admins appoint them"
     data = "build/test-community-moderation"
     listener = network.listen("127.0.0.1", 0)
     port = listener.address().port
-    state = website(data, port)
+    state = client.website(data, port)
     running = threads.spawn(function()
         server.serve(listener, state, REQUESTS)
     )
     talk = client.Talk(port = port, sent = 0)
-    who = people(data, port, ["gus", "hal", "ivy", "jo"])
+    who = client.people(data, port, ["gus", "hal", "ivy", "jo"])
     gus = clone(who["gus"])
     hal = clone(who["hal"])
     ivy = clone(who["ivy"])

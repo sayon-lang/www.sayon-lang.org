@@ -19,9 +19,10 @@ files = import("src/web/files.sayon")
 # it was made before accounts had email, which leaves it nothing); its
 # role, "admin" or "moderator", or nothing for anyone else; a few words
 # about its owner; whether its owner is mailed news, such as replies
-# (nothing for yes); and until when moderators keep it from posting, in
-# seconds since 1970.
-type Account = [created: string, password: string or nothing, email: string or nothing, verified: boolean or nothing, role: string or nothing, bio: string or nothing, notify: boolean or nothing, suspended: integer or nothing]
+# (nothing for yes); until when moderators keep it from posting, in
+# seconds since 1970; and the version of its picture
+# (src/accounts/pictures.sayon), or nothing for none.
+type Account = [created: string, password: string or nothing, email: string or nothing, verified: boolean or nothing, role: string or nothing, bio: string or nothing, notify: boolean or nothing, suspended: integer or nothing, picture: string or nothing]
 
 # A token: the account it belongs to, what it is for, such as the computer
 # `sayon login` ran on, and when it was made and last used.
@@ -29,7 +30,7 @@ type Token = [account: string, name: string, created: string, used: string or no
 
 # A new account, made now.
 function new_account(own password: string or nothing, own email: string or nothing, verified: boolean) -> Account
-    return Account(created = time.format(time.now()), password = password, email = email, verified = verified, role = nothing, bio = nothing, notify = nothing, suspended = nothing)
+    return Account(created = time.format(time.now()), password = password, email = email, verified = verified, role = nothing, bio = nothing, notify = nothing, suspended = nothing, picture = nothing)
 
 # Whether an account may publish packages and post: unless it is waiting
 # for its email to be verified.

@@ -1,0 +1,91 @@
+graphics = import("standard/graphics.sayon")
+network = import("standard/network.sayon")
+strings = import("standard/strings.sayon")
+threads = import("standard/threads.sayon")
+accounts = import("src/accounts/accounts.sayon")
+server = import("src/server.sayon")
+client = import("tests/client.sayon")
+
+# How many requests the test's server answers.
+constant REQUESTS = 40
+
+# A square of one color, `side` pixels a side, as PNG.
+function square(side: integer, color: graphics.Color) -> Array<byte>
+    canvas = graphics.canvas(side, side)
+    canvas.clear(color)
+    return canvas.png()
+
+# The first `count` bytes.
+function first_bytes(bytes: Array<byte>, count: integer) -> Array<byte>
+    out: Array<byte> = []
+    for index in range(count)
+        push(out, bytes[index])
+    return out
+
+test "a picture is chosen, kept as its pixels, shown, and removed"
+    data = "build/test-pictures"
+    listener = network.listen("127.0.0.1", 0)
+    port = listener.address().port
+    state = client.website(data, port)
+    running = threads.spawn(function()
+        server.serve(listener, state, REQUESTS)
+    )
+    talk = client.Talk(port = port, sent = 0)
+    who = client.people(data, port, ["ada", "bob", "moe"])
+    ada = clone(who["ada"])
+    moe = clone(who["moe"])
+    all = accounts.accounts(data)
+    all["moe"].role = "moderator"
+    accounts.save_accounts(data, all)
+    picture: Dict<string, string> = clone(ada)
+    picture["Content-Type"] = "image/png"
+
+    # Ada's picture is kept as its pixels, at an address for its version.
+    sent = square(256, graphics.rgb(30, 120, 200))
+    saved = client.ask_bytes(talk, "POST", "/account/picture", picture, sent)
+    assert(saved.status == 303 and saved.headers["location"] == "/account/settings?done=picture")
+    known = clone(accounts.accounts(data)["ada"].picture)
+    if known == nothing
+        error("ada has no picture")
+    address = "/users/ada/picture?v={known}"
+    shown = client.ask_bytes(talk, "GET", address, [], [])
+    assert(shown.status == 200 and shown.headers["content-type"] == "image/png" and shown.headers["x-content-type-options"] == "nosniff")
+    assert(strings.contains(shown.headers["cache-control"], "immutable"))
+    assert(shown.body == graphics.canvas_png(graphics.decode_image(sent)))
+    image = graphics.decode_image(shown.body)
+    assert(image.width == 256 and image.pixel(100, 100) == graphics.rgb(30, 120, 200))
+
+    # It shows in the bar, in the settings, on the profile, and beside posts.
+    settings = client.ask(talk, "GET", "/account/settings", ada, "")
+    assert(strings.contains(settings.body, "<img class=\"initial\" src=\"{address}\" alt=\"\">") and strings.contains(settings.body, "<img class=\"initial large\" src=\"{address}\" alt=\"\">"), settings.body)
+    assert(strings.contains(client.ask(talk, "GET", "/users/ada", [], "").body, "src=\"{address}\""))
+    assert(client.ask(talk, "POST", "/community/new", ada, "category=ideas&title=Pictures+beside+posts&text=They+show.").status == 303)
+    assert(strings.contains(client.ask(talk, "GET", "/community/ideas/1", [], "").body, "src=\"{address}\""))
+
+    # What is not a square PNG of a size, or is damaged, is refused, as JSON.
+    oblong = graphics.canvas(64, 32)
+    refused = client.ask_bytes(talk, "POST", "/account/picture", picture, oblong.png())
+    assert(refused.status == 400 and strings.contains(strings.from_bytes(refused.body), "square"))
+    assert(client.ask_bytes(talk, "POST", "/account/picture", picture, square(600, graphics.WHITE)).status == 400)
+    script = strings.bytes("<svg xmlns=\"http://www.w3.org/2000/svg\" onload=\"alert(1)\"></svg>")
+    assert(client.ask_bytes(talk, "POST", "/account/picture", picture, script).status == 400)
+    broken = client.ask_bytes(talk, "POST", "/account/picture", picture, first_bytes(sent, 60))
+    assert(broken.status == 400 and strings.contains(strings.from_bytes(broken.body), "damaged"))
+    outside: Dict<string, string> = clone(picture)
+    outside["Origin"] = "https://elsewhere.example"
+    assert(client.ask_bytes(talk, "POST", "/account/picture", outside, sent).status == 403)
+    assert(client.ask_bytes(talk, "POST", "/account/picture", ["Origin" = "http://127.0.0.1:{port}"], sent).status == 401)
+    assert(accounts.accounts(data)["ada"].picture == known)
+
+    # A moderator removes a member's picture, and Ada her own.
+    others: Dict<string, string> = clone(who["bob"])
+    others["Content-Type"] = "image/png"
+    assert(client.ask_bytes(talk, "POST", "/account/picture", others, square(64, graphics.BLACK)).status == 303)
+    assert(client.ask(talk, "POST", "/community/members", moe, "name=bob&action=remove-picture").status == 303)
+    assert(accounts.accounts(data)["bob"].picture == nothing)
+    assert(client.ask(talk, "POST", "/account/picture/remove", ada, "").status == 303)
+    assert(accounts.accounts(data)["ada"].picture == nothing)
+    assert(client.ask_bytes(talk, "GET", address, [], []).status == 404)
+    assert(strings.contains(client.ask(talk, "GET", "/users/ada", [], "").body, "<span class=\"initial\" aria-hidden=\"true\">a</span>"))
+    client.finish(talk, REQUESTS)
+    threads.join(running)

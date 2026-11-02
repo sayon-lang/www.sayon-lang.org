@@ -1,6 +1,7 @@
 // Sayon's website: the switch between the light and dark themes, a copy
 // button on each block of code, `/` to search, a link on each heading of a
-// guide, and the section in view in its contents.
+// guide, the section in view in its contents, and choosing a picture in
+// the account's settings.
 //
 // It runs in the page's head, so that a chosen theme applies before the
 // page is drawn, and the rest once the page is read.
@@ -191,12 +192,113 @@
     });
   }
 
+  // The settings page's picture: the chosen image's middle square, drawn at
+  // PICTURE_SIDE pixels a side, shown, and sent as a PNG, which holds those
+  // pixels and nothing else the file held.
+  var PICTURE_SIDE = 256;
+
+  function pictureForm() {
+    var form = document.querySelector("[data-picture]");
+    if (!form || !window.fetch || !window.createImageBitmap) {
+      return;
+    }
+    var input = form.querySelector("[data-picture-file]");
+    var save = form.querySelector("[data-picture-save]");
+    var problem = form.querySelector("[data-picture-problem]");
+    var preview = document.querySelector("[data-picture-preview]");
+    var picture = null;
+
+    function tell(text) {
+      problem.textContent = text;
+      problem.hidden = text === "";
+    }
+
+    function show(source) {
+      if (!preview) {
+        return;
+      }
+      var image = new Image();
+      image.className = "initial large";
+      image.alt = "";
+      image.src = source;
+      while (preview.firstChild) {
+        preview.removeChild(preview.firstChild);
+      }
+      preview.appendChild(image);
+    }
+
+    input.addEventListener("change", function () {
+      picture = null;
+      save.disabled = true;
+      tell("");
+      var file = input.files && input.files[0];
+      if (!file) {
+        return;
+      }
+      createImageBitmap(file).then(function (bitmap) {
+        var side = Math.min(bitmap.width, bitmap.height);
+        var canvas = document.createElement("canvas");
+        canvas.width = PICTURE_SIDE;
+        canvas.height = PICTURE_SIDE;
+        var context = canvas.getContext("2d");
+        context.imageSmoothingQuality = "high";
+        context.drawImage(bitmap, (bitmap.width - side) / 2, (bitmap.height - side) / 2, side, side, 0, 0, PICTURE_SIDE, PICTURE_SIDE);
+        if (bitmap.close) {
+          bitmap.close();
+        }
+        canvas.toBlob(function (blob) {
+          if (!blob) {
+            tell("This browser could not make the picture. Try another image.");
+            return;
+          }
+          picture = blob;
+          // The page's policy shows images from the website and data: addresses.
+          show(canvas.toDataURL("image/png"));
+          save.disabled = false;
+        }, "image/png");
+      }, function () {
+        tell("That file is not an image this browser can read. Choose a PNG, JPEG, WebP, or GIF image.");
+      });
+    });
+
+    form.addEventListener("submit", function (event) {
+      event.preventDefault();
+      if (!picture) {
+        return;
+      }
+      save.disabled = true;
+      tell("");
+      fetch(form.action, {
+        method: "POST",
+        body: picture,
+        headers: { "Content-Type": "image/png" },
+        credentials: "same-origin"
+      }).then(function (answer) {
+        if (answer.ok) {
+          window.location.assign(answer.url);
+          return;
+        }
+        return answer.json().then(function (said) {
+          tell(said && said.error ? said.error : "The picture was not saved. Try again.");
+        }, function () {
+          tell("The picture was not saved. Try again in a while.");
+        }).then(function () {
+          save.disabled = false;
+        });
+      }, function () {
+        tell("The picture was not sent. Check the connection, then try again.");
+        save.disabled = false;
+      });
+    });
+  }
+
   function start() {
     themeSwitches();
     copyButtons();
     searchKey();
     headingLinks();
     sectionInView();
+    pictureForm();
   }
 
   if (document.readyState === "loading") {

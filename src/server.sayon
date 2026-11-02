@@ -11,6 +11,7 @@ strings = import("standard/strings.sayon")
 threads = import("standard/threads.sayon")
 time = import("standard/time.sayon")
 account = import("src/accounts/pages.sayon")
+accounts = import("src/accounts/accounts.sayon")
 dashboard = import("src/accounts/dashboard.sayon")
 profiles = import("src/accounts/profiles.sayon")
 community = import("src/community/pages.sayon")
@@ -104,6 +105,10 @@ private function sent(request: http.Request, state: registry.State, view: layout
         return dashboard.sign_out_others(request, state, view)
     if path == "/account/notify"
         return dashboard.change_notify(request, state, view)
+    if path == "/account/picture"
+        return dashboard.change_picture(request, state, view)
+    if path == "/account/picture/remove"
+        return dashboard.remove_picture(request, state, view)
     if path == "/community/new"
         return community.start_thread(request, state, view)
     if path == "/community/reply"
@@ -163,7 +168,12 @@ function route(request: http.Request, state: registry.State) -> http.Response
     if elsewhere != nothing
         return elsewhere
     viewer = sessions.account_of(sessions.sessions(state.data), http.cookie(request, sessions.COOKIE))
-    view = layout.Visitor(account = viewer, here = clone(request.target), query = "")
+    picture: string or nothing = nothing
+    if viewer != nothing
+        known = accounts.accounts(state.data)
+        if haskey(known, viewer)
+            picture = clone(known[viewer].picture)
+    view = layout.Visitor(account = viewer, picture = picture, here = clone(request.target), query = "")
     parts = api.parts(path)
     if request.method == "POST"
         return sent(request, state, view, parts)
@@ -215,6 +225,8 @@ function route(request: http.Request, state: registry.State) -> http.Response
         return account.forgot_page(view, false)
     if length(parts) == 2 and parts[0] == "users"
         return profiles.profile(state, view, parts[1])
+    if length(parts) == 3 and parts[0] == "users" and parts[2] == "picture"
+        return profiles.picture(state, view, parts[1], haskey(request.query, "v"))
     if length(parts) == 2 and parts[0] == "verify"
         view.here = ""
         return account.verify_page(state, view, parts[1])
@@ -238,7 +250,8 @@ type Rule = [count: integer, seconds: integer]
 type Window = [start: integer, count: integer]
 
 # The rule for a request, for those that make accounts, sign in, send
-# mail, change a password, start a sign-in, or post, or nothing.
+# mail, change a password or a picture, start a sign-in, or post, or
+# nothing.
 function rule(method: string, path: string) -> Rule or nothing
     if method != "POST"
         return nothing
@@ -255,6 +268,8 @@ function rule(method: string, path: string) -> Rule or nothing
             return Rule(count = 10, seconds = 3600)
         case "/account/password"
             return Rule(count = 10, seconds = 900)
+        case "/account/picture"
+            return Rule(count = 20, seconds = 3600)
         case "/api/v1/logins"
             return Rule(count = 30, seconds = 3600)
         case "/community/new"
@@ -290,7 +305,7 @@ private function too_many(request: http.Request, rule: Rule) -> http.Response
     response = http.refuse(429, "this computer did that {rule.count} times in {minutes} minutes; try again later")
     if not strings.starts_with(request.path, "/api/")
         body = ["<div class=\"auth\">", "  <h1>Too many tries</h1>", "  <p class=\"lead\">This computer did that {rule.count} times in {minutes} minutes. Wait a while, then try again.</p>", "</div>"]
-        visitor = layout.Visitor(account = nothing, here = "", query = "")
+        visitor = layout.Visitor(account = nothing, picture = nothing, here = "", query = "")
         response = layout.page(visitor, "Too many tries · Sayon", body, 429)
     response.headers["Retry-After"] = "{rule.seconds}"
     return response

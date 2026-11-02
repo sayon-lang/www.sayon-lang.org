@@ -232,15 +232,22 @@ function forum_page(state: registry.State, view: layout.Visitor, key: string, qu
     push(body, "</div>")
     return layout.page(view, "{title} · Sayon", body, 200, true, "community", lead)
 
-# The roles of the accounts that have one, as posts show them.
-private function roles_of(state: registry.State) -> Dict<string, string>
-    out: Dict<string, string> = []
+# What a post shows of its author: their role, as "Admin", "Moderator",
+# or "" for none, and the version of their picture.
+type Face = [role: string, picture: string or nothing]
+
+# The faces of the accounts that have a role or a picture.
+private function faces_of(state: registry.State) -> Dict<string, Face>
+    out: Dict<string, Face> = []
     for name, account in accounts.accounts(state.data)
         given = clone(account.role)
+        shown = ""
         if given == "admin"
-            out[clone(name)] = "Admin"
+            shown = "Admin"
         elseif given == "moderator"
-            out[clone(name)] = "Moderator"
+            shown = "Moderator"
+        if shown != "" or account.picture != nothing
+            out[clone(name)] = Face(role = shown, picture = clone(account.picture))
     return out
 
 # A form of one button that sends a thread's and a post's numbers.
@@ -274,7 +281,7 @@ private function post_actions(thread: forum.Thread, post: forum.Post, viewer: st
     return out
 
 # A post in its thread. A hidden one shows only to moderators.
-private function post_article(thread: forum.Thread, post: forum.Post, viewer: string, moderator: boolean, roles: Dict<string, string>, now: integer, solvable: boolean) -> Array<string>
+private function post_article(thread: forum.Thread, post: forum.Post, viewer: string, moderator: boolean, faces: Dict<string, Face>, now: integer, solvable: boolean) -> Array<string>
     if post.hidden and not moderator
         return ["<article class=\"post post-gone\" id=\"post-{post.number}\"><p>A moderator hid this reply.</p></article>"]
     classes = "post"
@@ -284,10 +291,13 @@ private function post_article(thread: forum.Thread, post: forum.Post, viewer: st
         classes = classes + " post-hidden"
     out: Array<string> = ["<article class=\"{classes}\" id=\"post-{post.number}\">"]
     push(out, "  <header class=\"post-head\">")
-    push(out, "    <span class=\"initial\" aria-hidden=\"true\">{html.text(strings.slice(post.author, 0, 1))}</span>")
+    picture: string or nothing = nothing
     badge = ""
-    if haskey(roles, post.author)
-        badge = " <span class=\"tag accent\">{roles[post.author]}</span>"
+    if haskey(faces, post.author)
+        picture = clone(faces[post.author].picture)
+        if faces[post.author].role != ""
+            badge = " <span class=\"tag accent\">{faces[post.author].role}</span>"
+    push(out, "    " + layout.avatar(post.author, picture))
     push(out, "    <span class=\"post-who\"><a href=\"/users/{post.author}\">{html.text(post.author)}</a>{badge}</span>")
     edited = ""
     if post.edited != nothing
@@ -402,7 +412,7 @@ function thread_page(state: registry.State, view: layout.Visitor, key: string, i
         viewer = clone(someone.name)
         if someone.name == thread.author
             forum.saw(state.data, someone.name, thread.id, thread.replies)
-    roles = roles_of(state)
+    faces = faces_of(state)
     body: Array<string> = ["<div class=\"wrap thread\">"]
     push(body, "  <header class=\"thread-head\">")
     push(body, "    <ol class=\"trail\"><li><a href=\"/community\">Community</a></li><li><a href=\"/community/{part.key}\">{html.text(part.label)}</a></li></ol>")
@@ -418,7 +428,7 @@ function thread_page(state: registry.State, view: layout.Visitor, key: string, i
             push(body, "  " + line)
     push(body, "  <div class=\"posts\">")
     for post in kept
-        for line in post_article(thread, post, viewer, moderator, roles, now, part.solvable)
+        for line in post_article(thread, post, viewer, moderator, faces, now, part.solvable)
             push(body, "    " + line)
         solved = thread.solved
         if post.number == 1 and solved != nothing

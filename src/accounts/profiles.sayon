@@ -2,10 +2,10 @@
 # the few words they wrote about themselves, the packages they own, and
 # the threads they started; with the moderators' tools for the account.
 
-strings = import("standard/strings.sayon")
 time = import("standard/time.sayon")
 accounts = import("src/accounts/accounts.sayon")
 dashboard = import("src/accounts/dashboard.sayon")
+pictures = import("src/accounts/pictures.sayon")
 forum = import("src/community/forum.sayon")
 moderation = import("src/community/moderation.sayon")
 community = import("src/community/pages.sayon")
@@ -23,7 +23,7 @@ function profile(state: registry.State, view: layout.Visitor, name: string) -> h
     record = clone(all[name])
     body: Array<string> = ["<div class=\"wrap\">"]
     push(body, "  <header class=\"account-head\">")
-    push(body, "    <span class=\"initial\" aria-hidden=\"true\">{html.text(strings.slice(name, 0, 1))}</span>")
+    push(body, "    " + layout.avatar(name, record.picture))
     role = ""
     given = clone(record.role)
     if given == "admin"
@@ -74,3 +74,24 @@ function profile(state: registry.State, view: layout.Visitor, name: string) -> h
             push(body, "  " + line)
     push(body, "</div>")
     return layout.page(view, "{name} · Sayon", body, 200, true, "", "{name} on Sayon's website: their packages and threads.")
+
+# An account's picture, as PNG. Asked for at its version's address, as
+# the pages ask, it is kept for a year, since a new picture has a new
+# address; otherwise for five minutes.
+function picture(state: registry.State, view: layout.Visitor, name: string, versioned: boolean) -> http.Response
+    all = accounts.accounts(state.data)
+    if not index.valid_name(name) or not haskey(all, name)
+        return pages.not_found(view)
+    if all[name].picture == nothing
+        return pages.not_found(view)
+    kept = pictures.read(state.data, name)
+    if kept == nothing
+        return pages.not_found(view)
+    response = http.respond(200, "image/png", kept)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Content-Security-Policy"] = "default-src 'none'; sandbox"
+    if versioned
+        response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    else
+        response.headers["Cache-Control"] = "public, max-age=300"
+    return response

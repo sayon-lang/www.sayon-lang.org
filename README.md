@@ -25,7 +25,7 @@ It serves the website at `http://127.0.0.1:4100`:
 | `/packages` | Every package, a search, and a page for each |
 | `/community` | The forum: the latest threads, each category's, and each thread; `/community/new` starts one |
 | `/account` | Your dashboard; `/account/tokens` and `/account/settings` your tokens and settings |
-| `/users/<name>` | A person's profile, with their packages and threads |
+| `/users/<name>` | A person's profile, with their picture, packages, and threads |
 | `/sign-up`, `/sign-in`, `/forgot` | Making an account, signing in, and a forgotten password |
 | `/api/v1`, `/index` | The registry's API and index, which `sayon` uses ([PROTOCOL.md](PROTOCOL.md)) |
 
@@ -45,7 +45,7 @@ It serves the website at `http://127.0.0.1:4100`:
 
 - `src/pages`: the first page, and the guides, made HTML once as the website starts;
 - `src/packages`: the registry's API and index, checking archives and manifests as `sayon` does, and its pages;
-- `src/accounts`: accounts with passwords kept by `crypto.hash_password`, tokens kept as their SHA-256, browsers signed in, the sign-ins `sayon login` starts, and the pages for all of them;
+- `src/accounts`: accounts with passwords kept by `crypto.hash_password`, tokens kept as their SHA-256, browsers signed in, the sign-ins `sayon login` starts, pictures (cut to a square of 256 pixels in the browser by `static/site.js`, sent as PNG, and kept in `data/pictures` as their pixels alone, decoded and encoded again), and the pages for all of them;
 - `src/community`: the forum, with its threads in `data/community`: categories, posts in Markdown shown safely (HTML as text, links only to the web, marked as the poster's), solved questions in Help, reports, and the moderators' tools; a new account posts ten times a day in its first week, and a verified email posts;
 - `src/web`: HTTP with cookies and forms, Markdown, Sayon's highlighting, and the frame every page shares, in the look of `static/style.css` and `static/site.js`.
 
@@ -55,7 +55,7 @@ It serves the website at `http://127.0.0.1:4100`:
 sayon test
 ```
 
-The tests check versions, archives, manifests, the index, accounts, sessions, sign-ins, Markdown, and highlighting, and run the server: to publish, refuse, serve the index and archives, the first page, the guides, and the packages; and to make accounts, sign in and out, refuse forms from other sites, and approve and deny `sayon login`'s sign-ins; and to answer others while one computer is slow, answer HEAD, let browsers keep the stylesheet, and count tries and accounts sent at once; and in the forum, to ask, answer, and mark a question solved, keep HTML and other links out of posts, keep who may not post from posting, and moderate. The tests of [sayon-lang/sayon](https://github.com/sayon-lang/sayon) also run `sayon` itself against this website, `sayon login` in a browser's place among them, when this repository is checked out beside it, as `../www.sayon-lang.org`.
+The tests check versions, archives, manifests, the index, accounts, sessions, sign-ins, Markdown, and highlighting, and run the server: to publish, refuse, serve the index and archives, the first page, the guides, and the packages; and to make accounts, sign in and out, refuse forms from other sites, and approve and deny `sayon login`'s sign-ins, and to keep, show, refuse, and remove pictures; and to answer others while one computer is slow, answer HEAD, let browsers keep the stylesheet, and count tries and accounts sent at once; and in the forum, to ask, answer, and mark a question solved, keep HTML and other links out of posts, keep who may not post from posting, and moderate. The tests of [sayon-lang/sayon](https://github.com/sayon-lang/sayon) also run `sayon` itself against this website, `sayon login` in a browser's place among them, when this repository is checked out beside it, as `../www.sayon-lang.org`.
 
 ## Writing the guides
 

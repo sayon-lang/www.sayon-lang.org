@@ -1654,6 +1654,44 @@ textarea.input {
   text-transform: uppercase;
 }
 
+/* An account's picture, where its initial would be. */
+img.initial {
+  border: 1px solid var(--line);
+  background: var(--mist);
+  object-fit: cover;
+}
+
+.initial.large {
+  width: 96px;
+  height: 96px;
+  font-size: 2.75rem;
+}
+
+.picture-box {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 16px 24px;
+}
+
+.picture-form .field {
+  margin-bottom: 14px;
+}
+
+.picture-remove {
+  grid-column: 2;
+}
+
+input[type="file"].input {
+  height: auto;
+  padding: 8px 10px;
+  cursor: pointer;
+}
+
+.hint.problem {
+  color: var(--danger);
+}
+
 .secret {
   margin-bottom: 12px;
   overflow-wrap: anywhere;
@@ -1920,6 +1958,14 @@ textarea.input {
 @media (max-width: 480px) {
   .foot-inner {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .picture-box {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .picture-remove {
+    grid-column: auto;
   }
 
   .letters span {
