@@ -834,7 +834,7 @@ while true
     print(strings.upper(line))
 ```
 
-String positions count Unicode characters. File and directory failures raise `IOError`; text that is not UTF-8 raises `EncodingError`. `math.random()` is not suitable for security; `crypto.random_bytes` is, for keys and tokens. `crypto.hash_password` makes a password safe to keep, slowly on purpose, and `crypto.check_password` tells whether a password is the one kept. [The standard library's API](https://github.com/sayon-lang/sayon/blob/main/docs/api.md) lists every export with its declaration.
+String positions count Unicode characters. File and directory failures raise `IOError`; text that is not UTF-8 raises `EncodingError`. `math.random()` is not suitable for security; `crypto.random_bytes` is, for keys and tokens. `crypto.hash_password` makes a password safe to keep, slowly on purpose, and `crypto.check_password` tells whether a password is the one kept. [The standard library's API](api.md) lists every export with its declaration.
 
 For numbers that can be had again, `math.new_generator(seed)` gives a `Generator`: generators from the same seed give the same numbers in the same order, on every device and target, in the interpreter and compiled, which suits tests, simulations, and games that replay. `float()` is from 0 up to 1, `integer(low, high)` from `low` up to, but not including, `high`, each as likely as the others, and `shuffle(items)` puts an array in a random order:
 
@@ -1239,7 +1239,7 @@ Sayon's first packages are [math_core](https://github.com/sayon-lang/math_core),
 - Everything a published package depends on must come from a registry; `dev_dependencies` may be local, since only the package's own tests use them.
 - The registry is part of Sayon's website, [www.sayon-lang.org](https://github.com/sayon-lang/www.sayon-lang.org), whose repository has its protocol and how to run it; Sayon's index is [packages-index](https://github.com/sayon-lang/packages-index).
 
-`sayon doctor` reports the Unicode version the toolchain follows and where the standard library, the runtime library, and clang were found. `sayon explain CODE` explains a diagnostic or runtime error code; [the error codes](https://github.com/sayon-lang/sayon/blob/main/docs/errors.md) lists them all.
+`sayon doctor` reports the Unicode version the toolchain follows and where the standard library, the runtime library, and clang were found. `sayon explain CODE` explains a diagnostic or runtime error code, and [the error codes](errors.md) are all listed with what they mean.
 
 ## Targets
 
@@ -1395,7 +1395,7 @@ test "adds integers"
 
 ## Linting
 
-`sayon lint` checks a program like `sayon check` and also warns about code that is valid but probably not meant: unused variables, parameters, imports, and private items; names that do not follow the conventions; variables that hide others; and an assignment that makes a new variable whose name is one letter away from an existing one. The standard library is not linted. [the error codes](https://github.com/sayon-lang/sayon/blob/main/docs/errors.md#lint-warnings) describes each warning.
+`sayon lint` checks a program like `sayon check` and also warns about code that is valid but probably not meant: unused variables, parameters, imports, and private items; names that do not follow the conventions; variables that hide others; and an assignment that makes a new variable whose name is one letter away from an existing one. The standard library is not linted. Each warning is described among [the error codes](errors.md#lint-warnings).
 
 ```sayon
 total = 0

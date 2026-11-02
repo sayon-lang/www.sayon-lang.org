@@ -779,6 +779,12 @@ th.end {
   text-align: right;
 }
 
+/* Code in a cell keeps its names whole, so that a column is as wide as
+   its longest; a table wider than the page scrolls. */
+td code {
+  overflow-wrap: break-word;
+}
+
 .facts {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);

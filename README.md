@@ -21,7 +21,7 @@ It serves the website at `http://127.0.0.1:4100`:
 | Address | What |
 | --- | --- |
 | `/` | What Sayon is, a first program, and how to get started |
-| `/docs` | The guides, from the Markdown of [`docs`](docs) |
+| `/docs` | The guides, from the Markdown of [`docs`](docs): installing, the language, the standard library's API, and the error codes |
 | `/packages` | Every package, a search, and a page for each |
 | `/community` | The forum: the latest threads, each category's, and each thread; `/community/new` starts one |
 | `/account` | Your dashboard; `/account/tokens` and `/account/settings` your tokens and settings |
@@ -55,11 +55,20 @@ It serves the website at `http://127.0.0.1:4100`:
 sayon test
 ```
 
-The tests check versions, archives, manifests, the index, accounts, sessions, sign-ins, Markdown, and highlighting, and run the server: to publish, refuse, serve the index and archives, the first page, the guides, and the packages; and to make accounts, sign in and out, refuse forms from other sites, and approve and deny `sayon login`'s sign-ins, and to keep, show, refuse, and remove pictures; and to answer others while one computer is slow, answer HEAD, let browsers keep the stylesheet, send no script, keep the theme a browser chose, and count tries and accounts sent at once; and in the forum, to ask, answer, and mark a question solved, keep HTML and other links out of posts, keep who may not post from posting, and moderate. The tests of [sayon-lang/sayon](https://github.com/sayon-lang/sayon) also run `sayon` itself against this website, `sayon login` in a browser's place among them, when this repository is checked out beside it, as `../www.sayon-lang.org`.
+The tests check versions, archives, manifests, the index, accounts, sessions, sign-ins, Markdown, and highlighting, and run the server: to publish, refuse, serve the index and archives, the first page, the guides (the language's references the same as it has them), and the packages; and to make accounts, sign in and out, refuse forms from other sites, and approve and deny `sayon login`'s sign-ins, and to keep, show, refuse, and remove pictures; and to answer others while one computer is slow, answer HEAD, let browsers keep the stylesheet, send no script, keep the theme a browser chose, and count tries and accounts sent at once; and in the forum, to ask, answer, and mark a question solved, keep HTML and other links out of posts, keep who may not post from posting, and moderate. The tests of [sayon-lang/sayon](https://github.com/sayon-lang/sayon) also run `sayon` itself against this website, `sayon login` in a browser's place among them, when this repository is checked out beside it, as `../www.sayon-lang.org`.
 
 ## Writing the guides
 
 The guides describe Sayon as it is implemented: a change to the language goes with a change to them. They are Markdown in [`docs`](docs), which GitHub shows as it is, and which the website reads when it starts.
+
+Two of them are copies: `docs/api.md` and `docs/errors.md`, the standard library's API and the error codes, change with the compiler, so they are written beside its code, in sayon-lang/sayon's `docs`. Change them there, then copy them here with the language's checkout beside this one, as `../sayon`, or named:
+
+```bash
+sayon run scripts/language_docs.sayon
+sayon run scripts/language_docs.sayon -- --check ../sayon
+```
+
+With the language beside it, `sayon test` fails while a copy is not the language's text.
 
 ## The logo
 

@@ -11,22 +11,48 @@ layout = import("src/web/layout.sayon")
 markdown = import("src/web/markdown.sayon")
 
 constant SOURCES = "https://github.com/sayon-lang/www.sayon-lang.org/blob/main/docs/"
+constant LANGUAGE = "https://github.com/sayon-lang/sayon/"
+constant EDIT = "Edit this page on GitHub"
 
 # A guide: its Markdown file in `docs`, its name in its address,
-# /docs/<slug> ("" for /docs itself), its name among the guides, and its
-# text made HTML.
-type Guide = [source: string, slug: string, label: string, document: markdown.Document]
+# /docs/<slug> ("" for /docs itself), its name among the guides, where its
+# text is written and what the link there says, and its text made HTML.
+type Guide = [source: string, slug: string, label: string, origin: string, change: string, document: markdown.Document]
 
-# The guides' files, addresses, and names, in the order they are read.
+# The guides' files, addresses, names, and where their text is written, in
+# the order they are read. The last two are the language's `references`.
 private function listed() -> Array<Array<string>>
-    return [["index.md", "", "Overview"], ["installing.md", "installing", "Installing"], ["language.md", "language", "The language"]]
+    return [
+        ["index.md", "", "Overview", SOURCES + "index.md", clone(EDIT)],
+        ["installing.md", "installing", "Installing", SOURCES + "installing.md", clone(EDIT)],
+        ["language.md", "language", "The language", SOURCES + "language.md", clone(EDIT)],
+        ["api.md", "api", "Standard library", LANGUAGE + "tree/main/stdlib", "Written from the library's declarations"],
+        ["errors.md", "errors", "Error codes", LANGUAGE + "blob/main/docs/errors.md", clone(EDIT)]
+    ]
+
+# The references written beside the language's code, in the `docs` folder
+# of sayon-lang/sayon, of which `docs` here holds copies, made by
+# scripts/language_docs.sayon.
+function references() -> Array<string>
+    return ["api.md", "errors.md"]
+
+# The references whose copy in `folder` is not the text in the `docs` of
+# the language's checkout at `language`.
+function stale(language: string, folder: string) -> Array<string>
+    out: Array<string> = []
+    for name in references()
+        theirs = filesystem.join(filesystem.join(language, "docs"), name)
+        ours = filesystem.join(folder, name)
+        if not filesystem.is_file(ours) or io.read_file(ours) != io.read_file(theirs)
+            push(out, clone(name))
+    return out
 
 # Reads the guides from `folder` and makes them HTML.
 function load(folder: string) -> Array<Guide>
     out: Array<Guide> = []
     for entry in listed()
         source = io.read_file(filesystem.join(folder, entry[0]))
-        push(out, Guide(source = clone(entry[0]), slug = clone(entry[1]), label = clone(entry[2]), document = markdown.convert(source)))
+        push(out, Guide(source = clone(entry[0]), slug = clone(entry[1]), label = clone(entry[2]), origin = clone(entry[3]), change = clone(entry[4]), document = markdown.convert(source)))
     return out
 
 # Where a guide is.
@@ -96,7 +122,7 @@ function page(guides: Array<Guide>, position: integer, view: layout.Visitor) -> 
         push(out, "      </nav>")
         push(out, "    </details>")
     push(out, clone(guides[position].document.body))
-    push(out, "    <div class=\"page-end\"><span>{html.text(guides[position].label)}</span><a href=\"{SOURCES}{guides[position].source}\">Edit this page on GitHub</a></div>")
+    push(out, "    <div class=\"page-end\"><span>{html.text(guides[position].label)}</span><a href=\"{guides[position].origin}\">{html.text(guides[position].change)}</a></div>")
     push(out, "    <nav class=\"pager\" aria-label=\"The guides before and after this one\">")
     if position > 0
         push(out, "      <a href=\"{address(guides[position - 1])}\"><small>Previous</small>{html.text(guides[position - 1].label)}</a>")

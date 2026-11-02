@@ -1,0 +1,43 @@
+# Copies the references written beside Sayon's compiler, the standard
+# library's API and the error codes, from a checkout of sayon-lang/sayon
+# into `docs`, where the website shows them as guides. Run it from the
+# repository's top folder, with the language checked out beside it, as
+# ../sayon, or named:
+#
+#     sayon run scripts/language_docs.sayon
+#     sayon run scripts/language_docs.sayon -- --check ../sayon
+#
+# With `--check` it copies nothing, and fails when a copy is not the
+# language's text; the tests check so when ../sayon is there.
+
+filesystem = import("standard/filesystem.sayon")
+io = import("standard/io.sayon")
+os = import("standard/os.sayon")
+strings = import("standard/strings.sayon")
+docs = import("src/pages/docs.sayon")
+
+constant FOLDER = "docs"
+
+function main()
+    language = "../sayon"
+    checking = false
+    for argument in os.arguments()
+        if argument == "--check"
+            checking = true
+        else
+            language = clone(argument)
+    if not filesystem.is_directory(filesystem.join(language, "docs"))
+        io.write_error("{language} is not a checkout of sayon-lang/sayon: it has no docs folder\n")
+        os.exit(1)
+    stale = docs.stale(language, FOLDER)
+    if checking
+        if length(stale) > 0
+            io.write_error("not the language's: {strings.join(stale, ", ")}; run `sayon run scripts/language_docs.sayon` and commit them\n")
+            os.exit(1)
+        print("the references are the language's")
+        return
+    for name in stale
+        io.write_file(filesystem.join(FOLDER, name), io.read_file(filesystem.join(filesystem.join(language, "docs"), name)))
+        print("copied {name}")
+    if length(stale) == 0
+        print("the references were already the language's")

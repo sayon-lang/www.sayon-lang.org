@@ -1,4 +1,5 @@
 filesystem = import("standard/filesystem.sayon")
+io = import("standard/io.sayon")
 network = import("standard/network.sayon")
 strings = import("standard/strings.sayon")
 threads = import("standard/threads.sayon")
@@ -21,10 +22,22 @@ function clear(folder: string)
 
 test "the guides are read from docs, each with its address"
     guides = docs.load("docs")
-    assert(length(guides) == 3)
-    assert(docs.address(guides[0]) == "/docs" and docs.address(guides[2]) == "/docs/language")
-    assert(docs.find(guides, "installing") == 1 and docs.find(guides, "missing") == nothing)
-    assert(guides[2].document.title == "The Sayon language")
+    assert(length(guides) == 5)
+    assert(docs.address(guides[0]) == "/docs" and docs.address(guides[2]) == "/docs/language" and docs.address(guides[4]) == "/docs/errors")
+    assert(docs.find(guides, "installing") == 1 and docs.find(guides, "api") == 3 and docs.find(guides, "missing") == nothing)
+    assert(guides[2].document.title == "The Sayon language" and guides[4].document.title == "Error codes")
+    assert(strings.contains(guides[3].origin, "sayon-lang/sayon/") and strings.contains(guides[2].origin, "www.sayon-lang.org"))
+
+test "the language's references are copied as they are, when it is checked out beside"
+    if not filesystem.is_directory("../sayon/docs")
+        return
+    stale = docs.stale("../sayon", "docs")
+    assert(length(stale) == 0, "not the language's: {strings.join(stale, ", ")}; run `sayon run scripts/language_docs.sayon`")
+    copies = "build/test-references"
+    clear(copies)
+    filesystem.create_directory(copies)
+    io.write_file(filesystem.join(copies, "api.md"), io.read_file("docs/api.md"))
+    assert(docs.stale("../sayon", copies) == ["errors.md"])
 
 test "the first page, the guides, and the packages are one website"
     clear(DATA)
@@ -33,7 +46,7 @@ test "the first page, the guides, and the packages are one website"
     address = "http://127.0.0.1:{listener.address().port}"
     state = registry.State(data = clone(DATA), index = filesystem.join(DATA, "index"), address = clone(address), admin = "operator", guides = docs.load("docs"))
     running = threads.spawn(function()
-        server.serve(listener, state, 9)
+        server.serve(listener, state, 11)
     )
     first = network.get(address + "/")
     assert(first.status == 200 and strings.contains(first.text(), "Programming made easy. Safety made automatic."))
@@ -45,6 +58,12 @@ test "the first page, the guides, and the packages are one website"
     assert(language.status == 200 and strings.contains(language.text(), "<h2 id=\"source-files\">Source files<a class=\"anchor\" href=\"#source-files\""))
     assert(strings.contains(language.text(), "aria-current=\"page\">The language</a>") and strings.contains(language.text(), "On this page"))
     assert(network.get(address + "/docs/missing").status == 404)
+    errors = network.get(address + "/docs/errors")
+    assert(errors.status == 200 and strings.contains(errors.text(), "<h3 id=\"e_invalid_utf8\">E_INVALID_UTF8<a class=\"anchor\" href=\"#e_invalid_utf8\""))
+    assert(strings.contains(errors.text(), "github.com/sayon-lang/sayon/blob/main/docs/errors.md\">Edit this page on GitHub</a>"))
+    api = network.get(address + "/docs/api")
+    assert(api.status == 200 and strings.contains(api.text(), "<a href=\"#standardcollectionssayon\"><code>standard/collections.sayon</code></a>"))
+    assert(strings.contains(api.text(), "<h2 id=\"standardcollectionssayon\">standard/collections.sayon<a class=\"anchor\""))
     every = network.get(address + "/packages")
     assert(every.status == 200 and strings.contains(every.text(), "Packages for Sayon"))
     moved = network.request("GET", address + "/search?q=json", [], [], time.seconds(30), 1)
