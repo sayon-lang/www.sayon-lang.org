@@ -1,0 +1,190 @@
+# Browsers signed in to accounts: each holds a cookie of 32 random bytes,
+# which the registry keeps as their SHA-256, for 30 days or until its owner
+# signs out. And the passwords given wrongly for each account, so that
+# guessing one takes long.
+
+crypto = import("standard/crypto.sayon")
+filesystem = import("standard/filesystem.sayon")
+io = import("standard/io.sayon")
+json = import("standard/json.sayon")
+time = import("standard/time.sayon")
+accounts = import("src/accounts.sayon")
+files = import("src/files.sayon")
+
+# The cookie's name.
+constant COOKIE = "sayon_session"
+
+# How long a browser stays signed in, in seconds: 30 days.
+constant LASTS = 2592000
+
+# How many wrong passwords in a row an account takes, within how many
+# seconds, before it waits that long to be tried again.
+constant TRIES = 10
+constant WINDOW = 900
+
+# A signed-in browser: its account, and when it was signed in and stops
+# being so, in seconds since 1970.
+type Session = [account: string, created: string, expires: integer]
+
+# An account's wrong passwords in a row, since the first of them.
+type Failures = [count: integer, since: integer]
+
+# A link the operator makes for choosing an account's password, for an
+# account made without one or a password forgotten: its account, and when
+# it stops working, in seconds since 1970.
+type Reset = [account: string, expires: integer]
+
+# How long such a link works, in seconds: an hour.
+constant RESET_LASTS = 3600
+
+# The sessions, by the SHA-256 of each cookie, in hexadecimal.
+function sessions(data: string) -> Dict<string, Session>
+    file = filesystem.join(data, "sessions.json")
+    if not filesystem.is_file(file)
+        return []
+    return json.decode(io.read_file(file))
+
+# Keeps the sessions that have not expired.
+function save_sessions(data: string, all: Dict<string, Session>)
+    now = time.unix_seconds()
+    kept: Dict<string, Session> = []
+    for key, session in all
+        if session.expires > now
+            kept[clone(key)] = clone(session)
+    files.save_text(filesystem.join(data, "sessions.json"), json.encode_value(kept))
+
+# Signs a browser in to an account: the cookie's value.
+function start(update all: Dict<string, Session>, account: string) -> string
+    id = crypto.hex(crypto.random_bytes(32))
+    all[accounts.hash(id)] = Session(account = clone(account), created = time.format(time.now()), expires = time.unix_seconds() + LASTS)
+    return id
+
+# The account a cookie is signed in to, or nothing.
+function account_of(all: Dict<string, Session>, id: string or nothing) -> string or nothing
+    if id == nothing
+        return nothing
+    key = accounts.hash(id)
+    if not haskey(all, key)
+        return nothing
+    if all[key].expires <= time.unix_seconds()
+        return nothing
+    return clone(all[key].account)
+
+# Signs a browser out.
+function finish(update all: Dict<string, Session>, id: string)
+    remove(all, accounts.hash(id))
+
+# Signs an account out everywhere but the browser holding `keep`.
+function finish_others(update all: Dict<string, Session>, account: string, keep: string or nothing)
+    kept = ""
+    if keep != nothing
+        kept = accounts.hash(keep)
+    gone: Array<string> = []
+    for key, session in all
+        if session.account == account and key != kept
+            push(gone, clone(key))
+    for key in gone
+        remove(all, key)
+
+# The `Set-Cookie` header that signs a browser in, or with "" out; `secure`
+# when the registry is reached over HTTPS, so that the cookie never travels
+# without it.
+function cookie(id: string, secure: boolean) -> string
+    lasts = LASTS
+    if id == ""
+        lasts = 0
+    text = "{COOKIE}={id}; Path=/; HttpOnly; SameSite=Lax; Max-Age={lasts}"
+    if secure
+        text = text + "; Secure"
+    return text
+
+function failures(data: string) -> Dict<string, Failures>
+    file = filesystem.join(data, "failures.json")
+    if not filesystem.is_file(file)
+        return []
+    return json.decode(io.read_file(file))
+
+function save_failures(data: string, all: Dict<string, Failures>)
+    files.save_text(filesystem.join(data, "failures.json"), json.encode_value(all))
+
+# How many seconds an account waits before its password may be tried
+# again: 0 but after `TRIES` wrong ones within `WINDOW`.
+function wait_for(all: Dict<string, Failures>, account: string) -> integer
+    if not haskey(all, account)
+        return 0
+    counted = all[account]
+    left = counted.since + WINDOW - time.unix_seconds()
+    if counted.count < TRIES or left <= 0
+        return 0
+    return left
+
+# Counts a wrong password.
+function failed(update all: Dict<string, Failures>, account: string)
+    now = time.unix_seconds()
+    if haskey(all, account) and all[account].since + WINDOW > now
+        all[account].count += 1
+    else
+        all[clone(account)] = Failures(count = 1, since = now)
+
+# Forgets the wrong passwords once the right one is given.
+function succeeded(update all: Dict<string, Failures>, account: string)
+    remove(all, account)
+
+# The links for choosing passwords, by the SHA-256 of each secret.
+function resets(data: string) -> Dict<string, Reset>
+    file = filesystem.join(data, "resets.json")
+    if not filesystem.is_file(file)
+        return []
+    return json.decode(io.read_file(file))
+
+# Keeps the links that still work.
+function save_resets(data: string, all: Dict<string, Reset>)
+    now = time.unix_seconds()
+    kept: Dict<string, Reset> = []
+    for key, reset in all
+        if reset.expires > now
+            kept[clone(key)] = clone(reset)
+    files.save_text(filesystem.join(data, "resets.json"), json.encode_value(kept))
+
+# A new link's secret, for an account.
+function new_reset(update all: Dict<string, Reset>, account: string) -> string
+    secret = crypto.hex(crypto.random_bytes(32))
+    all[accounts.hash(secret)] = Reset(account = clone(account), expires = time.unix_seconds() + RESET_LASTS)
+    return secret
+
+# The account a link's secret chooses the password of, while it works.
+function reset_account(all: Dict<string, Reset>, secret: string) -> string or nothing
+    key = accounts.hash(secret)
+    if haskey(all, key) and all[key].expires > time.unix_seconds()
+        return clone(all[key].account)
+    return nothing
+
+test "a session holds its account until it is finished"
+    all: Dict<string, Session> = []
+    id = start(all, "ada")
+    assert(length(id) == 64 and not haskey(all, id))
+    assert(account_of(all, clone(id)) == "ada")
+    assert(account_of(all, id + "0") == nothing and account_of(all, nothing) == nothing)
+    other = start(all, "ada")
+    finish_others(all, "ada", clone(other))
+    assert(account_of(all, clone(id)) == nothing and account_of(all, clone(other)) == "ada")
+    finish(all, other)
+    assert(length(all) == 0)
+    assert(cookie("ab", true) == "sayon_session=ab; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000; Secure")
+    assert(cookie("", false) == "sayon_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0")
+
+test "a link chooses one account's password, for an hour"
+    all: Dict<string, Reset> = []
+    secret = new_reset(all, "ada")
+    assert(reset_account(all, secret) == "ada" and reset_account(all, secret + "0") == nothing)
+    assert(all[accounts.hash(secret)].expires > time.unix_seconds() + RESET_LASTS - 60)
+
+test "wrong passwords make an account wait"
+    all: Dict<string, Failures> = []
+    for _count in range(TRIES - 1)
+        failed(all, "ada")
+    assert(wait_for(all, "ada") == 0)
+    failed(all, "ada")
+    assert(wait_for(all, "ada") > 0 and wait_for(all, "bo") == 0)
+    succeeded(all, "ada")
+    assert(wait_for(all, "ada") == 0)

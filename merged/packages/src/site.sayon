@@ -1,0 +1,173 @@
+# The registry's pages about packages: every package with a search, the
+# packages a search finds, and a page for each package with the line that
+# adds it to a project, its dependencies, and its versions.
+
+collections = import("standard/collections.sayon")
+strings = import("standard/strings.sayon")
+accounts = import("src/accounts.sayon")
+html = import("src/html.sayon")
+http = import("src/http.sayon")
+index = import("src/index.sayon")
+layout = import("src/layout.sayon")
+registry = import("src/registry.sayon")
+semver = import("src/semver.sayon")
+
+constant GUIDE = "https://github.com/sayon-lang/docs.sayon-lang.org/blob/main/language.md#versions-from-the-registry"
+
+private function count_of(count: integer, one: string, many: string) -> string
+    if count == 1
+        return "1 {one}"
+    return "{count} {many}"
+
+# Packages as a list of rows.
+private function listing(found: Array<registry.Summary>) -> Array<string>
+    out: Array<string> = ["<ul class=\"rows\">"]
+    for summary in found
+        push(out, "  <li><a class=\"row\" href=\"/packages/{summary.name}\"><span class=\"row-title\">{html.text(summary.name)}</span><span class=\"tag\">{html.text(summary.latest)}</span>")
+        if summary.description != ""
+            push(out, "    <p class=\"row-text\">{html.text(summary.description)}</p>")
+        push(out, "  </a></li>")
+    push(out, "</ul>")
+    return out
+
+# How to publish, beside the packages: the steps, as far as the viewer has
+# come.
+private function publishing(view: layout.Visitor) -> Array<string>
+    out: Array<string> = []
+    push(out, "<section class=\"box\" aria-labelledby=\"publish\">")
+    push(out, "  <div class=\"box-head\"><h2 id=\"publish\">Publish a package</h2></div>")
+    push(out, "  <div class=\"box-body\">")
+    push(out, "    <ol class=\"flow\">")
+    account = clone(view.account)
+    if account == nothing
+        push(out, "      <li><a href=\"/sign-up\">Create an account</a>, or <a href=\"/sign-in\">sign in</a>.</li>")
+    else
+        push(out, "      <li>You're signed in as <a href=\"/account\">{html.text(account)}</a>.</li>")
+    push(out, "      <li>Run <code>sayon login</code> on your computer, and approve it in the browser.</li>")
+    push(out, "      <li>Run <code>sayon publish</code> in your project.</li>")
+    push(out, "    </ol>")
+    push(out, "    <p class=\"hint\">The first account to publish a name owns it. <a href=\"{GUIDE}\">How versions work</a></p>")
+    push(out, "  </div>")
+    push(out, "</section>")
+    return out
+
+function home(state: registry.State, view: layout.Visitor) -> http.Response
+    all = registry.summaries(state)
+    body: Array<string> = []
+    push(body, "<section class=\"welcome\">")
+    push(body, "  <div class=\"wrap\">")
+    push(body, "    <h1>Packages for Sayon</h1>")
+    push(body, "    <p class=\"lead\">Find a package, name it in <code>sayon.toml</code>, and <code>sayon install</code> fetches it. <code>sayon publish</code> shares yours.</p>")
+    push(body, "    " + layout.search_box("", true))
+    push(body, "  </div>")
+    push(body, "</section>")
+    push(body, "<div class=\"wrap split\">")
+    push(body, "  <section aria-labelledby=\"every\">")
+    push(body, "    <div class=\"heading\"><h2 id=\"every\">Every package</h2><span class=\"tag\">{length(all)}</span></div>")
+    if length(all) == 0
+        push(body, "    <div class=\"rows\"><p class=\"empty\">No packages are published yet. Yours could be the first: see how on the right.</p></div>")
+    else
+        for line in listing(all)
+            push(body, "    " + line)
+    push(body, "  </section>")
+    push(body, "  <aside>")
+    for line in publishing(view)
+        push(body, "    " + line)
+    push(body, "  </aside>")
+    push(body, "</div>")
+    return layout.page(view, "Sayon packages", body, 200, false)
+
+function search(state: registry.State, view: layout.Visitor, query: string) -> http.Response
+    found = registry.search(state, query, 50)
+    words = strings.trim(query)
+    body: Array<string> = []
+    push(body, "<div class=\"wrap\">")
+    push(body, "  <header class=\"package-head\">")
+    push(body, "    <ol class=\"trail\"><li><a href=\"/\">Packages</a></li><li aria-current=\"page\">Search</li></ol>")
+    if words == ""
+        push(body, "    <h1>Search</h1>")
+        push(body, "    <p class=\"lead\">Search packages by a part of their names or descriptions.</p>")
+    else
+        push(body, "    <h1>Results for “{html.text(words)}”</h1>")
+        push(body, "    <p class=\"lead\">{count_of(length(found), "package matches", "packages match")} these words.</p>")
+    push(body, "  </header>")
+    push(body, "  <div class=\"stack results\">")
+    if length(found) == 0 and words != ""
+        push(body, "    <div class=\"rows\"><p class=\"empty\">No package has “{html.text(words)}” in its name or description. Try fewer words, or <a href=\"/\">see every package</a>.</p></div>")
+    else
+        for line in listing(found)
+            push(body, "    " + line)
+    push(body, "  </div>")
+    push(body, "</div>")
+    title = "Search · Sayon packages"
+    if words != ""
+        title = "{words} · Sayon packages"
+    return layout.page(view, title, body)
+
+function package(state: registry.State, view: layout.Visitor, name: string) -> http.Response
+    versions = index.entries(state.index, name)
+    latest = index.latest(versions)
+    if not index.valid_name(name) or latest == nothing
+        return not_found(view)
+    collections.sort_by(versions, function(first: index.Entry, second: index.Entry) return semver.compare_text(first.version, second.version) > 0)
+    owners = accounts.owners(state.data)
+    owner = "nobody"
+    if haskey(owners, name)
+        owner = clone(owners[name])
+    body: Array<string> = []
+    push(body, "<div class=\"wrap\">")
+    push(body, "  <header class=\"package-head\">")
+    push(body, "    <ol class=\"trail\"><li><a href=\"/\">Packages</a></li><li aria-current=\"page\">{html.text(name)}</li></ol>")
+    push(body, "    <h1>{html.text(name)} <span class=\"tag accent\">{html.text(latest.version)}</span></h1>")
+    if latest.description != ""
+        push(body, "    <p class=\"lead\">{html.text(latest.description)}</p>")
+    push(body, "  </header>")
+    push(body, "  <div class=\"split\">")
+    push(body, "    <div class=\"stack\">")
+    push(body, "      <section aria-labelledby=\"use\">")
+    push(body, "        <h2 id=\"use\">Add it to a project</h2>")
+    push(body, "        <p>In <code>sayon.toml</code>, under <code>[dependencies]</code>, then run <code>sayon install</code>:</p>")
+    push(body, "        <pre><code>{html.text(name)} = \"{html.text(latest.version)}\"</code></pre>")
+    push(body, "      </section>")
+    push(body, "      <section aria-labelledby=\"needs\">")
+    push(body, "        <h2 id=\"needs\">Dependencies</h2>")
+    if length(latest.dependencies) == 0
+        push(body, "        <p class=\"hint\">None: it needs only Sayon's standard library.</p>")
+    else
+        push(body, "        <ul class=\"rows\">")
+        for dependency in latest.dependencies
+            push(body, "          <li><a class=\"row\" href=\"/packages/{dependency.package}\"><span class=\"row-title\">{html.text(dependency.package)}</span><span class=\"tag\">{html.text(dependency.requirement)}</span></a></li>")
+        push(body, "        </ul>")
+    push(body, "      </section>")
+    push(body, "      <section aria-labelledby=\"versions\">")
+    push(body, "        <h2 id=\"versions\">Versions</h2>")
+    push(body, "        <div class=\"table\"><table>")
+    push(body, "          <thead><tr><th scope=\"col\">Version</th><th scope=\"col\">Published</th><th scope=\"col\" class=\"hide-small\">Digest</th></tr></thead>")
+    push(body, "          <tbody>")
+    for entry in versions
+        push(body, "            <tr><td>{html.text(entry.version)}</td><td>{html.text(layout.day(entry.published))}</td><td class=\"hide-small\"><code title=\"{html.escape(entry.digest)}\">{html.text(strings.slice(entry.digest, 0, 19))}…</code></td></tr>")
+    push(body, "          </tbody>")
+    push(body, "        </table></div>")
+    push(body, "      </section>")
+    push(body, "    </div>")
+    push(body, "    <aside class=\"box\" aria-label=\"The package\">")
+    push(body, "      <div class=\"box-body\">")
+    push(body, "        <dl class=\"facts\">")
+    push(body, "          <dt>Latest version</dt><dd>{html.text(latest.version)}</dd>")
+    push(body, "          <dt>Published</dt><dd>{html.text(layout.day(latest.published))}</dd>")
+    push(body, "          <dt>Versions</dt><dd>{length(versions)}</dd>")
+    push(body, "          <dt>Owner</dt><dd>{html.text(owner)}</dd>")
+    push(body, "        </dl>")
+    push(body, "      </div>")
+    push(body, "    </aside>")
+    push(body, "  </div>")
+    push(body, "</div>")
+    return layout.page(view, "{name} · Sayon packages", body)
+
+function not_found(view: layout.Visitor) -> http.Response
+    body: Array<string> = []
+    push(body, "<div class=\"auth\">")
+    push(body, "  <h1>Nothing is here</h1>")
+    push(body, "  <p class=\"lead\">No page of the registry has this address. Search for a package above, or <a href=\"/\">see every package</a>.</p>")
+    push(body, "</div>")
+    return layout.page(view, "Not found · Sayon packages", body, 404)

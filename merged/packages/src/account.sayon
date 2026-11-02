@@ -1,0 +1,531 @@
+# The registry's pages for accounts: creating one, signing in and out; an
+# account's own page, with its tokens, packages, and password; choosing a
+# password from a link of the operator's; and approving the sign-ins that
+# `sayon login` starts (src/logins.sayon).
+#
+# A browser holds its session in a cookie that it sends only to this site
+# and only on its own pages' requests (SameSite), and every form must come
+# from one of the registry's pages, as browsers say in `Origin`, so that no
+# other site can make a signed-in browser act.
+
+crypto = import("standard/crypto.sayon")
+strings = import("standard/strings.sayon")
+time = import("standard/time.sayon")
+accounts = import("src/accounts.sayon")
+html = import("src/html.sayon")
+http = import("src/http.sayon")
+index = import("src/index.sayon")
+layout = import("src/layout.sayon")
+logins = import("src/logins.sayon")
+registry = import("src/registry.sayon")
+sessions = import("src/sessions.sayon")
+
+constant FOREIGN = "The form did not come from the registry's own page, so nothing was done. Open the page again and send it from there."
+
+# Names kept for the registry, so that no account seems to speak for it.
+private function reserved() -> Array<string>
+    return ["admin", "administrator", "operator", "packages", "registry", "root", "sayon", "security", "standard", "support"]
+
+private function value(fields: Dict<string, string>, name: string) -> string
+    if haskey(fields, name)
+        return clone(fields[name])
+    return ""
+
+private function count_of(count: integer, one: string, many: string) -> string
+    if count == 1
+        return "1 {one}"
+    return "{count} {many}"
+
+# Whether a form came from one of the registry's own pages.
+function from_here(request: http.Request, state: registry.State) -> boolean
+    if not haskey(request.headers, "origin")
+        return false
+    return request.headers["origin"] == state.address
+
+# Whether the registry is reached over HTTPS, so that its cookie must be.
+private function secure(state: registry.State) -> boolean
+    return strings.starts_with(state.address, "https://")
+
+# Where to go once signed in or out: a page of the registry, never another
+# site, nor back to signing in.
+function next_page(text: string, fallback: string) -> string
+    if not strings.starts_with(text, "/") or strings.starts_with(text, "//")
+        return clone(fallback)
+    for symbol in ["\\", "\r", "\n", "\""]
+        if strings.contains(text, symbol)
+            return clone(fallback)
+    if strings.starts_with(text, "/sign-")
+        return clone(fallback)
+    return clone(text)
+
+# The code of a sign-in's page, /login/<code>, or nothing.
+private function login_code(page: string) -> string or nothing
+    if not strings.starts_with(page, "/login/")
+        return nothing
+    code = strings.slice(page, 7, length(page))
+    if not logins.valid_code(code)
+        return nothing
+    return code
+
+# A code with each letter in its own box.
+private function letters(code: string) -> string
+    spoken: Array<string> = []
+    boxes: Array<string> = []
+    for letter in strings.characters(code)
+        if letter == "-"
+            push(boxes, "<span class=\"dash\">-</span>")
+        else
+            push(spoken, clone(letter))
+            push(boxes, "<span>{letter}</span>")
+    return "<div class=\"letters\" role=\"img\" aria-label=\"The code {strings.join(spoken, " ")}\">{strings.join(boxes, "")}</div>"
+
+# A narrow page with one box, as the pages for signing in have.
+private function boxed(view: layout.Visitor, title: string, inside: Array<string>, after: Array<string>, status: integer) -> http.Response
+    body: Array<string> = ["<div class=\"auth\">", "  <div class=\"box\">", "    <div class=\"box-body\">"]
+    for line in inside
+        push(body, "      " + line)
+    push(body, "    </div>")
+    push(body, "  </div>")
+    for line in after
+        push(body, "  " + line)
+    push(body, "</div>")
+    return layout.page(view, title + " · Sayon packages", body, status)
+
+# The switch between signing in and making an account, as links.
+private function account_switch(sign_in: string, sign_up: string, making: boolean) -> string
+    first = " aria-current=\"page\""
+    second = ""
+    if making
+        first = ""
+        second = " aria-current=\"page\""
+    return "<nav class=\"switch\" aria-label=\"Account\"><a href=\"{html.escape(sign_in)}\"{first}>Sign in</a><a href=\"{html.escape(sign_up)}\"{second}>Create account</a></nav>"
+
+# The fields that sign in, or with `making` make an account, ending in the
+# button `action`.
+private function account_form(making: boolean, next: string, approve: boolean, name: string, wrong: boolean, action: string) -> Array<string>
+    target = "/sign-in"
+    if making
+        target = "/sign-up"
+    out = ["<form method=\"post\" action=\"{target}\">", "  <input type=\"hidden\" name=\"next\" value=\"{html.escape(next)}\">"]
+    if approve
+        push(out, "  <input type=\"hidden\" name=\"approve\" value=\"yes\">")
+    name_hint = ""
+    if making
+        name_hint = "Lowercase letters, digits, and `_`, starting with a letter. It shows as the owner of what you publish."
+    for line in layout.field("Account name", "name", "text", name, "username", name_hint, wrong, " required maxlength=\"64\" autocapitalize=\"none\" spellcheck=\"false\"")
+        push(out, "  " + line)
+    if making
+        for line in layout.field("Password", "password", "password", "", "new-password", "At least {accounts.SHORTEST_PASSWORD} characters. A few words in a row are long and easy to remember.", false, " required minlength=\"{accounts.SHORTEST_PASSWORD}\" maxlength=\"{accounts.LONGEST_PASSWORD}\"")
+            push(out, "  " + line)
+        for line in layout.field("Password again", "again", "password", "", "new-password", "", false, " required")
+            push(out, "  " + line)
+    else
+        for line in layout.field("Password", "password", "password", "", "current-password", "", wrong, " required")
+            push(out, "  " + line)
+    push(out, "  <button class=\"button primary wide large\" type=\"submit\">{action}</button>")
+    push(out, "</form>")
+    return out
+
+function sign_in_page(view: layout.Visitor, next: string, name: string, problem: string, status: integer = 200) -> http.Response
+    inside: Array<string> = []
+    push(inside, account_switch("/sign-in?next={http.encode(next)}", "/sign-up?next={http.encode(next)}", false))
+    push(inside, "<h1>Sign in</h1>")
+    push(inside, "<p class=\"lead\">To publish packages, and to keep the tokens that publish them.</p>")
+    if problem != ""
+        push(inside, layout.notice("error", problem))
+    for line in account_form(false, next, false, name, problem != "", "Sign in")
+        push(inside, clone(line))
+    after = ["<p class=\"after\">Forgot the password? The registry's operator can send you a link to choose a new one.</p>"]
+    return boxed(view, "Sign in", inside, after, status)
+
+function sign_up_page(view: layout.Visitor, next: string, name: string, problem: string, status: integer = 200) -> http.Response
+    inside: Array<string> = []
+    push(inside, account_switch("/sign-in?next={http.encode(next)}", "/sign-up?next={http.encode(next)}", true))
+    push(inside, "<h1>Create an account</h1>")
+    push(inside, "<p class=\"lead\">The registry asks for no email address, so keep the password somewhere safe, such as a password manager.</p>")
+    if problem != ""
+        push(inside, layout.notice("error", problem))
+    for line in account_form(true, next, false, name, problem != "", "Create the account")
+        push(inside, clone(line))
+    return boxed(view, "Create an account", inside, [], status)
+
+# The page of a sign-in that `sayon login` started, for `view`: approving
+# it, or signing in or making an account first; or how it ended.
+function login_page(state: registry.State, view: layout.Visitor, code: string, making: boolean = false, name: string = "", problem: string = "", status: integer = 200) -> http.Response
+    all = logins.logins(state.data)
+    key = logins.find(all, code)
+    if key == nothing or not logins.valid_code(code)
+        inside = ["<h1>This sign-in is over</h1>", "<p class=\"lead\">A sign-in from <code>sayon login</code> ends once it is finished, or after ten minutes. To sign in, run <code>sayon login</code> again.</p>"]
+        return boxed(view, "Sign-in over", inside, [], 410)
+    login = clone(all[key])
+    machine = html.text(login.machine)
+    approved = clone(login.account)
+    if approved != nothing
+        inside = ["<div class=\"seal\">{layout.CHECK_ICON}</div>", "<h1 class=\"centered\">You're signed in</h1>"]
+        push(inside, "<p class=\"lead centered\"><code>sayon login</code> on <strong>{machine}</strong> now publishes as <strong>{html.text(approved)}</strong>. Close this page and go back to your terminal.</p>")
+        return boxed(view, "Signed in", inside, [], 200)
+    if login.denied
+        inside = ["<div class=\"seal\">{layout.STOP_ICON}</div>", "<h1 class=\"centered\">Sign-in denied</h1>"]
+        push(inside, "<p class=\"lead centered\"><code>sayon login</code> on <strong>{machine}</strong> gets no token. If you did mean to sign in, run <code>sayon login</code> again.</p>")
+        return boxed(view, "Sign-in denied", inside, [], 200)
+    page = "/login/" + code
+    who = "you"
+    account = clone(view.account)
+    if account != nothing
+        who = "<strong>{html.text(account)}</strong>"
+    inside: Array<string> = []
+    if account == nothing
+        push(inside, account_switch(page, page + "?new=yes", making))
+        if making
+            push(inside, "<h1>Create an account to approve</h1>")
+        else
+            push(inside, "<h1>Sign in to approve</h1>")
+    else
+        push(inside, "<h1>Approve this sign-in?</h1>")
+    push(inside, "<div class=\"request\">")
+    push(inside, "  <p><code>sayon login</code> on <strong>{machine}</strong> asks to publish packages as {who}.</p>")
+    push(inside, "  " + letters(code))
+    push(inside, "  <p>Check that your terminal shows this code.</p>")
+    push(inside, "</div>")
+    if problem != ""
+        push(inside, layout.notice("error", problem))
+    after: Array<string> = []
+    if account == nothing
+        action = "Sign in and approve"
+        if making
+            action = "Create the account and approve"
+        for line in account_form(making, page, true, name, problem != "", action)
+            push(inside, clone(line))
+    else
+        push(inside, "<form method=\"post\" action=\"{page}\"><input type=\"hidden\" name=\"decision\" value=\"approve\"><button class=\"button primary wide large\" type=\"submit\">Approve</button></form>")
+        push(inside, "<form class=\"deny\" method=\"post\" action=\"{page}\"><input type=\"hidden\" name=\"decision\" value=\"deny\"><button class=\"button quiet wide\" type=\"submit\">Deny</button></form>")
+        push(after, "<form class=\"after\" method=\"post\" action=\"/sign-out\"><input type=\"hidden\" name=\"next\" value=\"{page}\">Approve only a sign-in you started. Not {html.text(account)}? <button class=\"link\" type=\"submit\">Sign out</button></form>")
+    return boxed(view, "Approve a sign-in", inside, after, status)
+
+# The page a form goes back to with a problem: the sign-in's when it came
+# from one, or else signing in, or making an account.
+private function again(state: registry.State, view: layout.Visitor, next: string, making: boolean, name: string, problem: string, status: integer) -> http.Response
+    code = login_code(next)
+    if code != nothing
+        return login_page(state, view, code, making, name, problem, status)
+    if making
+        return sign_up_page(view, next, name, problem, status)
+    return sign_in_page(view, next, name, problem, status)
+
+# Approves or denies a sign-in still waiting; whether it was.
+private function decide(state: registry.State, code: string, account: string, approve: boolean) -> boolean
+    all = logins.logins(state.data)
+    key = logins.find(all, code)
+    if key == nothing
+        return false
+    if all[key].account != nothing or all[key].denied
+        return false
+    if approve
+        all[key].account = clone(account)
+    else
+        all[key].denied = true
+    logins.save_logins(state.data, all)
+    return true
+
+# Signs the browser in, approves the sign-in it came from when asked, and
+# goes on to `next`.
+private function signed_in(state: registry.State, account: string, next: string, approve: boolean) -> http.Response
+    all = sessions.sessions(state.data)
+    id = sessions.start(all, account)
+    sessions.save_sessions(state.data, all)
+    code = login_code(next)
+    if approve and code != nothing
+        decide(state, code, account, true)
+    response = http.redirect(next)
+    response.headers["Set-Cookie"] = sessions.cookie(id, secure(state))
+    return response
+
+function sign_in(request: http.Request, state: registry.State, view: layout.Visitor) -> http.Response
+    fields = http.form(request)
+    name = strings.lower(strings.trim(value(fields, "name")))
+    password = value(fields, "password")
+    next = next_page(value(fields, "next"), "/account")
+    approve = value(fields, "approve") == "yes"
+    if not from_here(request, state)
+        return again(state, view, next, false, name, FOREIGN, 403)
+    all = accounts.accounts(state.data)
+    failures = sessions.failures(state.data)
+    waiting = sessions.wait_for(failures, name)
+    if waiting > 0
+        minutes = (waiting + 59) / 60
+        return again(state, view, next, false, name, "Too many wrong passwords were given for this account. Try again in {count_of(minutes, "minute", "minutes")}.", 429)
+    if not haskey(all, name) or not accounts.password_is(all[name], password)
+        if haskey(all, name)
+            sessions.failed(failures, name)
+            sessions.save_failures(state.data, failures)
+        return again(state, view, next, false, name, "The account's name or the password is wrong.", 401)
+    if haskey(failures, name)
+        sessions.succeeded(failures, name)
+        sessions.save_failures(state.data, failures)
+    return signed_in(state, name, next, approve)
+
+function sign_up(request: http.Request, state: registry.State, view: layout.Visitor) -> http.Response
+    fields = http.form(request)
+    name = strings.lower(strings.trim(value(fields, "name")))
+    password = value(fields, "password")
+    next = next_page(value(fields, "next"), "/account?done=welcome")
+    approve = value(fields, "approve") == "yes"
+    if not from_here(request, state)
+        return again(state, view, next, true, name, FOREIGN, 403)
+    all = accounts.accounts(state.data)
+    problem = ""
+    status = 400
+    if not index.valid_name(name)
+        problem = "An account's name is lowercase letters, digits, and `_`, starting with a letter, 64 characters at most."
+    elseif collections_has(reserved(), name)
+        problem = "The name `{name}` is kept for the registry. Choose another."
+    elseif haskey(all, name)
+        problem = "The name `{name}` is taken. Choose another, or sign in if the account is yours."
+        status = 409
+    else
+        weak = accounts.password_problem(name, password)
+        if weak != nothing
+            problem = weak
+        elseif password != value(fields, "again")
+            problem = "The two passwords differ. Type the same password in both."
+    if problem != ""
+        return again(state, view, next, true, name, problem, status)
+    all[clone(name)] = accounts.Account(created = time.format(time.now()), password = crypto.hash_password(password))
+    accounts.save_accounts(state.data, all)
+    return signed_in(state, name, next, approve)
+
+private function collections_has(names: Array<string>, name: string) -> boolean
+    for each in names
+        if each == name
+            return true
+    return false
+
+function sign_out(request: http.Request, state: registry.State, view: layout.Visitor) -> http.Response
+    next = next_page(value(http.form(request), "next"), "/")
+    if not from_here(request, state)
+        return sign_in_page(view, next, "", FOREIGN, 403)
+    id = http.cookie(request, sessions.COOKIE)
+    if id != nothing
+        all = sessions.sessions(state.data)
+        sessions.finish(all, id)
+        sessions.save_sessions(state.data, all)
+    response = http.redirect(next)
+    response.headers["Set-Cookie"] = sessions.cookie("", secure(state))
+    return response
+
+# Approving or denying a sign-in, from its page.
+function login_decision(request: http.Request, state: registry.State, view: layout.Visitor, code: string) -> http.Response
+    page = "/login/" + code
+    if not from_here(request, state)
+        return login_page(state, view, code, false, "", FOREIGN, 403)
+    account = clone(view.account)
+    if account == nothing
+        return http.redirect(page)
+    decision = value(http.form(request), "decision")
+    if decision == "approve" or decision == "deny"
+        decide(state, code, account, decision == "approve")
+    return http.redirect(page)
+
+# An account's page, for its owner.
+function account_page(state: registry.State, view: layout.Visitor, done: string, problem: string = "", status: integer = 200) -> http.Response
+    account = clone(view.account)
+    if account == nothing
+        return http.redirect("/sign-in?next=%2Faccount")
+    all = accounts.accounts(state.data)
+    since = ""
+    if haskey(all, account)
+        since = layout.day(all[account].created)
+    kept = accounts.tokens(state.data)
+    mine: Array<string> = []
+    for key, token in kept
+        if token.account == account
+            push(mine, clone(key))
+    owned = accounts.packages_of(accounts.owners(state.data), account)
+    body: Array<string> = []
+    push(body, "<div class=\"wrap\">")
+    push(body, "  <header class=\"account-head\">")
+    push(body, "    <span class=\"initial\" aria-hidden=\"true\">{html.text(strings.slice(account, 0, 1))}</span>")
+    push(body, "    <div><h1>{html.text(account)}</h1><p>An account since {html.text(since)}</p></div>")
+    push(body, "  </header>")
+    push(body, "  <div class=\"split\">")
+    push(body, "    <div class=\"stack\">")
+    match done
+        case "welcome"
+            push(body, "      " + layout.notice("success", "Your account is ready. Run `sayon login` on your computer to publish from it."))
+        case "revoked"
+            push(body, "      " + layout.notice("success", "The token is revoked: whatever used it can no longer publish."))
+        case "missing"
+            push(body, "      " + layout.notice("error", "That token was revoked already."))
+        case "password"
+            push(body, "      " + layout.notice("success", "Your password is changed, and every other browser is signed out."))
+        case _
+            if problem != ""
+                push(body, "      " + layout.notice("error", problem))
+    push(body, "      <section class=\"box\" id=\"tokens\" aria-labelledby=\"tokens-title\">")
+    push(body, "        <div class=\"box-head\"><h2 id=\"tokens-title\">Tokens</h2><span class=\"tag\">{length(mine)}</span></div>")
+    push(body, "        <div class=\"box-body\"><p class=\"hint\">A token lets <code>sayon publish</code> act for you. <code>sayon login</code> makes one for each computer, and <code>sayon logout</code> revokes it. For a service, such as a build server, make one here and give it to <code>sayon login --token</code>, or set <code>SAYON_TOKEN</code>.</p></div>")
+    if length(mine) > 0
+        push(body, "        <div class=\"table\"><table>")
+        push(body, "          <thead><tr><th scope=\"col\">For</th><th scope=\"col\" class=\"hide-small\">Made</th><th scope=\"col\">Last used</th><th scope=\"col\" class=\"end\"><span class=\"hidden\">Revoke</span></th></tr></thead>")
+        push(body, "          <tbody>")
+        for key in mine
+            token = clone(kept[key])
+            used = "Never"
+            when = clone(token.used)
+            if when != nothing
+                used = layout.day(when)
+            id = accounts.token_id(key)
+            push(body, "            <tr><td>{html.text(token.name)}</td><td class=\"hide-small\">{html.text(layout.day(token.created))}</td><td>{html.text(used)}</td><td class=\"end\"><form method=\"post\" action=\"/account/tokens/{id}/revoke\"><button class=\"button small danger\" type=\"submit\" aria-label=\"Revoke the token for {html.escape(token.name)}\">Revoke</button></form></td></tr>")
+        push(body, "          </tbody>")
+        push(body, "        </table></div>")
+    push(body, "        <form class=\"box-foot inline-form\" method=\"post\" action=\"/account/tokens\">")
+    push(body, "          <label class=\"hidden\" for=\"token-name\">What the new token is for</label>")
+    push(body, "          <input class=\"input\" id=\"token-name\" name=\"name\" required maxlength=\"64\" placeholder=\"What it is for, such as build server\">")
+    push(body, "          <button class=\"button primary\" type=\"submit\">Make a token</button>")
+    push(body, "        </form>")
+    push(body, "      </section>")
+    push(body, "      <section class=\"box\" aria-labelledby=\"packages-title\">")
+    push(body, "        <div class=\"box-head\"><h2 id=\"packages-title\">Packages</h2><span class=\"tag\">{length(owned)}</span></div>")
+    if length(owned) == 0
+        push(body, "        <p class=\"empty\">You own no packages yet. Run <code>sayon publish</code> in a project to publish its package.</p>")
+    else
+        push(body, "        <ul class=\"rows\">")
+        for name in owned
+            push(body, "          <li><a class=\"row\" href=\"/packages/{name}\"><span class=\"row-title\">{html.text(name)}</span></a></li>")
+        push(body, "        </ul>")
+    push(body, "      </section>")
+    push(body, "      <section class=\"box\" id=\"password\" aria-labelledby=\"password-title\">")
+    push(body, "        <div class=\"box-head\"><h2 id=\"password-title\">Password</h2></div>")
+    push(body, "        <form class=\"box-body\" method=\"post\" action=\"/account/password\">")
+    for line in layout.field("Current password", "current", "password", "", "current-password", "", false, " required")
+        push(body, "          " + line)
+    for line in layout.field("New password", "password", "password", "", "new-password", "At least {accounts.SHORTEST_PASSWORD} characters.", false, " required minlength=\"{accounts.SHORTEST_PASSWORD}\" maxlength=\"{accounts.LONGEST_PASSWORD}\"")
+        push(body, "          " + line)
+    for line in layout.field("New password again", "again", "password", "", "new-password", "", false, " required")
+        push(body, "          " + line)
+    push(body, "          <button class=\"button\" type=\"submit\">Change the password</button>")
+    push(body, "        </form>")
+    push(body, "      </section>")
+    push(body, "    </div>")
+    push(body, "    <aside class=\"box\" aria-labelledby=\"browser-title\">")
+    push(body, "      <div class=\"box-head\"><h2 id=\"browser-title\">This browser</h2></div>")
+    push(body, "      <div class=\"box-body\">")
+    push(body, "        <p>You're signed in as <strong>{html.text(account)}</strong> for 30 days, or until you sign out.</p>")
+    push(body, "        <form method=\"post\" action=\"/sign-out\"><button class=\"button wide\" type=\"submit\">Sign out</button></form>")
+    push(body, "      </div>")
+    push(body, "    </aside>")
+    push(body, "  </div>")
+    push(body, "</div>")
+    return layout.page(view, "{account} · Sayon packages", body, status)
+
+# Makes a token, from the account's page, and shows it this once.
+function make_token(request: http.Request, state: registry.State, view: layout.Visitor) -> http.Response
+    account = clone(view.account)
+    if account == nothing
+        return http.redirect("/sign-in?next=%2Faccount")
+    if not from_here(request, state)
+        return account_page(state, view, "", FOREIGN, 403)
+    raw = strings.trim(value(http.form(request), "name"))
+    if raw == ""
+        return account_page(state, view, "", "Say what the token is for, such as `build server`, so that you know which to revoke later.", 400)
+    name = logins.machine_name(raw)
+    all = accounts.tokens(state.data)
+    token = accounts.add_token(all, account, name)
+    accounts.save_tokens(state.data, all)
+    inside = ["<div class=\"seal\">{layout.CHECK_ICON}</div>", "<h1 class=\"centered\">Your new token</h1>"]
+    push(inside, "<p class=\"lead centered\">For <strong>{html.text(name)}</strong>. Copy it now: the registry keeps only its hash, so this is the one time it is shown.</p>")
+    push(inside, "<pre class=\"secret\"><code>{html.text(token)}</code></pre>")
+    push(inside, "<p class=\"hint\">Give it to <code>sayon login --token</code>, or set <code>SAYON_TOKEN</code> where <code>sayon publish</code> runs. Revoke it on your account's page once it is no longer needed.</p>")
+    push(inside, "<p><a class=\"button wide\" href=\"/account#tokens\">Back to your account</a></p>")
+    return boxed(view, "Your new token", inside, [], 200)
+
+function revoke_token(request: http.Request, state: registry.State, view: layout.Visitor, id: string) -> http.Response
+    account = clone(view.account)
+    if account == nothing
+        return http.redirect("/sign-in?next=%2Faccount")
+    if not from_here(request, state)
+        return account_page(state, view, "", FOREIGN, 403)
+    all = accounts.tokens(state.data)
+    if not accounts.remove_tokens(all, account, clone(id))
+        return http.redirect("/account?done=missing#tokens")
+    accounts.save_tokens(state.data, all)
+    return http.redirect("/account?done=revoked#tokens")
+
+function change_password(request: http.Request, state: registry.State, view: layout.Visitor) -> http.Response
+    account = clone(view.account)
+    if account == nothing
+        return http.redirect("/sign-in?next=%2Faccount")
+    if not from_here(request, state)
+        return account_page(state, view, "", FOREIGN, 403)
+    fields = http.form(request)
+    password = value(fields, "password")
+    all = accounts.accounts(state.data)
+    if not haskey(all, account)
+        return http.redirect("/sign-in")
+    if not accounts.password_is(all[account], value(fields, "current"))
+        return account_page(state, view, "", "The current password is wrong, so the password is unchanged.", 401)
+    weak = accounts.password_problem(account, password)
+    if weak != nothing
+        return account_page(state, view, "", weak, 400)
+    if password != value(fields, "again")
+        return account_page(state, view, "", "The two new passwords differ. Type the same password in both.", 400)
+    all[account].password = crypto.hash_password(password)
+    accounts.save_accounts(state.data, all)
+    kept = sessions.sessions(state.data)
+    sessions.finish_others(kept, account, http.cookie(request, sessions.COOKIE))
+    sessions.save_sessions(state.data, kept)
+    return http.redirect("/account?done=password")
+
+# The page of a link for choosing a password.
+function reset_page(state: registry.State, view: layout.Visitor, secret: string, problem: string = "", status: integer = 200) -> http.Response
+    account = sessions.reset_account(sessions.resets(state.data), secret)
+    if account == nothing
+        inside = ["<h1>This link no longer works</h1>", "<p class=\"lead\">A link for choosing a password works once, for an hour. Ask the registry's operator for a new one.</p>"]
+        return boxed(view, "Link expired", inside, [], 410)
+    inside: Array<string> = []
+    push(inside, "<h1>Choose a password</h1>")
+    push(inside, "<p class=\"lead\">For the account <strong>{html.text(account)}</strong>. You'll be signed in with it, here and from then on.</p>")
+    if problem != ""
+        push(inside, layout.notice("error", problem))
+    push(inside, "<form method=\"post\" action=\"/reset/{html.escape(secret)}\">")
+    push(inside, "  <input type=\"text\" name=\"name\" value=\"{html.escape(account)}\" autocomplete=\"username\" hidden>")
+    for line in layout.field("Password", "password", "password", "", "new-password", "At least {accounts.SHORTEST_PASSWORD} characters. A few words in a row are long and easy to remember.", problem != "", " required minlength=\"{accounts.SHORTEST_PASSWORD}\" maxlength=\"{accounts.LONGEST_PASSWORD}\"")
+        push(inside, "  " + line)
+    for line in layout.field("Password again", "again", "password", "", "new-password", "", false, " required")
+        push(inside, "  " + line)
+    push(inside, "  <button class=\"button primary wide large\" type=\"submit\">Save the password</button>")
+    push(inside, "</form>")
+    return boxed(view, "Choose a password", inside, [], status)
+
+function reset_password(request: http.Request, state: registry.State, view: layout.Visitor, secret: string) -> http.Response
+    if not from_here(request, state)
+        return reset_page(state, view, secret, FOREIGN, 403)
+    resets = sessions.resets(state.data)
+    account = sessions.reset_account(resets, secret)
+    if account == nothing
+        return reset_page(state, view, secret)
+    fields = http.form(request)
+    password = value(fields, "password")
+    weak = accounts.password_problem(account, password)
+    if weak != nothing
+        return reset_page(state, view, secret, weak, 400)
+    if password != value(fields, "again")
+        return reset_page(state, view, secret, "The two passwords differ. Type the same password in both.", 400)
+    all = accounts.accounts(state.data)
+    if not haskey(all, account)
+        return reset_page(state, view, secret)
+    all[account].password = crypto.hash_password(password)
+    accounts.save_accounts(state.data, all)
+    remove(resets, accounts.hash(secret))
+    sessions.save_resets(state.data, resets)
+    kept = sessions.sessions(state.data)
+    sessions.finish_others(kept, account, nothing)
+    sessions.save_sessions(state.data, kept)
+    return signed_in(state, account, "/account?done=password", false)
+
+test "pages to go on to stay on the registry"
+    assert(next_page("/packages/strings", "/") == "/packages/strings")
+    assert(next_page("/login/BCDF-GHJK", "/") == "/login/BCDF-GHJK")
+    for away in ["https://example.com", "//example.com", "/\\example.com", "", "packages", "/sign-in?next=/x", "/a\r\nSet-Cookie: x"]
+        assert(next_page(away, "/account") == "/account", away)
+    assert(login_code("/login/BCDF-GHJK") == "BCDF-GHJK" and login_code("/login/x") == nothing and login_code("/account") == nothing)
