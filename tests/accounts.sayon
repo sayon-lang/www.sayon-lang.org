@@ -3,6 +3,7 @@ json = import("standard/json.sayon")
 network = import("standard/network.sayon")
 strings = import("standard/strings.sayon")
 threads = import("standard/threads.sayon")
+docs = import("src/pages/docs.sayon")
 registry = import("src/packages/registry.sayon")
 server = import("src/server.sayon")
 client = import("tests/client.sayon")
@@ -19,7 +20,7 @@ test "accounts are made and signed in to, and approve the sign-ins sayon login s
     listener = network.listen("127.0.0.1", 0)
     port = listener.address().port
     address = "http://127.0.0.1:{port}"
-    state = registry.State(data = clone(DATA), index = filesystem.join(DATA, "index"), address = clone(address), admin = "operator", guides = [])
+    state = registry.State(data = clone(DATA), index = filesystem.join(DATA, "index"), address = clone(address), admin = "operator", guides = docs.none())
     running = threads.spawn(function()
         server.serve(listener, state, 18)
     )
@@ -40,6 +41,8 @@ test "accounts are made and signed in to, and approve the sign-ins sayon login s
     page = client.send(port, "GET", "/account", signed, "")
     assert(page.status == 200 and strings.contains(page.body, "<h1>ada</h1>"), page.body)
     assert(client.header_of(page, "x-frame-options") == "DENY" and client.header_of(page, "cache-control") == "no-store")
+    # The account's pages share tabs, the one shown marked.
+    assert(strings.contains(page.body, "<nav class=\"tabs\" aria-label=\"Your account\"><a href=\"/account\" aria-current=\"page\">Overview</a><a href=\"/account/tokens\">Tokens</a><a href=\"/account/settings\">Settings</a><a class=\"tabs-aside\" href=\"/users/ada\">Your profile</a></nav>"), page.body)
 
     # sayon login starts a sign-in, which waits until it is approved.
     begun = client.send(port, "POST", "/api/v1/logins", [], "{{\"machine\": \"test computer\"}}")

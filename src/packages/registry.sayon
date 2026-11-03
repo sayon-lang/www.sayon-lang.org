@@ -9,7 +9,7 @@ docs = import("src/pages/docs.sayon")
 # The website: its data folder (accounts, owners, archives), its index
 # folder, the address it serves at, the operator's token, and the guides,
 # made HTML when it starts.
-type State = [data: string, index: string, address: string, admin: string, guides: Array<docs.Guide>]
+type State = [data: string, index: string, address: string, admin: string, guides: docs.Docs]
 
 # A package as a list shows it.
 type Summary = [name: string, latest: string, description: string]

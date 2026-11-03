@@ -5,6 +5,7 @@ threads = import("standard/threads.sayon")
 accounts = import("src/accounts/accounts.sayon")
 archive = import("src/packages/archive.sayon")
 index = import("src/packages/index.sayon")
+docs = import("src/pages/docs.sayon")
 registry = import("src/packages/registry.sayon")
 server = import("src/server.sayon")
 
@@ -37,7 +38,7 @@ test "publications reach the index, and the pages and archives show them"
         return
     listener = network.listen("127.0.0.1", 0)
     address = "http://127.0.0.1:{listener.address().port}"
-    state = registry.State(data = clone(DATA), index = filesystem.join(DATA, "index"), address = clone(address), admin = "operator", guides = [])
+    state = registry.State(data = clone(DATA), index = filesystem.join(DATA, "index"), address = clone(address), admin = "operator", guides = docs.none())
     folder = clone(state.index)
     running = threads.spawn(function()
         server.serve(listener, state, 11)

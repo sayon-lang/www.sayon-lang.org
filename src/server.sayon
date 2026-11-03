@@ -19,6 +19,7 @@ moderation = import("src/community/moderation.sayon")
 api = import("src/packages/api.sayon")
 docs = import("src/pages/docs.sayon")
 home = import("src/pages/home.sayon")
+search = import("src/pages/search.sayon")
 http = import("src/web/http.sayon")
 layout = import("src/web/layout.sayon")
 registry = import("src/packages/registry.sayon")
@@ -204,24 +205,31 @@ function route(request: http.Request, state: registry.State) -> http.Response
     if request.method != "GET"
         return http.refuse(405, "pages are read with GET, and their forms sent with POST")
     if path == "/"
-        return home.home(view)
+        return home.home(view, state.guides)
     if path == "/docs" or strings.starts_with(path, "/docs/")
         slug = strings.trim_end(strings.slice(path, 5, length(path)))
         while strings.starts_with(slug, "/")
             slug = strings.slice(slug, 1, length(slug))
         while strings.ends_with(slug, "/")
             slug = strings.slice(slug, 0, length(slug) - 1)
+        if slug == ""
+            return docs.home(state.guides, view)
+        now_at = docs.moved(slug)
+        if now_at != nothing
+            return http.redirect(now_at, 308)
+        category = docs.find_category(state.guides, slug)
+        if category != nothing
+            return docs.category_page(state.guides, category, view)
         position = docs.find(state.guides, slug)
         if position == nothing
             return site.not_found(view)
         return docs.page(state.guides, position, view)
-    if path == "/packages" or path == "/search"
+    if path == "/search"
+        return search.results(state, view, asked(request, "q"))
+    if path == "/packages"
         query = ""
         if haskey(request.query, "q")
             query = clone(request.query["q"])
-        if path == "/search"
-            return http.redirect("/packages?q=" + http.encode(query), 308)
-        view.query = clone(query)
         return site.packages(state, view, query)
     if length(parts) > 0 and parts[0] == "community"
         return community_page(request, state, view, parts)

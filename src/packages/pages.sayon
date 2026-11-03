@@ -61,7 +61,7 @@ function packages(state: registry.State, view: layout.Visitor, query: string) ->
     push(body, "  <div class=\"wrap\">")
     push(body, "    <h1>Packages for Sayon</h1>")
     push(body, "    <p class=\"lead\">Find a package, name it in <code>sayon.toml</code>, and <code>sayon install</code> fetches it. <code>sayon publish</code> shares yours.</p>")
-    push(body, "    " + layout.search_box("", true))
+    push(body, "    " + layout.search_box("", true, "Search packages", "/packages"))
     push(body, "  </div>")
     push(body, "</section>")
     push(body, "<div class=\"wrap split\">")
@@ -93,6 +93,7 @@ private function search(state: registry.State, view: layout.Visitor, query: stri
     else
         push(body, "    <h1>Results for “{html.text(words)}”</h1>")
         push(body, "    <p class=\"lead\">{count_of(length(found), "package matches", "packages match")} these words.</p>")
+    push(body, "    " + layout.search_box(words, true, "Search packages", "/packages"))
     push(body, "  </header>")
     push(body, "  <div class=\"stack results\">")
     if length(found) == 0 and words != ""
@@ -102,7 +103,7 @@ private function search(state: registry.State, view: layout.Visitor, query: stri
             push(body, "    " + line)
     push(body, "  </div>")
     push(body, "</div>")
-    return layout.page(view, "{words} · Sayon packages", body, 200, true, "packages")
+    return layout.page(view, "{words} · Sayon packages", body, 200, false, "packages")
 
 function package(state: registry.State, view: layout.Visitor, name: string) -> http.Response
     versions = index.entries(state.index, name)

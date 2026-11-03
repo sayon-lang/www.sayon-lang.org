@@ -1,0 +1,202 @@
+# The website's search, at /search: the guides' sections, by their
+# headings and their text; the packages, by their names and descriptions;
+# and the forum's threads, by their titles. A section holds every word of
+# the search to be found, and one whose heading holds a word comes before
+# one whose text does.
+
+collections = import("standard/collections.sayon")
+strings = import("standard/strings.sayon")
+time = import("standard/time.sayon")
+community = import("src/community/pages.sayon")
+forum = import("src/community/forum.sayon")
+docs = import("src/pages/docs.sayon")
+registry = import("src/packages/registry.sayon")
+html = import("src/web/html.sayon")
+http = import("src/web/http.sayon")
+layout = import("src/web/layout.sayon")
+
+constant MOST_WORDS = 8
+constant MOST_SECTIONS = 20
+constant MOST_PACKAGES = 10
+constant MOST_THREADS = 10
+constant PLACEHOLDER = "Search the docs, packages, and forum"
+
+# A section a search found: its guide's position, its own, and how well it
+# matches.
+type Hit = [guide: integer, section: integer, score: integer]
+
+# The words of a search, in lowercase, eight at most.
+function words_of(query: string) -> Array<string>
+    out: Array<string> = []
+    for word in strings.split(strings.lower(strings.trim(query)), " ")
+        if word != "" and length(out) < MOST_WORDS
+            push(out, clone(word))
+    return out
+
+# The guides' sections that hold every word, the best first: a word in a
+# section's heading counts ten, in its text one, and in its guide's name
+# three more.
+function find_sections(guides: docs.Docs, words: Array<string>) -> Array<Hit>
+    hits: Array<Hit> = []
+    if length(words) == 0
+        return hits
+    for place in range(length(guides.guides))
+        name = strings.lower(guides.guides[place].label)
+        for part in range(length(guides.guides[place].sections))
+            heading = strings.lower(guides.guides[place].sections[part].title)
+            matched = true
+            score = 0
+            for word in words
+                if strings.contains(heading, word)
+                    score += 10
+                elseif strings.contains(guides.guides[place].sections[part].lowered, word)
+                    score += 1
+                else
+                    matched = false
+                if strings.contains(name, word)
+                    score += 3
+            if matched
+                push(hits, Hit(guide = place, section = part, score = score))
+    collections.sort_by(hits, function(first: Hit, second: Hit) return first.score > second.score)
+    while length(hits) > MOST_SECTIONS
+        pop(hits)
+    return hits
+
+# Text as HTML with each of the words marked wherever it is, in any case.
+function marked(text: string, words: Array<string>) -> string
+    characters = strings.characters(text)
+    lowered = strings.characters(strings.lower(text))
+    out: Array<string> = []
+    index = 0
+    while index < length(characters)
+        found = 0
+        for word in words
+            size = length(word)
+            if found == 0 and index + size <= length(lowered) and strings.join(between(lowered, index, index + size), "") == word
+                found = size
+        if found > 0
+            push(out, "<mark>" + html.text(strings.join(between(characters, index, index + found), "")) + "</mark>")
+            index += found
+        else
+            push(out, html.text(clone(characters[index])))
+            index += 1
+    return strings.join(out, "")
+
+private function between(items: Array<string>, start: integer, end: integer) -> Array<string>
+    out: Array<string> = []
+    for index in range(start, end)
+        if index < length(items)
+            push(out, clone(items[index]))
+    return out
+
+# A part of a section's text around the first word it holds, about two
+# lines long, cut at spaces, with the words marked.
+function snippet(text: string, lowered: string, words: Array<string>) -> string
+    first = length(text)
+    for word in words
+        found = strings.find(lowered, word)
+        if found != nothing and found < first
+            first = found
+    if first == length(text)
+        first = 0
+    start = 0
+    if first > 60
+        start = first - 60
+    end = start + 180
+    if end > length(text)
+        end = length(text)
+    piece = strings.slice(text, start, end)
+    before = ""
+    after = ""
+    if start > 0
+        space = strings.find(piece, " ")
+        if space != nothing
+            piece = strings.slice(piece, space + 1, length(piece))
+        before = "… "
+    if end < length(text)
+        cut = length(piece)
+        while cut > 0 and strings.slice(piece, cut - 1, cut) != " "
+            cut -= 1
+        if cut > 0
+            piece = strings.slice(piece, 0, cut - 1)
+        after = " …"
+    return before + marked(piece, words) + after
+
+# What a search found, its words, and where it goes, for `view`.
+function results(state: registry.State, view: layout.Visitor, query: string) -> http.Response
+    words = words_of(query)
+    shown = strings.trim(query)
+    body: Array<string> = []
+    push(body, "<div class=\"wrap search-page\">")
+    push(body, "  <header class=\"search-head\">")
+    if length(words) == 0
+        push(body, "    <h1>Search</h1>")
+        push(body, "    <p class=\"lead\">Find a topic in the guides, a package, or a thread of the forum.</p>")
+    else
+        push(body, "    <h1>Results for “{html.text(shown)}”</h1>")
+    push(body, "    " + layout.search_box(shown, true, PLACEHOLDER, "/search"))
+    push(body, "  </header>")
+    if length(words) > 0
+        hits = find_sections(state.guides, words)
+        packages = registry.search(state, shown, MOST_PACKAGES)
+        threads = forum.listed(forum.threads(state.data), "", shown, false, false)
+        while length(threads) > MOST_THREADS
+            pop(threads)
+        if length(hits) == 0 and length(packages) == 0 and length(threads) == 0
+            push(body, "  <div class=\"rows\"><p class=\"empty\">Nothing holds all of these words. Try fewer words, or others, or look through <a href=\"/docs\">the docs</a>.</p></div>")
+        if length(hits) > 0
+            push(body, "  <section class=\"results\" aria-labelledby=\"found-docs\">")
+            push(body, "    <div class=\"heading\"><h2 id=\"found-docs\">Docs</h2><span class=\"tag\">{length(hits)}</span></div>")
+            push(body, "    <ul class=\"rows\">")
+            for hit in hits
+                found = clone(state.guides.guides[hit.guide])
+                part = clone(found.sections[hit.section])
+                target = docs.address(found)
+                where = state.guides.categories[found.category].label + " / " + found.label
+                if part.id != ""
+                    target = target + "#" + part.id
+                else
+                    where = clone(state.guides.categories[found.category].label)
+                push(body, "      <li><a class=\"row\" href=\"{target}\"><span class=\"row-title\">{marked(part.title, words)}</span><span class=\"row-place\">{html.text(where)}</span>")
+                if part.text != ""
+                    push(body, "        <p class=\"row-text\">{snippet(part.text, part.lowered, words)}</p>")
+                push(body, "      </a></li>")
+            push(body, "    </ul>")
+            push(body, "  </section>")
+        if length(packages) > 0
+            push(body, "  <section class=\"results\" aria-labelledby=\"found-packages\">")
+            push(body, "    <div class=\"heading\"><h2 id=\"found-packages\">Packages</h2><span class=\"tag\">{length(packages)}</span></div>")
+            push(body, "    <ul class=\"rows\">")
+            for summary in packages
+                push(body, "      <li><a class=\"row\" href=\"/packages/{summary.name}\"><span class=\"row-title\">{marked(summary.name, words)}</span><span class=\"tag\">{html.text(summary.latest)}</span>")
+                if summary.description != ""
+                    push(body, "        <p class=\"row-text\">{marked(summary.description, words)}</p>")
+                push(body, "      </a></li>")
+            push(body, "    </ul>")
+            push(body, "  </section>")
+        if length(threads) > 0
+            now = time.unix_seconds()
+            push(body, "  <section class=\"results\" aria-labelledby=\"found-threads\">")
+            push(body, "    <div class=\"heading\"><h2 id=\"found-threads\">Community</h2><span class=\"tag\">{length(threads)}</span></div>")
+            push(body, "    <ul class=\"rows\">")
+            for thread in threads
+                for line in community.thread_row(thread, now, true)
+                    push(body, "      " + line)
+            push(body, "    </ul>")
+            push(body, "  </section>")
+    push(body, "</div>")
+    title = "Search · Sayon"
+    if shown != ""
+        title = "{shown} · Search · Sayon"
+    return layout.page(view, title, body, 200, false, "", "Search Sayon's guides, packages, and forum.")
+
+test "a search's words are its own, in lowercase"
+    assert(words_of("  Ownership  VIEWS ") == ["ownership", "views"] and length(words_of("")) == 0)
+
+test "words are marked in any case, and the rest is text"
+    assert(marked("Views of <arrays>", ["views", "array"]) == "<mark>Views</mark> of &lt;<mark>array</mark>s&gt;")
+
+test "a snippet is cut at spaces around the first word"
+    text = "One two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen ownership seventeen eighteen."
+    made = snippet(text, strings.lower(text), ["ownership"])
+    assert(strings.starts_with(made, "… ") and strings.contains(made, "<mark>ownership</mark>") and not strings.contains(made, "One two"), made)

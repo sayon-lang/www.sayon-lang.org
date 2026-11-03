@@ -8,6 +8,7 @@ network = import("standard/network.sayon")
 strings = import("standard/strings.sayon")
 accounts = import("src/accounts/accounts.sayon")
 sessions = import("src/accounts/sessions.sayon")
+docs = import("src/pages/docs.sayon")
 registry = import("src/packages/registry.sayon")
 
 # An answer as the website wrote it: its status, its headers by lowercase
@@ -61,7 +62,7 @@ function multipart(field: string, file: string, kind: string, bytes: Array<byte>
 function website(data: string, port: integer) -> registry.State
     clear(data)
     filesystem.create_directory(filesystem.join(data, "index"))
-    return registry.State(data = clone(data), index = filesystem.join(data, "index"), address = "http://127.0.0.1:{port}", admin = "operator", guides = [])
+    return registry.State(data = clone(data), index = filesystem.join(data, "index"), address = "http://127.0.0.1:{port}", admin = "operator", guides = docs.none())
 
 # Makes verified accounts, a year old, each signed in: the headers that
 # its forms are sent with, by name.

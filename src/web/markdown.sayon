@@ -1,8 +1,10 @@
 # Markdown as the guides are written, made into HTML: headings with the
 # ids GitHub gives them, paragraphs, lists, tables, fenced code (Sayon's
 # highlighted), and HTML passed through; in text, `code`, **strong**,
-# *emphasis*, and links, those to another guide pointing at its page
-# under /docs. Posts in the forum are made HTML safely instead (`post`).
+# *emphasis*, and links. A link is read from its page's folder, as GitHub
+# reads it, and goes to the guide's page on the website when it names a
+# guide, or else to the file on GitHub. Posts in the forum are made HTML
+# safely instead (`post`).
 
 strings = import("standard/strings.sayon")
 html = import("src/web/html.sayon")
@@ -36,23 +38,40 @@ private function find_double(characters: Array<string>, start: integer, end: int
             return index
     return nothing
 
-# Where the guides' other files are, for links to them.
-constant REPOSITORY = "https://github.com/sayon-lang/www.sayon-lang.org/blob/main/docs/"
+# Where the repository's files are, for links to those that are not
+# guides.
+constant REPOSITORY = "https://github.com/sayon-lang/www.sayon-lang.org/blob/main/"
 
-# A link's address: another guide's `.md` made its page under /docs
-# (`index.md` /docs itself), and another file of the repository found on
-# GitHub.
-private function address(target: string) -> string
-    if strings.contains(target, "://") or strings.starts_with(target, "#") or strings.starts_with(target, "/")
+# Where a page's links lead: the page's folder in the repository, such as
+# `docs/language`, and each guide's file there, such as
+# `docs/language/types.md`, with its address on the website.
+type Links = [folder: string, pages: Dict<string, string>]
+
+# A path in the repository, with `.` and `..` gone.
+function resolve(folder: string, path: string) -> string
+    kept: Array<string> = []
+    for part in strings.split(folder + "/" + path, "/")
+        if part == ".."
+            pop(kept)
+        elseif part != "" and part != "."
+            push(kept, clone(part))
+    return strings.join(kept, "/")
+
+# A link's address: a guide's page on the website, read from the page's
+# folder as GitHub reads it, or else the file on GitHub.
+private function address(target: string, links: Links) -> string
+    if strings.contains(target, "://") or strings.starts_with(target, "#") or strings.starts_with(target, "/") or strings.starts_with(target, "mailto:")
         return clone(target)
-    mark = strings.find(target, ".md")
+    path = clone(target)
+    fragment = ""
+    mark = strings.find(target, "#")
     if mark != nothing
-        name = strings.slice(target, 0, mark)
-        rest = strings.slice(target, mark + 3, length(target))
-        if name == "index"
-            return "/docs" + rest
-        return "/docs/" + name + rest
-    return REPOSITORY + target
+        path = strings.slice(target, 0, mark)
+        fragment = strings.slice(target, mark, length(target))
+    found = resolve(links.folder, path)
+    if haskey(links.pages, found)
+        return links.pages[found] + fragment
+    return REPOSITORY + found + fragment
 
 # Whether a post may link to an address: one on the web, over HTTP or
 # HTTPS, or one on this website.
@@ -65,7 +84,7 @@ private function linkable(target: string) -> boolean
     return strings.starts_with(target, "/") and not strings.starts_with(target, "//") or strings.starts_with(target, "#")
 
 # Text from `start` up to `end` as HTML, into `out`; `safe` for a post.
-private function inline_range(characters: Array<string>, start: integer, end: integer, update out: Array<string>, safe: boolean)
+private function inline_range(characters: Array<string>, start: integer, end: integer, update out: Array<string>, safe: boolean, links: Links)
     index = start
     while index < end
         current = clone(characters[index])
@@ -79,7 +98,7 @@ private function inline_range(characters: Array<string>, start: integer, end: in
             close = find_double(characters, index + 2, end)
             if close != nothing
                 push(out, "<strong>")
-                inline_range(characters, index + 2, close, out, safe)
+                inline_range(characters, index + 2, close, out, safe, links)
                 push(out, "</strong>")
                 index = close + 2
                 continue
@@ -87,7 +106,7 @@ private function inline_range(characters: Array<string>, start: integer, end: in
             close = find_from(characters, "*", index + 1, end)
             if close != nothing
                 push(out, "<em>")
-                inline_range(characters, index + 1, close, out, safe)
+                inline_range(characters, index + 1, close, out, safe, links)
                 push(out, "</em>")
                 index = close + 1
                 continue
@@ -101,13 +120,13 @@ private function inline_range(characters: Array<string>, start: integer, end: in
                 # A post's link that goes elsewhere stays text, as written.
                 if close != nothing and safe and linkable(target)
                     push(out, "<a href=\"" + html.escape(target) + "\" rel=\"nofollow ugc\">")
-                    inline_range(characters, index + 1, middle, out, safe)
+                    inline_range(characters, index + 1, middle, out, safe, links)
                     push(out, "</a>")
                     index = close + 1
                     continue
                 if close != nothing and not safe
-                    push(out, "<a href=\"" + html.escape(address(target)) + "\">")
-                    inline_range(characters, index + 1, middle, out, safe)
+                    push(out, "<a href=\"" + html.escape(address(target, links)) + "\">")
+                    inline_range(characters, index + 1, middle, out, safe, links)
                     push(out, "</a>")
                     index = close + 1
                     continue
@@ -118,11 +137,15 @@ private function inline_range(characters: Array<string>, start: integer, end: in
         push(out, html.text(current))
         index += 1
 
-# A line of text as HTML.
-function inline(text: string, safe: boolean = false) -> string
+# A line of text as HTML, its links read from `folder`, where `pages`
+# names the guides.
+function inline(text: string, safe: boolean = false, folder: string = "docs", pages: Dict<string, string> = []) -> string
+    return inline_with(text, safe, Links(folder = clone(folder), pages = clone(pages)))
+
+private function inline_with(text: string, safe: boolean, links: Links) -> string
     characters = strings.characters(text)
     out: Array<string> = []
-    inline_range(characters, 0, length(characters), out, safe)
+    inline_range(characters, 0, length(characters), out, safe, links)
     return strings.join(out, "")
 
 # A heading's id, as GitHub makes it: its text in lowercase, without the
@@ -188,10 +211,10 @@ private function cells(line: string) -> Array<string>
         push(out, strings.trim(strings.join(current, "")))
     return out
 
-private function row(line: string, tag: string, safe: boolean) -> string
+private function row(line: string, tag: string, safe: boolean, links: Links) -> string
     out: Array<string> = ["<tr>"]
     for cell in cells(line)
-        push(out, "<{tag}>" + inline(cell, safe) + "</{tag}>")
+        push(out, "<{tag}>" + inline_with(cell, safe, links) + "</{tag}>")
     push(out, "</tr>")
     return strings.join(out, "")
 
@@ -201,8 +224,11 @@ private function row(line: string, tag: string, safe: boolean) -> string
 function post(source: string) -> string
     return convert(source, true).body
 
-# A page of Markdown as HTML; `safe` for a post.
-function convert(source: string, safe: boolean = false) -> Document
+# A page of Markdown as HTML; `safe` for a post. The page's links are read
+# from its `folder` in the repository, where `pages` names each guide's
+# file with its address on the website.
+function convert(source: string, safe: boolean = false, folder: string = "docs", pages: Dict<string, string> = []) -> Document
+    links = Links(folder = clone(folder), pages = clone(pages))
     source_lines = strings.lines(source)
     count = length(source_lines)
     out: Array<string> = []
@@ -216,7 +242,12 @@ function convert(source: string, safe: boolean = false) -> Document
         if strings.trim(line) == ""
             index += 1
         elseif strings.starts_with(line, "```")
+            # The language is the first word, as GitHub reads it: ```sayon run
+            # is Sayon code.
             language = strings.trim(strings.slice(line, 3, length(line)))
+            space = strings.find(language, " ")
+            if space != nothing
+                language = strings.slice(language, 0, space)
             code: Array<string> = []
             index += 1
             while index < count and strings.trim(source_lines[index]) != "```"
@@ -235,7 +266,7 @@ function convert(source: string, safe: boolean = false) -> Document
             shown = level + 2
             if shown > 6
                 shown = 6
-            push(out, "<h{shown}>" + inline(strings.slice(line, level + 1, length(line)), true) + "</h{shown}>")
+            push(out, "<h{shown}>" + inline_with(strings.slice(line, level + 1, length(line)), true, links) + "</h{shown}>")
             index += 1
         elseif level > 0
             text = strings.slice(line, level + 1, length(line))
@@ -251,16 +282,16 @@ function convert(source: string, safe: boolean = false) -> Document
             anchor = ""
             if level == 2 or level == 3
                 anchor = "<a class=\"anchor\" href=\"#{id}\" aria-label=\"Link to this section\">#</a>"
-            push(out, "<h{level} id=\"{id}\">" + inline(text) + anchor + "</h{level}>")
+            push(out, "<h{level} id=\"{id}\">" + inline_with(text, false, links) + anchor + "</h{level}>")
             push(headings, Heading(level = level, id = clone(id), title = strings.replace(text, "`", "")))
             index += 1
         elseif strings.starts_with(line, "|")
             push(out, "<div class=\"table\"><table>")
-            push(out, "<thead>" + row(line, "th", safe) + "</thead>")
+            push(out, "<thead>" + row(line, "th", safe, links) + "</thead>")
             index += 2
             push(out, "<tbody>")
             while index < count and strings.starts_with(source_lines[index], "|")
-                push(out, row(source_lines[index], "td", safe))
+                push(out, row(source_lines[index], "td", safe, links))
                 index += 1
             push(out, "</tbody></table></div>")
         elseif strings.starts_with(line, "- ") or is_ordered_item(line)
@@ -272,7 +303,7 @@ function convert(source: string, safe: boolean = false) -> Document
                 while index < count and strings.trim(source_lines[index]) != "" and not starts_block(source_lines[index], safe)
                     item = item + " " + strings.trim(source_lines[index])
                     index += 1
-                push(out, "<li>" + inline(item, safe) + "</li>")
+                push(out, "<li>" + inline_with(item, safe, links) + "</li>")
             push(out, if_text(ordered, "</ol>", "</ul>"))
         elseif strings.starts_with(line, "<") and not safe
             # What is in the repository's `static` is at the site's top.
@@ -284,7 +315,7 @@ function convert(source: string, safe: boolean = false) -> Document
             while index < count and strings.trim(source_lines[index]) != "" and (length(paragraph) == 0 or not starts_block(source_lines[index], safe))
                 push(paragraph, strings.trim(source_lines[index]))
                 index += 1
-            push(out, "<p>" + inline(strings.join(paragraph, " "), safe) + "</p>")
+            push(out, "<p>" + inline_with(strings.join(paragraph, " "), safe, links) + "</p>")
     return Document(body = strings.join(out, "\n"), headings = headings, title = title)
 
 private function if_text(condition: boolean, yes: string, no: string) -> string
@@ -301,14 +332,25 @@ test "headings get GitHub's ids, numbered when repeated, and link to themselves"
     assert(length(page.headings) == 4)
 
 test "text keeps its marks"
-    assert(inline("a `<b>` **c** *d* [e](language.md#f) [g](https://x.org/h.md)") == "a <code>&lt;b&gt;</code> <strong>c</strong> <em>d</em> <a href=\"/docs/language#f\">e</a> <a href=\"https://x.org/h.md\">g</a>")
+    pages: Dict<string, string> = ["docs/language/types.md" = "/docs/language/types", "docs/README.md" = "/docs"]
+    assert(inline("a `<b>` **c** *d* [e](types.md#f) [g](https://x.org/h.md)", false, "docs/language", pages) == "a <code>&lt;b&gt;</code> <strong>c</strong> <em>d</em> <a href=\"/docs/language/types#f\">e</a> <a href=\"https://x.org/h.md\">g</a>")
     assert(inline("2 * 3 < 4") == "2 * 3 &lt; 4")
-    assert(inline("[the license](LICENSE)") == "<a href=\"" + REPOSITORY + "LICENSE\">the license</a>")
-    assert(inline("[guides](index.md) [rules](/packages)") == "<a href=\"/docs\">guides</a> <a href=\"/packages\">rules</a>")
+    assert(inline("[the license](../../LICENSE)", false, "docs/language", pages) == "<a href=\"" + REPOSITORY + "LICENSE\">the license</a>")
+    assert(inline("[guides](../README.md) [rules](/packages) [up](../language/types.md)", false, "docs/tools", pages) == "<a href=\"/docs\">guides</a> <a href=\"/packages\">rules</a> <a href=\"/docs/language/types\">up</a>")
+    assert(inline("[a page not here](other.md#x)", false, "docs/language", pages) == "<a href=\"" + REPOSITORY + "docs/language/other.md#x\">a page not here</a>")
+
+test "paths are read as GitHub reads them"
+    assert(resolve("docs/language", "../tools/targets.md") == "docs/tools/targets.md")
+    assert(resolve("", "docs/./tools/../language/types.md") == "docs/language/types.md")
+    assert(resolve("docs", "../PROTOCOL.md") == "PROTOCOL.md")
 
 test "tables split at the bars outside code"
     page = convert("| Code | Means |\n|---|---|\n| `a | b` | either |\n")
     assert(page.body == "<div class=\"table\"><table>\n<thead><tr><th>Code</th><th>Means</th></tr></thead>\n<tbody>\n<tr><td><code>a | b</code></td><td>either</td></tr>\n</tbody></table></div>")
+
+test "a fence's language is its first word"
+    page = convert("```sayon run\nx = 1\n```\n")
+    assert(page.body == "<pre><code class=\"language-sayon\">x = <span class=\"n\">1</span></code></pre>", page.body)
 
 test "HTML goes through, with the files of static at the site's top"
     page = convert("<p align=\"center\">\n  <img src=\"static/images/logo.svg\">\n</p>\n")

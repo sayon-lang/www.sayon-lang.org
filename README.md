@@ -21,7 +21,8 @@ It serves the website at `http://127.0.0.1:4100`:
 | Address | What |
 | --- | --- |
 | `/` | What Sayon is, a first program, and how to get started |
-| `/docs` | The guides, from the Markdown of [`docs`](docs): installing, the language, the standard library's API, and the error codes |
+| `/docs` | The guides, from the Markdown of [`docs`](docs), in five categories: Get started, The language, Standard library, Tools, and Reference; `/docs/<category>` lists one's guides |
+| `/search` | A search of the guides' sections, the packages, and the forum's threads |
 | `/packages` | Every package, a search, and a page for each |
 | `/community` | The forum: the latest threads, each category's, and each thread; `/community/new` starts one |
 | `/account` | Your dashboard; `/account/tokens` and `/account/settings` your tokens and settings |
@@ -43,7 +44,7 @@ It serves the website at `http://127.0.0.1:4100`:
 
 `src/main.sayon` reads the options and the guides and starts `src/server.sayon`, which answers each connection in a task of its own, so that a slow one holds up no one, and tells a computer that makes too many accounts, sign-ins, mails, or posts to wait (429, by `server.rule`). Passwords are hashed on threads of their own, publications take turns since each runs Git, and the pages link the stylesheet with its version in the address, so that browsers keep it until it changes. No script runs on the website, and its pages forbid them: forms do what scripts would, the theme's switch among them, whose choice the website keeps in a cookie and puts on each page it sends. The parts:
 
-- `src/pages`: the first page, and the guides, made HTML once as the website starts;
+- `src/pages`: the first page; the guides, made HTML once as the website starts, in the categories and order of their map; and the search, which goes through the guides' sections, the packages, and the forum's threads;
 - `src/packages`: the registry's API and index, checking archives and manifests as `sayon` does, and its pages;
 - `src/accounts`: accounts with passwords kept by `crypto.hash_password`, tokens kept as their SHA-256, browsers signed in, the sign-ins `sayon login` starts, pictures (a PNG or JPEG image sent by a plain form, as multipart/form-data, decoded and turned as a photo's orientation says, its middle square made 256 pixels a side on a thread of its own, and kept in `data/pictures` as its pixels alone), and the pages for all of them;
 - `src/community`: the forum, with its threads in `data/community`: categories, posts in Markdown shown safely (HTML as text, links only to the web, marked as the poster's), solved questions in Help, reports, and the moderators' tools; a new account posts ten times a day in its first week, and a verified email posts;
@@ -55,13 +56,15 @@ It serves the website at `http://127.0.0.1:4100`:
 sayon test
 ```
 
-The tests check versions, archives, manifests, the index, accounts, sessions, sign-ins, Markdown, and highlighting, and run the server: to publish, refuse, serve the index and archives, the first page, the guides (the language's references the same as it has them), and the packages; and to make accounts, sign in and out, refuse forms from other sites, and approve and deny `sayon login`'s sign-ins, and to keep, show, refuse, and remove pictures; and to answer others while one computer is slow, answer HEAD, let browsers keep the stylesheet, send no script, keep the theme a browser chose, and count tries and accounts sent at once; and in the forum, to ask, answer, and mark a question solved, keep HTML and other links out of posts, keep who may not post from posting, and moderate. The tests of [sayon-lang/sayon](https://github.com/sayon-lang/sayon) also run `sayon` itself against this website, `sayon login` in a browser's place among them, when this repository is checked out beside it, as `../www.sayon-lang.org`.
+The tests check versions, archives, manifests, the index, accounts, sessions, sign-ins, Markdown, and highlighting, and run the server: to publish, refuse, serve the index and archives, the first page, the guides (in their map's categories and order, with every link between them leading somewhere, and the language's references the same as it has them), the search, and the packages; and to make accounts, sign in and out, refuse forms from other sites, and approve and deny `sayon login`'s sign-ins, and to keep, show, refuse, and remove pictures; and to answer others while one computer is slow, answer HEAD, let browsers keep the stylesheet, send no script, keep the theme a browser chose, and count tries and accounts sent at once; and in the forum, to ask, answer, and mark a question solved, keep HTML and other links out of posts, keep who may not post from posting, and moderate. The tests of [sayon-lang/sayon](https://github.com/sayon-lang/sayon) also run `sayon` itself against this website, `sayon login` in a browser's place among them, when this repository is checked out beside it, as `../www.sayon-lang.org`.
 
 ## Writing the guides
 
-The guides describe Sayon as it is implemented: a change to the language goes with a change to them. They are Markdown in [`docs`](docs), which GitHub shows as it is, and which the website reads when it starts.
+The guides describe Sayon as it is implemented: a change to the language goes with a change to them. They are Markdown in [`docs`](docs), which GitHub shows as it is, and which the website reads when it starts. `src/web/markdown.sayon` makes them HTML: headings with the ids GitHub gives them, paragraphs, lists, tables, code (Sayon's highlighted), and in text `code`, **strong**, *emphasis*, and links.
 
-Two of them are copies: `docs/api.md` and `docs/errors.md`, the standard library's API and the error codes, change with the compiler, so they are written beside its code, in sayon-lang/sayon's `docs`. Change them there, then copy them here with the language's checkout beside this one, as `../sayon`, or named:
+[`docs/README.md`](docs/README.md) is their map: a heading for each category, with a sentence about it, and its guides as `- [Title](path.md): summary`. The website builds from it the docs' first page, each category's page, the sidebar, the order of Previous and Next, and each guide's description, and each category's guides are in a folder of its own, its address: `docs/language/ownership.md` is `/docs/language/ownership`. A new guide is a file there and a line in the map. A guide outside `docs`, such as [PROTOCOL.md](PROTOCOL.md), is at its category's address, by its name. Write links as GitHub reads them, from the guide's own folder (`../tools/targets.md#wasi`): on the website, a link to a guide goes to its page, and one to another file to GitHub. The tests check that every link between the guides leads to a page and a section that exist.
+
+Three of them are copies: `docs/reference/api.md`, `error-codes.md`, and `features.md`, the standard library's API, the error codes, and the feature ledger, change with the compiler, so they are written beside its code, in sayon-lang/sayon's `docs` (as `api.md`, `errors.md`, and `features.md`). Change them there, then copy them here with the language's checkout beside this one, as `../sayon`, or named:
 
 ```bash
 sayon run scripts/language_docs.sayon

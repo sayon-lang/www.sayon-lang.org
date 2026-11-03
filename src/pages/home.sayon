@@ -2,6 +2,7 @@
 # start.
 
 strings = import("standard/strings.sayon")
+docs = import("src/pages/docs.sayon")
 highlight = import("src/web/highlight.sayon")
 html = import("src/web/html.sayon")
 http = import("src/web/http.sayon")
@@ -65,8 +66,8 @@ private function diagnostic_html() -> string
             push(lines, html.text(line))
     return strings.join(lines, "\n")
 
-# The page, for `view`.
-function home(view: layout.Visitor) -> http.Response
+# The page, for `view`, with the guides' categories to explore.
+function home(view: layout.Visitor, guides: docs.Docs) -> http.Response
     out: Array<string> = []
     push(out, "    <div class=\"wrap\">")
     push(out, "      <section class=\"hero\">")
@@ -74,8 +75,8 @@ function home(view: layout.Visitor) -> http.Response
     push(out, "          <h1>Programming made easy. Safety made automatic.</h1>")
     push(out, "          <p class=\"lead\">" + html.prose("Sayon means “easy”. Ordinary programs need fewer decisions, less boilerplate, and less setup, while the compiler checks who owns each value, so memory is freed on time without a garbage collector.") + "</p>")
     push(out, "          <div class=\"buttons\">")
-    push(out, "            <a class=\"button primary large\" href=\"#start\">Get started</a>")
-    push(out, "            <a class=\"button large\" href=\"/docs/language\">Read the language guide</a>")
+    push(out, "            <a class=\"button primary large\" href=\"/docs/get-started/first-program\">Get started</a>")
+    push(out, "            <a class=\"button large\" href=\"/docs\">Read the docs</a>")
     push(out, "          </div>")
     push(out, "        </div>")
     push(out, "        <figure class=\"editor\" aria-label=\"A Sayon program and what it prints\">")
@@ -111,7 +112,7 @@ function home(view: layout.Visitor) -> http.Response
     push(out, "        <ol class=\"steps\">")
     push(out, "          <li>")
     push(out, "            <h3>Install Sayon</h3>")
-    push(out, "            <p>Download the installer for your device from the <a href=\"{GITHUB}/sayon/releases\">releases page</a> and run it. <a href=\"/docs/installing\">Installing</a> lists them all.</p>")
+    push(out, "            <p>Run the installer for your device. No release is out yet, so for now you build it from Sayon's source: <a href=\"/docs/get-started/installing\">Installing</a> shows how, for each device.</p>")
     push(out, "          </li>")
     push(out, "          <li>")
     push(out, "            <h3>Make a project</h3>")
@@ -125,6 +126,19 @@ function home(view: layout.Visitor) -> http.Response
     push(out, "            <p>For VS Code, install the <a href=\"{GITHUB}/sayon-vscode\">Sayon extension</a>: highlighting, errors as you type, completion, and more.</p>")
     push(out, "          </li>")
     push(out, "        </ol>")
+    push(out, "        <p class=\"after-steps\"><a href=\"/docs/get-started/first-program\">Your first program</a> goes on from there, step by step.</p>")
     push(out, "      </section>")
+    if length(guides.categories) > 0
+        push(out, "")
+        push(out, "      <section class=\"section\" aria-labelledby=\"explore-title\">")
+        push(out, "        <h2 id=\"explore-title\">Explore the docs</h2>")
+        push(out, "        <div class=\"explore\">")
+        for category in guides.categories
+            push(out, "          <article class=\"box explore-card\">")
+            push(out, "            <h3><a href=\"/docs/{category.key}\">{html.text(category.label)}</a></h3>")
+            push(out, "            <p>{category.summary}</p>")
+            push(out, "          </article>")
+        push(out, "        </div>")
+        push(out, "      </section>")
     push(out, "    </div>")
     return layout.page(view, "Sayon: Programming made easy. Safety made automatic.", out, 200, true, "", "Sayon is a readable programming language whose compiler checks ownership for you: no garbage collector, no hidden copies, and errors that say how to fix them.")

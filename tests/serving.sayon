@@ -4,6 +4,7 @@ strings = import("standard/strings.sayon")
 threads = import("standard/threads.sayon")
 time = import("standard/time.sayon")
 accounts = import("src/accounts/accounts.sayon")
+docs = import("src/pages/docs.sayon")
 registry = import("src/packages/registry.sayon")
 server = import("src/server.sayon")
 client = import("tests/client.sayon")
@@ -16,7 +17,7 @@ test "a slow computer holds up no one, and one asking too often is told to wait"
     listener = network.listen("127.0.0.1", 0)
     port = listener.address().port
     address = "http://127.0.0.1:{port}"
-    state = registry.State(data = clone(DATA), index = filesystem.join(DATA, "index"), address = clone(address), admin = "operator", guides = [])
+    state = registry.State(data = clone(DATA), index = filesystem.join(DATA, "index"), address = clone(address), admin = "operator", guides = docs.none())
     running = threads.spawn(function()
         server.serve(listener, state, 16)
     )
@@ -63,7 +64,7 @@ test "tries sent together each count, and accounts made together both stay"
     filesystem.create_directory(filesystem.join(data, "index"))
     listener = network.listen("127.0.0.1", 0)
     port = listener.address().port
-    state = registry.State(data = clone(data), index = filesystem.join(data, "index"), address = "http://127.0.0.1:{port}", admin = "operator", guides = [])
+    state = registry.State(data = clone(data), index = filesystem.join(data, "index"), address = "http://127.0.0.1:{port}", admin = "operator", guides = docs.none())
     running = threads.spawn(function()
         server.serve(listener, state, 15)
     )
@@ -107,7 +108,7 @@ test "pages run no script, and the theme a browser chooses stays"
     filesystem.create_directory(filesystem.join(data, "index"))
     listener = network.listen("127.0.0.1", 0)
     port = listener.address().port
-    state = registry.State(data = clone(data), index = filesystem.join(data, "index"), address = "http://127.0.0.1:{port}", admin = "operator", guides = [])
+    state = registry.State(data = clone(data), index = filesystem.join(data, "index"), address = "http://127.0.0.1:{port}", admin = "operator", guides = docs.none())
     running = threads.spawn(function()
         server.serve(listener, state, 8)
     )

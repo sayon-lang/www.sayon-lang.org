@@ -32,16 +32,23 @@ function owned(state: registry.State, account: string) -> Array<registry.Summary
     return out
 
 # The head of an account's pages: its picture or initial, its name, and
-# since when it exists, with the page's own title below when it has one.
+# since when it exists, with the page's own title below when it has one;
+# then the tabs between the pages, and a link to the public profile.
 private function head(account: string, picture: string or nothing, since: string, title: string) -> Array<string>
     out: Array<string> = ["<header class=\"account-head\">"]
     push(out, "  " + layout.avatar(account, picture))
     if title == ""
         push(out, "  <div><h1>{html.text(account)}</h1><p>An account since {html.text(since)}</p></div>")
-        push(out, "  <div class=\"buttons head-actions\"><a class=\"button\" href=\"/users/{account}\">Your profile</a><a class=\"button\" href=\"/account/settings\">Settings</a></div>")
     else
         push(out, "  <div><ol class=\"trail\"><li><a href=\"/account\">{html.text(account)}</a></li><li aria-current=\"page\">{html.text(title)}</li></ol><h1>{html.text(title)}</h1></div>")
     push(out, "</header>")
+    tabs = "<nav class=\"tabs\" aria-label=\"Your account\">"
+    for entry in [["/account", "Overview", ""], ["/account/tokens", "Tokens", "Tokens"], ["/account/settings", "Settings", "Settings"]]
+        current = ""
+        if entry[2] == title
+            current = " aria-current=\"page\""
+        tabs = tabs + "<a href=\"{entry[0]}\"{current}>{entry[1]}</a>"
+    push(out, tabs + "<a class=\"tabs-aside\" href=\"/users/{account}\">Your profile</a></nav>")
     return out
 
 # The rows of packages, with each one's latest version.

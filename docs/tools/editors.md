@@ -1,0 +1,12 @@
+# Editors
+
+`sayon lsp` is a language server: editors start it and talk to it in the language server protocol over its standard input and output. The [VS Code extension](https://github.com/sayon-lang/sayon-vscode) starts it as the setting `sayon.path` names it (`sayon` on the `PATH` by default), and the command **Sayon: Restart the Language Server** starts it again.
+
+Each open document is checked as `sayon lint` checks it, as the entry of a program, with its project's root when it is in one, and with what the editor holds of every open document in place of its file, saved or not. Its errors and warnings show as it changes. The server answers from what the checker resolved, so the answers stay useful while there are errors, syntax errors among them:
+
+- Hover shows what a name is: a function's signature, a variable's or a field's type, a type's fields or variants, and the comment lines just above a definition.
+- Going to a definition goes to where a name is declared, in whatever file; on an import's alias, to the module's file.
+- References lists everywhere a name is written, and renaming changes them all, in every file. The standard library's names are not renamed, and a function called as a method keeps its type's prefix: renaming `canvas_fill` to `canvas_paint` turns `canvas.fill()` into `canvas.paint()`.
+- Completion reads where it is. In code it offers the variables in scope, the module's definitions and imports, the built-in functions, keywords with snippets of the blocks they start, and the standard modules not imported yet, whose import it adds at the top. After a dot it offers a module's definitions, a value's fields and methods, or an enum's variants; after `case`, the variants of what the `match` matches; after `:` or `->`, and among a type's arguments, types; in an `import("...")`, the standard modules and the program's files; in comments and strings, nothing. In a call's arguments, what fits the parameter's type comes first: values of the type, those of the imported modules among them (`graphics.BLACK` where a `Color` goes), the variants of an expected enum, `true` and `false` for a `boolean`, and, building a structure, the fields left to name. Functions are inserted with placeholders for their arguments, and the comment above a definition shows beside it.
+- Signature help shows the signature of the call being written, with the parameter of the argument at the cursor marked, as `(` and `,` are typed.
+- Formatting formats the document as `sayon fmt` does, and leaves one with syntax errors as it is.

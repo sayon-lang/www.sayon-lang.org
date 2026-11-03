@@ -1,8 +1,9 @@
 # Copies the references written beside Sayon's compiler, the standard
-# library's API and the error codes, from a checkout of sayon-lang/sayon
-# into `docs`, where the website shows them as guides. Run it from the
-# repository's top folder, with the language checked out beside it, as
-# ../sayon, or named:
+# library's API, the error codes, and the feature ledger, from a checkout
+# of sayon-lang/sayon into `docs/reference`, where the website shows them
+# as guides (`docs.references` names them). Run it from the repository's
+# top folder, with the language checked out beside it, as ../sayon, or
+# named:
 #
 #     sayon run scripts/language_docs.sayon
 #     sayon run scripts/language_docs.sayon -- --check ../sayon
@@ -36,8 +37,10 @@ function main()
             os.exit(1)
         print("the references are the language's")
         return
-    for name in stale
-        io.write_file(filesystem.join(FOLDER, name), io.read_file(filesystem.join(filesystem.join(language, "docs"), name)))
-        print("copied {name}")
+    for reference in docs.references()
+        for name in stale
+            if name == reference.ours
+                io.write_file(filesystem.join(FOLDER, reference.ours), io.read_file(filesystem.join(language, reference.theirs)))
+                print("copied {reference.theirs} to {FOLDER}/{reference.ours}")
     if length(stale) == 0
         print("the references were already the language's")

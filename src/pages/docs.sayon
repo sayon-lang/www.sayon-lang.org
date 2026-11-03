@@ -1,82 +1,318 @@
 # The guides, under /docs: the Markdown of `docs`, made HTML once when the
-# site starts, and each guide's page around it: the guides beside it; for a
-# long page, its sections; and at its end, where to change it and the
-# guides before and after it.
+# site starts, in the categories and the order of its map, docs/README.md.
+# The docs' first page shows the categories with their guides; each
+# category has a page listing its guides with their summaries; and each
+# guide's page has the categories beside it, its sections, where its text
+# is written, and the guides before and after it, in the map's order.
 
 filesystem = import("standard/filesystem.sayon")
 io = import("standard/io.sayon")
+strings = import("standard/strings.sayon")
 html = import("src/web/html.sayon")
 http = import("src/web/http.sayon")
 layout = import("src/web/layout.sayon")
 markdown = import("src/web/markdown.sayon")
 
-constant SOURCES = "https://github.com/sayon-lang/www.sayon-lang.org/blob/main/docs/"
+constant WEBSITE = "https://github.com/sayon-lang/www.sayon-lang.org/blob/main/"
 constant LANGUAGE = "https://github.com/sayon-lang/sayon/"
 constant EDIT = "Edit this page on GitHub"
+constant DESCRIPTION = "The guides to Sayon: installing it, the language, its standard library, its tools, and references to look things up."
 
-# A guide: its Markdown file in `docs`, its name in its address,
-# /docs/<slug> ("" for /docs itself), its name among the guides, where its
-# text is written and what the link there says, and its text made HTML.
-type Guide = [source: string, slug: string, label: string, origin: string, change: string, document: markdown.Document]
+# A category of the map: its folder in `docs`, which is its address under
+# /docs, its name, and its sentence as HTML.
+type Category = [key: string, label: string, summary: string]
 
-# The guides' files, addresses, names, and where their text is written, in
-# the order they are read. The last two are the language's `references`.
-private function listed() -> Array<Array<string>>
+# A part of a guide, for searching: its heading's id ("" for the guide's
+# start), its title, and its text, plain and in lowercase for matching.
+type Section = [id: string, title: string, text: string, lowered: string]
+
+# A guide: its file from the repository's top folder, its address under
+# /docs, its name and its summary in the map, its category's position,
+# where its text is written and what the link there says, its text made
+# HTML, and its sections.
+type Guide = [source: string, slug: string, label: string, summary: string, category: integer, origin: string, change: string, document: markdown.Document, sections: Array<Section>]
+
+# The guides: the map's title and first paragraph, the categories, and the
+# guides in the map's order.
+type Docs = [title: string, intro: string, categories: Array<Category>, guides: Array<Guide>]
+
+# No guides, for a website that serves none, as tests do.
+function none() -> Docs
+    return Docs(title = "", intro = "", categories = [], guides = [])
+
+# A reference written beside the language's code, in the `docs` folder of
+# sayon-lang/sayon, of which `docs` here holds a copy that
+# scripts/language_docs.sayon makes: its file there, from the language's
+# top folder, its copy here, from `docs`, and where its text is written
+# and what the link there says.
+type Reference = [theirs: string, ours: string, origin: string, change: string]
+
+function references() -> Array<Reference>
     return [
-        ["index.md", "", "Overview", SOURCES + "index.md", clone(EDIT)],
-        ["installing.md", "installing", "Installing", SOURCES + "installing.md", clone(EDIT)],
-        ["language.md", "language", "The language", SOURCES + "language.md", clone(EDIT)],
-        ["api.md", "api", "Standard library", LANGUAGE + "tree/main/stdlib", "Written from the library's declarations"],
-        ["errors.md", "errors", "Error codes", LANGUAGE + "blob/main/docs/errors.md", clone(EDIT)]
+        Reference(theirs = "docs/api.md", ours = "reference/api.md", origin = LANGUAGE + "tree/main/stdlib", change = "Written from the library's declarations"),
+        Reference(theirs = "docs/errors.md", ours = "reference/error-codes.md", origin = LANGUAGE + "blob/main/docs/errors.md", change = clone(EDIT)),
+        Reference(theirs = "docs/features.md", ours = "reference/features.md", origin = LANGUAGE + "blob/main/docs/features.md", change = clone(EDIT))
     ]
 
-# The references written beside the language's code, in the `docs` folder
-# of sayon-lang/sayon, of which `docs` here holds copies, made by
-# scripts/language_docs.sayon.
-function references() -> Array<string>
-    return ["api.md", "errors.md"]
-
-# The references whose copy in `folder` is not the text in the `docs` of
-# the language's checkout at `language`.
+# The references whose copy in `folder` is not the text of the language's
+# checkout at `language`: their copies' names.
 function stale(language: string, folder: string) -> Array<string>
     out: Array<string> = []
-    for name in references()
-        theirs = filesystem.join(filesystem.join(language, "docs"), name)
-        ours = filesystem.join(folder, name)
-        if not filesystem.is_file(ours) or io.read_file(ours) != io.read_file(theirs)
-            push(out, clone(name))
+    for reference in references()
+        ours = filesystem.join(folder, reference.ours)
+        if not filesystem.is_file(ours) or io.read_file(ours) != io.read_file(filesystem.join(language, reference.theirs))
+            push(out, clone(reference.ours))
     return out
 
-# Reads the guides from `folder` and makes them HTML.
-function load(folder: string) -> Array<Guide>
-    out: Array<Guide> = []
-    for entry in listed()
-        source = io.read_file(filesystem.join(folder, entry[0]))
-        push(out, Guide(source = clone(entry[0]), slug = clone(entry[1]), label = clone(entry[2]), origin = clone(entry[3]), change = clone(entry[4]), document = markdown.convert(source)))
+# A guide of the map: `- [Label](path.md): summary`.
+type Entry = [label: string, path: string, summary: string]
+
+private function map_entry(line: string) -> Entry or nothing
+    if not strings.starts_with(line, "- [")
+        return nothing
+    middle = strings.find(line, "](")
+    if middle == nothing
+        return nothing
+    rest = strings.slice(line, middle + 2, length(line))
+    end = strings.find(rest, ")")
+    if end == nothing
+        return nothing
+    after = strings.slice(rest, end + 1, length(rest))
+    summary = ""
+    if strings.starts_with(after, ": ")
+        summary = strings.slice(after, 2, length(after))
+    return Entry(label = strings.slice(line, 3, middle), path = strings.slice(rest, 0, end), summary = summary)
+
+# Whether a tag, as written between `<` and `>`, ends a run of text, as a
+# table's cell or a block does: in plain text, a space.
+private function separates(tag: string) -> boolean
+    name = clone(tag)
+    if strings.starts_with(name, "/")
+        name = strings.slice(name, 1, length(name))
+    space = strings.find(name, " ")
+    if space != nothing
+        name = strings.slice(name, 0, space)
+    if length(name) == 2 and strings.starts_with(name, "h")
+        return true
+    return name == "td" or name == "th" or name == "tr" or name == "li" or name == "p" or name == "div" or name == "pre" or name == "br"
+
+# Text without its tags, with the entities HTML marks it with read back,
+# and a space where a cell, an item, or a block ends. It works a tag at a
+# time, as the guides are many and long.
+function plain(content: string) -> string
+    text = strings.replace(content, "\n", " ")
+    text = strings.replace(text, "\r", " ")
+    text = strings.replace(text, "\t", " ")
+    pieces = strings.split(text, "<")
+    out: Array<string> = [clone(pieces[0])]
+    for index in range(1, length(pieces))
+        close = strings.find(pieces[index], ">")
+        if close == nothing
+            push(out, "<" + pieces[index])
+            continue
+        if separates(strings.slice(pieces[index], 0, close))
+            push(out, " ")
+        push(out, strings.slice(pieces[index], close + 1, length(pieces[index])))
+    text = strings.join(out, "")
+    while strings.contains(text, "  ")
+        text = strings.replace(text, "  ", " ")
+    text = strings.trim(text)
+    text = strings.replace(text, "&lt;", "<")
+    text = strings.replace(text, "&gt;", ">")
+    text = strings.replace(text, "&quot;", "\"")
+    return strings.replace(text, "&amp;", "&")
+
+# A summary of the map, written after a colon there, as a sentence of its
+# own: its first letter in capitals.
+function sentence(text: string) -> string
+    if text == ""
+        return ""
+    return strings.upper(strings.slice(text, 0, 1)) + strings.slice(text, 1, length(text))
+
+# A guide's parts, at its headings of levels 2 and 3, for searching: what
+# comes before the first is the guide's start, under its title.
+function sections_of(document: markdown.Document) -> Array<Section>
+    out: Array<Section> = []
+    id = ""
+    title = clone(document.title)
+    lines: Array<string> = []
+    for line in strings.split(document.body, "\n")
+        if strings.starts_with(line, "<h2 id=\"") or strings.starts_with(line, "<h3 id=\"")
+            push(out, section(id, title, lines))
+            lines = []
+            rest = strings.slice(line, 8, length(line))
+            quote = strings.find(rest, "\"")
+            id = ""
+            if quote != nothing
+                id = strings.slice(rest, 0, quote)
+            heading = clone(line)
+            anchor = strings.find(heading, "<a class=\"anchor\"")
+            if anchor != nothing
+                heading = strings.slice(heading, 0, anchor)
+            title = strings.trim(plain(heading))
+        elseif not strings.starts_with(line, "<h1")
+            push(lines, clone(line))
+    push(out, section(id, title, lines))
     return out
+
+private function section(id: string, title: string, lines: Array<string>) -> Section
+    text = plain(strings.join(lines, "\n"))
+    lowered = strings.lower(text)
+    return Section(id = clone(id), title = clone(title), text = text, lowered = lowered)
+
+# Reads the map, `folder`/README.md, and the guides it names, and makes
+# them HTML. A guide in a folder of `folder` is at its path there, without
+# `.md`; one outside it, such as ../PROTOCOL.md, is under its category's
+# folder, by its name in lowercase.
+function load(folder: string) -> Docs
+    title = "Documentation"
+    intro: Array<string> = []
+    labels: Array<string> = []
+    sentences: Array<string> = []
+    entries: Array<Entry> = []
+    kinds: Array<integer> = []
+    for line in strings.lines(io.read_file(filesystem.join(folder, "README.md")))
+        trimmed = strings.trim(line)
+        found = map_entry(line)
+        if strings.starts_with(line, "# ")
+            title = strings.slice(line, 2, length(line))
+        elseif strings.starts_with(line, "## ")
+            push(labels, strings.slice(line, 3, length(line)))
+            push(sentences, "")
+        elseif trimmed == ""
+            continue
+        elseif found != nothing and length(labels) > 0
+            push(entries, found)
+            push(kinds, length(labels) - 1)
+        elseif length(labels) == 0
+            push(intro, trimmed)
+        else
+            last = length(sentences) - 1
+            sentences[last] = strings.trim(sentences[last] + " " + trimmed)
+    # A category's folder is its first guide's.
+    keys: Array<string> = []
+    for _label in labels
+        push(keys, "")
+    for index in range(length(entries))
+        slash = strings.find(entries[index].path, "/")
+        if keys[kinds[index]] == "" and slash != nothing and not strings.starts_with(entries[index].path, "../")
+            keys[kinds[index]] = strings.slice(entries[index].path, 0, slash)
+    # Every guide's file and address, for the links between them.
+    files: Array<string> = []
+    addresses: Array<string> = []
+    pages: Dict<string, string> = [folder + "/README.md" = "/docs"]
+    for index in range(length(entries))
+        source = markdown.resolve(folder, entries[index].path)
+        slug = ""
+        if strings.starts_with(source, folder + "/")
+            slug = strings.slice(source, length(folder) + 1, length(source) - 3)
+        else
+            name = strings.lower(filesystem.name(source))
+            slug = keys[kinds[index]] + "/" + strings.slice(name, 0, length(name) - 3)
+        pages[clone(source)] = "/docs/" + slug
+        push(files, source)
+        push(addresses, slug)
+    categories: Array<Category> = []
+    for index in range(length(labels))
+        push(categories, Category(key = clone(keys[index]), label = clone(labels[index]), summary = markdown.inline(sentences[index], false, folder, pages)))
+    guides: Array<Guide> = []
+    for index in range(length(entries))
+        origin = WEBSITE + files[index]
+        change = clone(EDIT)
+        for reference in references()
+            if filesystem.join(folder, reference.ours) == files[index]
+                origin = clone(reference.origin)
+                change = clone(reference.change)
+        document = markdown.convert(io.read_file(files[index]), false, filesystem.parent(files[index]), pages)
+        sections = sections_of(document)
+        push(guides, Guide(source = clone(files[index]), slug = clone(addresses[index]), label = clone(entries[index].label), summary = clone(entries[index].summary), category = kinds[index], origin = origin, change = change, document = document, sections = sections))
+    return Docs(title = title, intro = markdown.inline(strings.join(intro, " "), false, folder, pages), categories = categories, guides = guides)
 
 # Where a guide is.
 function address(guide: Guide) -> string
-    if guide.slug == ""
-        return "/docs"
     return "/docs/" + guide.slug
 
 # The position of the guide at /docs/<slug>, or nothing.
-function find(guides: Array<Guide>, slug: string) -> integer or nothing
-    for position in range(length(guides))
-        if guides[position].slug == slug
+function find(docs: Docs, slug: string) -> integer or nothing
+    for position in range(length(docs.guides))
+        if docs.guides[position].slug == slug
             return position
     return nothing
 
-# A long page's sections and their subsections, as a list of links; none
-# for a page of fewer than four sections.
+# The position of the category at /docs/<key>, or nothing.
+function find_category(docs: Docs, key: string) -> integer or nothing
+    for position in range(length(docs.categories))
+        if docs.categories[position].key == key
+            return position
+    return nothing
+
+# Where a page that moved is now, for one asked for at its old address.
+function moved(slug: string) -> string or nothing
+    match slug
+        case "installing"
+            return "/docs/get-started/installing"
+        case "api"
+            return "/docs/reference/api"
+        case "errors"
+            return "/docs/reference/error-codes"
+        case _
+            return nothing
+
+# The categories and their guides, as a list of links, the current guide
+# (or category) marked; `guide` and `category` are -1 for none.
+private function categorized(docs: Docs, guide: integer, category: integer, indent: string) -> Array<string>
+    out: Array<string> = []
+    for index in range(length(docs.categories))
+        heading = ""
+        if index == category and guide < 0
+            heading = " aria-current=\"page\""
+        push(out, indent + "<div class=\"guides-part\">")
+        push(out, indent + "  <h2><a href=\"/docs/{docs.categories[index].key}\"{heading}>{html.text(docs.categories[index].label)}</a></h2>")
+        push(out, indent + "  <ul>")
+        for position in range(length(docs.guides))
+            if docs.guides[position].category == index
+                current = ""
+                if position == guide
+                    current = " aria-current=\"page\""
+                push(out, indent + "    <li><a href=\"{address(docs.guides[position])}\"{current}>{html.text(docs.guides[position].label)}</a></li>")
+        push(out, indent + "  </ul>")
+        push(out, indent + "</div>")
+    return out
+
+# The docs' sidebar, and on a phone the menu that holds the same list,
+# naming where the page is.
+private function navigation(docs: Docs, guide: integer, category: integer, place: string) -> Array<string>
+    out: Array<string> = []
+    push(out, "  <details class=\"docs-menu\">")
+    push(out, "    <summary><span class=\"docs-menu-label\">Docs</span><span class=\"docs-menu-place\">{html.text(place)}</span></summary>")
+    push(out, "    <nav class=\"guides\" aria-label=\"Docs\">")
+    for line in categorized(docs, guide, category, "      ")
+        push(out, clone(line))
+    push(out, "    </nav>")
+    push(out, "  </details>")
+    push(out, "  <nav class=\"guides docs-side\" aria-label=\"Docs\">")
+    for line in categorized(docs, guide, category, "    ")
+        push(out, clone(line))
+    push(out, "  </nav>")
+    return out
+
+# Where a page is: the docs, then its category, then the page itself.
+private function trail(docs: Docs, category: integer, current: string) -> string
+    out = "<ol class=\"trail\"><li><a href=\"/docs\">Docs</a></li>"
+    if category >= 0 and current != ""
+        out = out + "<li><a href=\"/docs/{docs.categories[category].key}\">{html.text(docs.categories[category].label)}</a></li>"
+        return out + "<li aria-current=\"page\">{html.text(current)}</li></ol>"
+    return out + "<li aria-current=\"page\">{html.text(docs.categories[category].label)}</li></ol>"
+
+# A page's sections and their subsections, as a list of links; none for a
+# page of fewer than three.
 private function contents(document: markdown.Document) -> Array<string>
     out: Array<string> = []
-    sections = 0
+    count = 0
     for heading in document.headings
-        if heading.level == 2
-            sections += 1
-    if sections < 4
+        if heading.level == 2 or heading.level == 3
+            count += 1
+    if count < 3
         return out
     push(out, "<ul>")
     open = false
@@ -89,30 +325,85 @@ private function contents(document: markdown.Document) -> Array<string>
             open = true
         elseif heading.level == 3 and open
             push(out, "    <li>" + entry + "</li>")
+        elseif heading.level == 3
+            push(out, "  <li>" + entry + "<ul>")
+            open = true
     if open
         push(out, "  </ul></li>")
     push(out, "</ul>")
     return out
 
+# The docs' first page: the map's title and paragraph, a search, the first
+# category as where to start, with a button for each of its guides, and
+# the other categories with their guides.
+function home(docs: Docs, view: layout.Visitor) -> http.Response
+    out: Array<string> = []
+    push(out, "<div class=\"wrap docs-home\">")
+    push(out, "  <header class=\"docs-head\">")
+    push(out, "    <h1>{html.text(docs.title)}</h1>")
+    push(out, "    <p class=\"lead\">{docs.intro}</p>")
+    push(out, "    " + layout.search_box("", true, "Search the docs, packages, and forum"))
+    push(out, "  </header>")
+    if length(docs.categories) > 0
+        push(out, "  <section class=\"start-here\" aria-labelledby=\"start-here\">")
+        push(out, "    <div><h2 id=\"start-here\"><a href=\"/docs/{docs.categories[0].key}\">{html.text(docs.categories[0].label)}</a></h2><p>{docs.categories[0].summary}</p></div>")
+        buttons = "    <div class=\"buttons\">"
+        kind = "button primary"
+        for position in range(length(docs.guides))
+            if docs.guides[position].category == 0
+                buttons = buttons + "<a class=\"{kind}\" href=\"{address(docs.guides[position])}\">{html.text(docs.guides[position].label)}</a>"
+                kind = "button"
+        push(out, buttons + "</div>")
+        push(out, "  </section>")
+    push(out, "  <div class=\"doc-categories\">")
+    for index in range(1, length(docs.categories))
+        push(out, "    <section class=\"box doc-category\">")
+        push(out, "      <h2><a href=\"/docs/{docs.categories[index].key}\">{html.text(docs.categories[index].label)}</a></h2>")
+        push(out, "      <p>{docs.categories[index].summary}</p>")
+        push(out, "      <ul>")
+        for position in range(length(docs.guides))
+            if docs.guides[position].category == index
+                push(out, "        <li><a href=\"{address(docs.guides[position])}\">{html.text(docs.guides[position].label)}</a></li>")
+        push(out, "      </ul>")
+        push(out, "    </section>")
+    push(out, "  </div>")
+    push(out, "</div>")
+    return layout.page(view, docs.title, out, 200, false, "docs", DESCRIPTION)
+
+# A category's page: its guides, each with its summary.
+function category_page(docs: Docs, category: integer, view: layout.Visitor) -> http.Response
+    shown = clone(docs.categories[category])
+    out: Array<string> = []
+    push(out, "<div class=\"docs narrow\">")
+    for line in navigation(docs, -1, category, shown.label)
+        push(out, clone(line))
+    push(out, "  <article class=\"prose\">")
+    push(out, "    " + trail(docs, category, ""))
+    push(out, "    <h1>{html.text(shown.label)}</h1>")
+    push(out, "    <p>{shown.summary}</p>")
+    push(out, "    <ul class=\"rows doc-list\">")
+    for position in range(length(docs.guides))
+        if docs.guides[position].category == category
+            push(out, "      <li><a class=\"row\" href=\"{address(docs.guides[position])}\"><span class=\"row-title\">{html.text(docs.guides[position].label)}</span><p class=\"row-text\">{html.prose(sentence(docs.guides[position].summary))}</p></a></li>")
+    push(out, "    </ul>")
+    push(out, "  </article>")
+    push(out, "</div>")
+    return layout.page(view, shown.label + " · Sayon docs", out, 200, true, "docs", plain(shown.summary))
+
 # The page of the guide at `position`, for `view`.
-function page(guides: Array<Guide>, position: integer, view: layout.Visitor) -> http.Response
-    sections = contents(guides[position].document)
+function page(docs: Docs, position: integer, view: layout.Visitor) -> http.Response
+    shown = clone(docs.guides[position])
+    sections = contents(shown.document)
     kind = "docs"
     if length(sections) == 0
         kind = "docs narrow"
+    place = docs.categories[shown.category].label + " / " + shown.label
     out: Array<string> = []
     push(out, "<div class=\"{kind}\">")
-    push(out, "  <nav class=\"guides\" aria-label=\"Guides\">")
-    push(out, "    <h2>Guides</h2>")
-    push(out, "    <ul>")
-    for index in range(length(guides))
-        current = ""
-        if index == position
-            current = " aria-current=\"page\""
-        push(out, "      <li><a href=\"{address(guides[index])}\"{current}>{html.text(guides[index].label)}</a></li>")
-    push(out, "    </ul>")
-    push(out, "  </nav>")
+    for line in navigation(docs, position, shown.category, place)
+        push(out, clone(line))
     push(out, "  <article class=\"prose\">")
+    push(out, "    " + trail(docs, shown.category, shown.label))
     if length(sections) > 0
         push(out, "    <details class=\"toc-inline\">")
         push(out, "      <summary>On this page</summary>")
@@ -121,13 +412,13 @@ function page(guides: Array<Guide>, position: integer, view: layout.Visitor) -> 
             push(out, "        " + line)
         push(out, "      </nav>")
         push(out, "    </details>")
-    push(out, clone(guides[position].document.body))
-    push(out, "    <div class=\"page-end\"><span>{html.text(guides[position].label)}</span><a href=\"{guides[position].origin}\">{html.text(guides[position].change)}</a></div>")
-    push(out, "    <nav class=\"pager\" aria-label=\"The guides before and after this one\">")
+    push(out, clone(shown.document.body))
+    push(out, "    <div class=\"page-end\"><span>{html.text(docs.categories[shown.category].label)} / {html.text(shown.label)}</span><a href=\"{shown.origin}\">{html.text(shown.change)}</a></div>")
+    push(out, "    <nav class=\"pager\" aria-label=\"The pages before and after this one\">")
     if position > 0
-        push(out, "      <a href=\"{address(guides[position - 1])}\"><small>Previous</small>{html.text(guides[position - 1].label)}</a>")
-    if position + 1 < length(guides)
-        push(out, "      <a class=\"next\" href=\"{address(guides[position + 1])}\"><small>Next</small>{html.text(guides[position + 1].label)}</a>")
+        push(out, "      <a href=\"{address(docs.guides[position - 1])}\"><small>Previous</small>{html.text(docs.guides[position - 1].label)}</a>")
+    if position + 1 < length(docs.guides)
+        push(out, "      <a class=\"next\" href=\"{address(docs.guides[position + 1])}\"><small>Next</small>{html.text(docs.guides[position + 1].label)}</a>")
     push(out, "    </nav>")
     push(out, "  </article>")
     if length(sections) > 0
@@ -137,7 +428,28 @@ function page(guides: Array<Guide>, position: integer, view: layout.Visitor) -> 
             push(out, "    " + line)
         push(out, "  </nav>")
     push(out, "</div>")
-    title = guides[position].document.title + " · Sayon docs"
-    if guides[position].slug == ""
-        title = "Sayon's documentation"
-    return layout.page(view, title, out, 200, true, "docs", "The guides to Sayon: installing it, and the language from values and ownership to projects, packages, and targets.")
+    description = sentence(strings.replace(shown.summary, "`", ""))
+    if description == ""
+        description = clone(DESCRIPTION)
+    return layout.page(view, shown.document.title + " · Sayon docs", out, 200, true, "docs", description)
+
+test "the map's entries give each guide its name, file, and summary"
+    found = map_entry("- [Types](language/types.md): inference, unions, and `structures`")
+    assert(found != nothing and found.label == "Types" and found.path == "language/types.md" and found.summary == "inference, unions, and `structures`")
+    assert(map_entry("A sentence.") == nothing and map_entry("- [Broken](no end") == nothing)
+
+test "a guide's sections are its parts under headings, as plain text"
+    document = markdown.convert("# Title\n\nFirst **words**.\n\n## One\n\nText of `one` &.\n\n### Two\n\nMore.\n")
+    found = sections_of(document)
+    assert(length(found) == 3)
+    assert(found[0].id == "" and found[0].title == "Title" and found[0].text == "First words.")
+    assert(found[1].id == "one" and found[1].title == "One" and found[1].text == "Text of one &." and found[1].lowered == "text of one &.")
+    assert(found[2].id == "two" and found[2].title == "Two")
+
+test "pages that moved say where they are"
+    assert(moved("installing") == "/docs/get-started/installing" and moved("errors") == "/docs/reference/error-codes" and moved("language") == nothing)
+
+test "plain text keeps cells and blocks apart, and words in a line together"
+    assert(plain("<tr><td><code>View</code></td><td>A run of <em>elements</em>.</td></tr>") == "View A run of elements.")
+    assert(plain("<p>a &lt;b&gt;</p>\n<p>c</p>") == "a <b> c")
+    assert(sentence("files, and paths") == "Files, and paths" and sentence("`sayon.toml`, and more") == "`sayon.toml`, and more" and sentence("") == "")

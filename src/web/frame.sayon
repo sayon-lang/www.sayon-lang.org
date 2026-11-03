@@ -104,7 +104,18 @@ function top(page: Page) -> Array<string>
     push(out, "  </header>")
     return out
 
-# The page's end: the footer.
+# A column of the footer: its heading and its links, each an address and
+# a name.
+private function column(heading: string, links: Array<Array<string>>) -> Array<string>
+    out = ["      <nav aria-label=\"{html.escape(heading)}\">", "        <h2>{html.text(heading)}</h2>", "        <ul>"]
+    for link in links
+        push(out, "          <li><a href=\"{link[0]}\">{html.text(link[1])}</a></li>")
+    push(out, "        </ul>")
+    push(out, "      </nav>")
+    return out
+
+# The page's end: the footer, with a column for each area of the website
+# and one for its source.
 function bottom() -> Array<string>
     out: Array<string> = []
     push(out, "  <footer class=\"foot\">")
@@ -113,29 +124,19 @@ function bottom() -> Array<string>
     push(out, "        " + brand())
     push(out, "        <p>Programming made easy. Safety made automatic.</p>")
     push(out, "      </div>")
-    push(out, "      <nav aria-label=\"The website\">")
-    push(out, "        <h2>Sayon</h2>")
-    push(out, "        <ul>")
-    for section in sections()
-        push(out, "          <li><a href=\"{section.address}\">{html.text(section.label)}</a></li>")
-    push(out, "          <li><a href=\"/account\">Your account</a></li>")
-    push(out, "        </ul>")
-    push(out, "      </nav>")
-    push(out, "      <nav aria-label=\"Source\">")
-    push(out, "        <h2>Source</h2>")
-    push(out, "        <ul>")
-    push(out, "          <li><a href=\"{GITHUB}/sayon\">The language</a></li>")
-    push(out, "          <li><a href=\"{GITHUB}/sayon-vscode\">The VS Code extension</a></li>")
-    push(out, "          <li><a href=\"{GITHUB}/www.sayon-lang.org\">This website</a></li>")
-    push(out, "        </ul>")
-    push(out, "      </nav>")
-    push(out, "      <nav aria-label=\"License\">")
-    push(out, "        <h2>License</h2>")
-    push(out, "        <ul>")
-    push(out, "          <li><a href=\"{GITHUB}/sayon/blob/main/LICENSE\">Apache 2.0 with LLVM's exception</a></li>")
-    push(out, "        </ul>")
-    push(out, "      </nav>")
-    push(out, "      <p class=\"fine\">This website is a Sayon program, <a href=\"{GITHUB}/www.sayon-lang.org\">www.sayon-lang.org</a>, and every package version it holds is listed in its public index, <a href=\"{GITHUB}/packages-index\">packages-index</a>.</p>")
+    docs = [["/docs/get-started", "Get started"], ["/docs/language", "The language"], ["/docs/library", "Standard library"], ["/docs/tools", "Tools"], ["/docs/reference", "Reference"]]
+    packages = [["/packages", "Every package"], ["/docs/tools/projects#publishing", "Publishing a package"], ["/account", "Your account"]]
+    community = [["/community", "The forum"], ["/community/help", "Help"], ["/community/show-and-tell", "Show and tell"], ["/community/announcements", "Announcements"]]
+    source = [["{GITHUB}/sayon", "The language"], ["{GITHUB}/sayon-vscode", "The VS Code extension"], ["{GITHUB}/www.sayon-lang.org", "This website"]]
+    for line in column("Docs", docs)
+        push(out, clone(line))
+    for line in column("Packages", packages)
+        push(out, clone(line))
+    for line in column("Community", community)
+        push(out, clone(line))
+    for line in column("Source", source)
+        push(out, clone(line))
+    push(out, "      <p class=\"fine\">Sayon is open source, under the <a href=\"{GITHUB}/sayon/blob/main/LICENSE\">Apache License 2.0 with LLVM's exception</a>. This website is a Sayon program, <a href=\"{GITHUB}/www.sayon-lang.org\">www.sayon-lang.org</a>, and every package version it holds is listed in its public index, <a href=\"{GITHUB}/packages-index\">packages-index</a>.</p>")
     push(out, "    </div>")
     push(out, "  </footer>")
     push(out, "</body>")

@@ -31,12 +31,18 @@ function avatar(name: string, picture: string or nothing, kind: string = "") -> 
         return "<img class=\"{classes}\" src=\"/users/{name}/picture?v={version}\" alt=\"\">"
     return "<span class=\"{classes}\" aria-hidden=\"true\">{html.text(strings.slice(name, 0, 1))}</span>"
 
-# A search of the packages: the bar's, or `large`, the packages' page's.
-function search_box(query: string, large: boolean) -> string
+# A search: the bar's, of the whole website, or `large`, a page's own;
+# `placeholder` says what it finds, and `action` is where it goes.
+function search_box(query: string, large: boolean, placeholder: string = "Search Sayon", action: string = "/search") -> string
     kind = "search"
     if large
         kind = "search large"
-    return "<form class=\"{kind}\" action=\"/packages\" role=\"search\">{frame.SEARCH_ICON}<input class=\"input\" type=\"search\" name=\"q\" value=\"{html.escape(query)}\" placeholder=\"Search packages\" aria-label=\"Search packages\" autocomplete=\"off\"></form>"
+    return "<form class=\"{kind}\" action=\"{action}\" role=\"search\">{frame.SEARCH_ICON}<input class=\"input\" type=\"search\" name=\"q\" value=\"{html.escape(query)}\" placeholder=\"{html.escape(placeholder)}\" aria-label=\"{html.escape(placeholder)}\" autocomplete=\"off\"></form>"
+
+# The bar's way to search on a phone, where its field does not fit: a link
+# to the search's page.
+function search_link() -> string
+    return "<a class=\"icon-button search-link\" href=\"/search\" aria-label=\"Search Sayon\" title=\"Search Sayon\">{frame.SEARCH_ICON}</a>"
 
 # The bar's account: a way to sign in, or the signed-in account's menu.
 function account_tool(view: Visitor) -> string
@@ -56,6 +62,7 @@ function page(view: Visitor, title: string, body: Array<string>, status: integer
     tools: Array<string> = []
     if bar_search
         push(tools, search_box(view.query, false))
+        push(tools, search_link())
     push(tools, account_tool(view))
     told = clone(description)
     if told == ""

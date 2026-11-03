@@ -20,13 +20,69 @@ function clear(folder: string)
         position -= 1
     filesystem.remove(folder)
 
-test "the guides are read from docs, each with its address"
+test "the map gives the guides in five categories, in its order"
     guides = docs.load("docs")
-    assert(length(guides) == 5)
-    assert(docs.address(guides[0]) == "/docs" and docs.address(guides[2]) == "/docs/language" and docs.address(guides[4]) == "/docs/errors")
-    assert(docs.find(guides, "installing") == 1 and docs.find(guides, "api") == 3 and docs.find(guides, "missing") == nothing)
-    assert(guides[2].document.title == "The Sayon language" and guides[4].document.title == "Error codes")
-    assert(strings.contains(guides[3].origin, "sayon-lang/sayon/") and strings.contains(guides[2].origin, "www.sayon-lang.org"))
+    assert(guides.title == "Sayon's documentation" and length(guides.categories) == 5)
+    keys: Array<string> = []
+    for category in guides.categories
+        push(keys, clone(category.key))
+    assert(keys == ["get-started", "language", "library", "tools", "reference"], strings.join(keys, " "))
+    assert(docs.find(guides, "get-started/installing") == 0 and docs.find(guides, "get-started/first-program") == 1)
+    assert(docs.find(guides, "language/ownership") != nothing and docs.find(guides, "missing") == nothing)
+    assert(docs.find_category(guides, "tools") == 3 and docs.find_category(guides, "language/types") == nothing)
+    protocol = docs.find(guides, "reference/protocol")
+    if protocol == nothing
+        error("the registry's protocol is not a guide")
+    api = docs.find(guides, "reference/api")
+    if api == nothing
+        error("the library's API is not a guide")
+    assert(guides.guides[protocol].source == "PROTOCOL.md" and strings.contains(guides.guides[protocol].origin, "www.sayon-lang.org/blob/main/PROTOCOL.md"))
+    assert(strings.contains(guides.guides[api].origin, "sayon-lang/sayon/tree/main/stdlib"))
+    # Every category's guides come together, in the map's order.
+    last = 0
+    for found in guides.guides
+        assert(found.category >= last, found.slug)
+        last = found.category
+        assert(found.summary != "" and found.document.title != "", found.slug)
+
+test "every link between the guides leads to a page and a section that exist"
+    guides = docs.load("docs")
+    known: Dict<string, Array<string>> = ["/docs" = []]
+    for category in guides.categories
+        known["/docs/" + category.key] = []
+    for found in guides.guides
+        ids: Array<string> = []
+        for heading in found.document.headings
+            push(ids, clone(heading.id))
+        known[docs.address(found)] = ids
+    broken: Array<string> = []
+    for found in guides.guides
+        pieces = strings.split(found.document.body, "href=\"")
+        for index in range(1, length(pieces))
+            close = strings.find(pieces[index], "\"")
+            if close == nothing
+                continue
+            target = strings.slice(pieces[index], 0, close)
+            if strings.starts_with(target, "#")
+                target = docs.address(found) + target
+            if not strings.starts_with(target, "/docs")
+                continue
+            path = clone(target)
+            fragment = ""
+            mark = strings.find(target, "#")
+            if mark != nothing
+                path = strings.slice(target, 0, mark)
+                fragment = strings.slice(target, mark + 1, length(target))
+            if not haskey(known, path)
+                push(broken, "{found.slug}: {target}")
+            elseif fragment != ""
+                there = false
+                for id in known[path]
+                    if id == fragment
+                        there = true
+                if not there
+                    push(broken, "{found.slug}: {target}")
+    assert(length(broken) == 0, strings.join(broken, "\n"))
 
 test "the language's references are copied as they are, when it is checked out beside"
     if not filesystem.is_directory("../sayon/docs")
@@ -36,8 +92,9 @@ test "the language's references are copied as they are, when it is checked out b
     copies = "build/test-references"
     clear(copies)
     filesystem.create_directory(copies)
-    io.write_file(filesystem.join(copies, "api.md"), io.read_file("docs/api.md"))
-    assert(docs.stale("../sayon", copies) == ["errors.md"])
+    filesystem.create_directory(filesystem.join(copies, "reference"))
+    io.write_file(filesystem.join(copies, "reference/api.md"), io.read_file("docs/reference/api.md"))
+    assert(docs.stale("../sayon", copies) == ["reference/error-codes.md", "reference/features.md"])
 
 test "the first page, the guides, and the packages are one website"
     clear(DATA)
@@ -46,28 +103,38 @@ test "the first page, the guides, and the packages are one website"
     address = "http://127.0.0.1:{listener.address().port}"
     state = registry.State(data = clone(DATA), index = filesystem.join(DATA, "index"), address = clone(address), admin = "operator", guides = docs.load("docs"))
     running = threads.spawn(function()
-        server.serve(listener, state, 11)
+        server.serve(listener, state, 14)
     )
     first = network.get(address + "/")
     assert(first.status == 200 and strings.contains(first.text(), "Programming made easy. Safety made automatic."))
     assert(strings.contains(first.text(), "href=\"/docs\"") and strings.contains(first.text(), "href=\"/packages\""))
     overview = network.get(address + "/docs")
-    assert(overview.status == 200 and strings.contains(overview.text(), "<h1 id=\"sayons-documentation\">Sayon's documentation</h1>"), overview.text())
-    assert(strings.contains(overview.text(), "<a href=\"/docs/installing\">Installing</a>"))
+    assert(overview.status == 200 and strings.contains(overview.text(), "<h1>Sayon's documentation</h1>"), overview.text())
+    assert(strings.contains(overview.text(), "<h2><a href=\"/docs/language\">The language</a></h2>") and strings.contains(overview.text(), "<a class=\"button primary\" href=\"/docs/get-started/installing\">Installing</a>"))
     language = network.get(address + "/docs/language/")
-    assert(language.status == 200 and strings.contains(language.text(), "<h2 id=\"source-files\">Source files<a class=\"anchor\" href=\"#source-files\""))
-    assert(strings.contains(language.text(), "aria-current=\"page\">The language</a>") and strings.contains(language.text(), "On this page"))
+    assert(language.status == 200 and strings.contains(language.text(), "<h1>The language</h1>"), language.text())
+    assert(strings.contains(language.text(), "<a class=\"row\" href=\"/docs/language/ownership\"><span class=\"row-title\">Ownership</span>"))
+    assert(strings.contains(language.text(), "<h2><a href=\"/docs/language\" aria-current=\"page\">The language</a></h2>"))
+    projects = network.get(address + "/docs/tools/projects")
+    assert(projects.status == 200 and strings.contains(projects.text(), "<h2 id=\"dependencies\">Dependencies<a class=\"anchor\" href=\"#dependencies\""))
+    assert(strings.contains(projects.text(), "aria-current=\"page\">Projects and packages</a>") and strings.contains(projects.text(), "On this page"))
+    assert(strings.contains(projects.text(), "<li><a href=\"/docs/tools\">Tools</a></li><li aria-current=\"page\">Projects and packages</li>"))
+    assert(strings.contains(projects.text(), "<span class=\"docs-menu-place\">Tools / Projects and packages</span>"))
     assert(network.get(address + "/docs/missing").status == 404)
-    errors = network.get(address + "/docs/errors")
+    moved = network.request("GET", address + "/docs/installing", [], [], time.seconds(30), 1)
+    assert(moved.status == 200 and moved.url == address + "/docs/get-started/installing")
+    errors = network.get(address + "/docs/reference/error-codes")
     assert(errors.status == 200 and strings.contains(errors.text(), "<h3 id=\"e_invalid_utf8\">E_INVALID_UTF8<a class=\"anchor\" href=\"#e_invalid_utf8\""))
     assert(strings.contains(errors.text(), "github.com/sayon-lang/sayon/blob/main/docs/errors.md\">Edit this page on GitHub</a>"))
-    api = network.get(address + "/docs/api")
+    api = network.get(address + "/docs/reference/api")
     assert(api.status == 200 and strings.contains(api.text(), "<a href=\"#standardcollectionssayon\"><code>standard/collections.sayon</code></a>"))
-    assert(strings.contains(api.text(), "<h2 id=\"standardcollectionssayon\">standard/collections.sayon<a class=\"anchor\""))
+    protocol = network.get(address + "/docs/reference/protocol")
+    assert(protocol.status == 200 and strings.contains(protocol.text(), "<h1 id=\"the-registry-protocol\">The registry protocol</h1>"))
+    assert(strings.contains(protocol.text(), "href=\"/docs/tools/projects#versions-from-the-registry\""))
     every = network.get(address + "/packages")
     assert(every.status == 200 and strings.contains(every.text(), "Packages for Sayon"))
-    moved = network.request("GET", address + "/search?q=json", [], [], time.seconds(30), 1)
-    assert(moved.status == 200 and moved.url == address + "/packages?q=json")
+    found = network.get(address + "/search?q=views")
+    assert(found.status == 200 and strings.contains(found.text(), "href=\"/docs/language/ownership#views\"><span class=\"row-title\"><mark>Views</mark></span>"), found.text())
     style = network.get(address + "/style.css")
     assert(style.status == 200 and style.header("content-type") == "text/css; charset=utf-8")
     assert(network.get(address + "/../sayon.toml").status == 404)
