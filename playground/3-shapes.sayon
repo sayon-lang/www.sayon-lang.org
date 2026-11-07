@@ -1,0 +1,17 @@
+# Shapes: an enum, and matching each kind of value
+enum Shape
+    circle(radius: float)
+    rectangle(width: float, height: float)
+    point
+
+function area(shape: Shape) -> float
+    match shape
+        case circle(radius)
+            return 3.14159 * radius * radius
+        case rectangle(width, height)
+            return width * height
+        case point
+            return 0.0
+
+for shape in [circle(1.0), rectangle(2.0, 3.0), point]
+    print(shape, "has an area of", area(shape))

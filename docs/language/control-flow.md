@@ -27,7 +27,7 @@ for character in "abc"
 
 A loop also goes through an iterator: a value whose type has a `next` [method](functions.md#methods) that returns the next value, or `nothing` at the end. The loop calls `next` before each iteration, and each value belongs to the loop variable, which may keep it.
 
-```sayon
+```sayon run
 type Countdown = [from: integer]
 
 function next(update countdown: Countdown) -> integer or nothing

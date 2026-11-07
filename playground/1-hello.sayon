@@ -1,0 +1,6 @@
+# Hello: printing, and values written into strings
+name = "world"
+print("Hello, {name}!")
+
+for count in range(1, 4)
+    print("{count} squared is {count * count}")

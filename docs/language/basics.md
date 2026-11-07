@@ -6,7 +6,7 @@ How a program runs, how its text is laid out, and how names hold values.
 
 A file with top-level statements is a script: they run in order. A file with only definitions runs its `main` function, which takes no parameters and returns `nothing` or an `integer`. The integer becomes the exit status. Portable statuses are 0 to 255; other values exit with 255 after a warning.
 
-```sayon
+```sayon run
 function main() -> integer
     print("done")
     return 0

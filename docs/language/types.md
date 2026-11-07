@@ -26,7 +26,7 @@
 
 Annotations are optional. The type of every binding and the parameter and result types of every function are inferred from how they are used. Functions are generic when their code works for more than one type:
 
-```sayon
+```sayon run
 function identity(x)
     return x
 
@@ -39,7 +39,7 @@ print(add(1, 2), add("con", "cat"))     # 3 concat
 
 Generic functions can also be written explicitly. Values of an explicit type parameter can be moved, borrowed, cloned, compared with `==` and `<`, and converted to and from JSON. Cloning, comparing, or converting one makes it a requirement of the parameter, so a call with a type that cannot do it, such as an open file to clone or a structure to order with `<`, is an error where it is written. Other operations, such as `+`, need an inferred parameter instead.
 
-```sayon
+```sayon run
 function wrap<T>(own value: T) -> Array<T>
     return [value]
 
@@ -64,7 +64,7 @@ When a value's type cannot be determined, for example an empty `[]` that is neve
 
 A union holds one value of one of its member types. Unions are flattened and normalized, so `(integer or nothing) or nothing` is `integer or nothing`. To use a union value as one of its members, test it first; inside the test the value has the narrower type:
 
-```sayon
+```sayon run
 function find(id: integer) -> string or nothing
     if id == 1
         return "ada"
@@ -89,7 +89,7 @@ A union compared with one of its members is equal when it holds that member with
 
 A structure type has named fields. Build a value by naming every field, either with the type's name or, where the type is known, with a field list:
 
-```sayon
+```sayon run
 type Point = [
     x: float,
     y: float

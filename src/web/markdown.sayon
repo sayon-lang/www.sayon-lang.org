@@ -243,10 +243,12 @@ function convert(source: string, safe: boolean = false, folder: string = "docs",
             index += 1
         elseif strings.starts_with(line, "```")
             # The language is the first word, as GitHub reads it: ```sayon run
-            # is Sayon code.
+            # is Sayon code, a program the playground can run.
             language = strings.trim(strings.slice(line, 3, length(line)))
+            runnable = false
             space = strings.find(language, " ")
             if space != nothing
+                runnable = strings.trim(strings.slice(language, space, length(language))) == "run"
                 language = strings.slice(language, 0, space)
             code: Array<string> = []
             index += 1
@@ -257,6 +259,8 @@ function convert(source: string, safe: boolean = false, folder: string = "docs",
             text = strings.join(code, "\n")
             if language == "sayon"
                 push(out, "<pre><code class=\"language-sayon\">" + highlight.highlight(text) + "</code></pre>")
+                if runnable and not safe
+                    push(out, "<form class=\"code-run\" method=\"post\" action=\"/play\"><textarea name=\"code\" hidden>{html.text(text + "\n")}</textarea><button class=\"button small\" type=\"submit\" name=\"action\" value=\"run\">Run in the playground</button></form>")
             elseif language == ""
                 push(out, "<pre><code>" + html.text(text) + "</code></pre>")
             else
@@ -348,9 +352,12 @@ test "tables split at the bars outside code"
     page = convert("| Code | Means |\n|---|---|\n| `a | b` | either |\n")
     assert(page.body == "<div class=\"table\"><table>\n<thead><tr><th>Code</th><th>Means</th></tr></thead>\n<tbody>\n<tr><td><code>a | b</code></td><td>either</td></tr>\n</tbody></table></div>")
 
-test "a fence's language is its first word"
-    page = convert("```sayon run\nx = 1\n```\n")
-    assert(page.body == "<pre><code class=\"language-sayon\">x = <span class=\"n\">1</span></code></pre>", page.body)
+test "a fence's language is its first word, and `run` makes a program the playground runs"
+    page = convert("```sayon run\nx = 1 < 2\n```\n")
+    assert(strings.starts_with(page.body, "<pre><code class=\"language-sayon\">x = <span class=\"n\">1</span>"), page.body)
+    assert(strings.contains(page.body, "<form class=\"code-run\" method=\"post\" action=\"/play\"><textarea name=\"code\" hidden>x = 1 &lt; 2\n</textarea>"), page.body)
+    assert(not strings.contains(convert("```sayon\nx = 1\n```\n").body, "code-run"))
+    assert(not strings.contains(post("```sayon run\nx = 1\n```\n"), "code-run"))
 
 test "HTML goes through, with the files of static at the site's top"
     page = convert("<p align=\"center\">\n  <img src=\"static/images/logo.svg\">\n</p>\n")

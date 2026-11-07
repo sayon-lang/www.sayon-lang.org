@@ -1,0 +1,11 @@
+# JSON: text read into typed values, and written back
+json = import("standard/json.sayon")
+
+type Point = [x: float, y: float]
+type Shape = [name: string, points: Array<Point>]
+
+shape: Shape = json.decode("{{\"name\": \"line\", \"points\": [{{\"x\": 0, \"y\": 1.5}}, {{\"x\": 2, \"y\": 4}}]}}")
+print(shape.name, "has", length(shape.points), "points")
+
+push(shape.points, Point(x = 3.0, y = 5.0))
+print(json.encode_value(shape))

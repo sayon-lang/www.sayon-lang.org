@@ -22,7 +22,7 @@ print(numbers)     # error[E_MOVED_VALUE]: `numbers` was transferred to `other`
 
 A view borrows a run of an array's elements without copying them. `view(items, start, end)` shows the elements from `start` up to, but not including, `end`, and `view(items)` all of them; `mutable_view(update items, start, end)` can also change them. The types are `View<T>` and `MutableView<T>`, and a view can be made of another view.
 
-```sayon
+```sayon run
 function total(values: View<integer>) -> integer
     sum = 0
     for value in values
@@ -44,7 +44,7 @@ print(numbers)                         # [10, 6, 8, 1, 9]
 - While a view is still used later in its block, the array it borrows cannot be changed, moved, or replaced, and while a mutable view is, the array cannot be used at all except through the view. After the view's last use, the array is free again. A view made of another view borrows that view in the same way.
 - `split_view(update rest, count)` splits the first `count` elements off a view: it returns them as a view of their own and leaves the others in `rest`. The two parts never overlap, so both can be used, and changed, at the same time, while both still borrow the array. Asking for more elements than the view has raises `BoundsError` and leaves the view as it was.
 
-```sayon
+```sayon run
 function add_into(update target: MutableView<integer>, source: MutableView<integer>)
     for index in range(length(target))
         target[index] += source[index]
@@ -65,7 +65,7 @@ print(pairs)                     # [1, 2, 3, 11, 22, 33]
 
 Most values have one owner. When several parts of a program need the same value, `share(value)` makes a `Shared<T>`: a handle to one value that every copy of the handle refers to. `shared.value` reads it in place.
 
-```sayon
+```sayon run
 type Settings = [name: string, sizes: Array<integer>]
 
 settings = share(Settings(name = "main", sizes = [1, 2, 3]))

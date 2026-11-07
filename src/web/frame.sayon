@@ -48,6 +48,7 @@ type Section = [key: string, label: string, address: string]
 function sections() -> Array<Section>
     return [
         Section(key = "docs", label = "Docs", address = "/docs"),
+        Section(key = "play", label = "Playground", address = "/play"),
         Section(key = "packages", label = "Packages", address = "/packages"),
         Section(key = "community", label = "Community", address = "/community")
     ]
@@ -124,7 +125,7 @@ function bottom() -> Array<string>
     push(out, "        " + brand())
     push(out, "        <p>Programming made easy. Safety made automatic.</p>")
     push(out, "      </div>")
-    docs = [["/docs/get-started", "Get started"], ["/docs/language", "The language"], ["/docs/library", "Standard library"], ["/docs/tools", "Tools"], ["/docs/reference", "Reference"]]
+    docs = [["/docs/get-started", "Get started"], ["/docs/language", "The language"], ["/docs/library", "Standard library"], ["/docs/tools", "Tools"], ["/docs/reference", "Reference"], ["/play", "Playground"]]
     packages = [["/packages", "Every package"], ["/docs/tools/projects#publishing", "Publishing a package"], ["/account", "Your account"]]
     community = [["/community", "The forum"], ["/community/help", "Help"], ["/community/show-and-tell", "Show and tell"], ["/community/announcements", "Announcements"]]
     source = [["{GITHUB}/sayon", "The language"], ["{GITHUB}/sayon-vscode", "The VS Code extension"], ["{GITHUB}/www.sayon-lang.org", "This website"]]

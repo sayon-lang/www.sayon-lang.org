@@ -25,7 +25,7 @@ Strings are immutable UTF-8 text in double quotes and must close on the same lin
 
 Braces interpolate an expression. Doubled braces are literal braces.
 
-```sayon
+```sayon run
 name = "Sayon"
 print("Hello, {name}!")          # Hello, Sayon!
 print("Sum: {100 + 20}")         # Sum: 120
@@ -34,7 +34,7 @@ print("Braces: {{{name}}}")      # Braces: {Sayon}
 
 Positions in a string count Unicode characters (scalar values), as `length` does; `bytelength` counts UTF-8 bytes. `text[i]` is the character at position `i` as a one-character string, and `for character in text` visits each character in order. A position outside the string raises `BoundsError`. Strings cannot be changed in place (`E_IMMUTABLE_STRING`); build a new one with `+`, interpolation, or the `standard/strings.sayon` functions such as `slice`.
 
-```sayon
+```sayon run
 word = "héllo"
 print(word[1], length(word), bytelength(word))   # é 5 6
 for character in word
@@ -51,7 +51,7 @@ Text has three kinds of units, and each operation names the one it counts:
 | character | a Unicode scalar value, such as `e` or the combining accent U+0301 | `length` | `text[i]`, `for`, `strings.characters` |
 | grapheme | what a reader sees as one character: a letter with its accents, a whole emoji sequence, a flag | `strings.grapheme_count` | `strings.graphemes` |
 
-```sayon
+```sayon run
 strings = import("standard/strings.sayon")
 
 word = "e\u{301}t\u{e9}"                       # "été", the first é written as e and an accent
@@ -72,7 +72,7 @@ An empty literal `[]` takes its type from an annotation or from later use, such 
 
 Dictionary keys are compared by value. A key can be an integer, a boolean, a string, `nothing`, or a structure, enum, or union made only of those; floats, collections, function values, and errors cannot be keys (`E_KEY_TYPE`), since a key must stay equal to itself. A key is copied into the dictionary.
 
-```sayon
+```sayon run
 type Point = [x: integer, y: integer]
 
 squares = [1 = 1, 2 = 4]

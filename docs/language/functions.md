@@ -33,7 +33,7 @@ An annotated parameter defaults to read; changing or keeping it requires `update
 
 `value.name(arguments)` calls a function with `value` as its first argument. The function is found beside the value's type: in the module that declares the type, a function named `type_name` (`point_move` for `Point`), or else one named `name`, whose first parameter is declared with the type.
 
-```sayon
+```sayon run
 type Point = [x: float, y: float]
 
 function length_squared(point: Point) -> float
@@ -58,7 +58,7 @@ print(p.length_squared())      # 41.0
 
 A named function is a value, and `function(...)` in an expression makes a closure: a function that captures the variables it uses from where it is written.
 
-```sayon
+```sayon run
 function apply(func, x, y)
     return func(x, y)
 

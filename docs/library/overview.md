@@ -33,7 +33,7 @@ String positions count Unicode characters. File and directory failures raise `IO
 
 For numbers that can be had again, `math.new_generator(seed)` gives a `Generator`: generators from the same seed give the same numbers in the same order, on every device and target, in the interpreter and compiled, which suits tests, simulations, and games that replay. `float()` is from 0 up to 1, `integer(low, high)` from `low` up to, but not including, `high`, each as likely as the others, and `shuffle(items)` puts an array in a random order:
 
-```sayon
+```sayon run
 math = import("standard/math.sayon")
 
 dice = math.new_generator(42)

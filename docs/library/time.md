@@ -2,7 +2,7 @@
 
 The monotonic clock measures intervals and never goes backwards; the wall clock gives the date and time and can jump when the system clock is set. Dates and times are in UTC, on the Gregorian calendar extended backwards, and time zones give them as a zone's clocks show them. Durations count whole nanoseconds, and their arithmetic is checked like any integer arithmetic.
 
-```sayon
+```sayon run
 time = import("standard/time.sayon")
 
 start = time.start()

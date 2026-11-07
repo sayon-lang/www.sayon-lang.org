@@ -2,7 +2,7 @@
 
 `json.parse(text)` reads JSON into a `Json` value, an enum with the variants `null`, `flag(value: boolean)`, `number(digits: string)`, `text(value: string)`, `list(items: Array<Json>)`, and `object(fields: Dict<string, Json>)`. `json.encode(value)` writes compact JSON and `json.pretty(value)` indents it by two spaces per level.
 
-```sayon
+```sayon run
 json = import("standard/json.sayon")
 
 value = json.parse("{{\"name\": \"Ada\", \"born\": 1815}}")

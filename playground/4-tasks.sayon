@@ -1,0 +1,16 @@
+# Tasks: work done together, with a channel between
+threads = import("standard/threads.sayon")
+time = import("standard/time.sayon")
+
+channel: Channel<string> = threads.new_channel()
+
+counter = threads.spawn(function()
+    for count in range(1, 4)
+        time.sleep(time.milliseconds(100))
+        threads.send(channel, "tick {count}")
+)
+
+for _turn in range(3)
+    print(threads.receive(channel))
+threads.join(counter)
+print("done")

@@ -1,0 +1,85 @@
+io = import("standard/io.sayon")
+network = import("standard/network.sayon")
+strings = import("standard/strings.sayon")
+threads = import("standard/threads.sayon")
+docs = import("src/pages/docs.sayon")
+playground = import("src/pages/playground.sayon")
+server = import("src/server.sayon")
+http = import("src/web/http.sayon")
+client = import("tests/client.sayon")
+
+# These run Sayon's sandbox: the `sayon` the system finds, or the one
+# SAYON_PLAYGROUND names, which has `sayon run --sandbox`.
+
+# The programs of the guides marked ```sayon run, by where they are.
+function marked(guides: docs.Docs) -> Dict<string, string>
+    out: Dict<string, string> = []
+    for found in guides.guides
+        lines = strings.lines(io.read_file(found.source))
+        index = 0
+        while index < length(lines)
+            if strings.trim(lines[index]) == "```sayon run"
+                start = index + 1
+                code: Array<string> = []
+                index += 1
+                while index < length(lines) and strings.trim(lines[index]) != "```"
+                    push(code, clone(lines[index]))
+                    index += 1
+                out["{found.source}:{start}"] = strings.join(code, "\n") + "\n"
+            index += 1
+    return out
+
+test "every example, and every program the guides let run, runs in the sandbox"
+    state = client.website("build/test-playground-programs", 0)
+    failures: Array<string> = []
+    for example in playground.examples()
+        ran = playground.run(state, example.code)
+        if ran.status != 0
+            push(failures, "the example {example.name}: {ran.errors}")
+    programs = marked(docs.load("docs"))
+    assert(length(programs) >= 20, "{length(programs)} programs")
+    for place, code in programs
+        ran = playground.run(state, code)
+        if ran.status != 0 or strings.trim(ran.output) == ""
+            push(failures, "{place}: {ran.status} {ran.errors}")
+    assert(length(failures) == 0, strings.join(failures, "\n\n"))
+
+test "the playground runs a program, refuses what the sandbox does not give, formats, and shares"
+    listener = network.listen("127.0.0.1", 0)
+    port = listener.address().port
+    state = client.website("build/test-playground", port)
+    running = threads.spawn(function()
+        server.serve(listener, state, 10)
+    )
+    form: Dict<string, string> = ["Content-Type" = "application/x-www-form-urlencoded", "Origin" = "http://127.0.0.1:{port}"]
+
+    first = client.send(port, "GET", "/play", [], "")
+    assert(first.status == 200 and strings.contains(first.body, "<textarea class=\"play-code\" id=\"code\" name=\"code\""), first.body)
+    assert(strings.contains(first.body, "print(&quot;Hello") or strings.contains(first.body, "print(\"Hello"), first.body)
+    assert(strings.contains(first.body, "<a href=\"/play\" aria-current=\"page\">Playground</a>"))
+    tasks = client.send(port, "GET", "/play?example=tasks", [], "")
+    assert(strings.contains(tasks.body, "threads.new_channel()"), tasks.body)
+
+    ran = client.send(port, "POST", "/play", form, "action=run&code=" + http.encode("print(\"from the <playground>\")\n"))
+    assert(ran.status == 200 and strings.contains(ran.body, "<pre class=\"play-text\">from the &lt;playground&gt;\n</pre>"), ran.body)
+    assert(strings.contains(ran.body, "<p class=\"play-status\">Finished in "))
+
+    refused = client.send(port, "POST", "/play", form, "action=run&code=" + http.encode("print(readfile(\"secret.txt\"))\n"))
+    assert(strings.contains(refused.body, "Not run: the program has errors") and strings.contains(refused.body, "error[<a href=\"/docs/reference/error-codes#e_capability\">E_CAPABILITY</a>]"), refused.body)
+
+    looping = client.send(port, "POST", "/play", form, "action=run&code=" + http.encode("count = 0\nwhile true\n    count += 1\n"))
+    assert(strings.contains(looping.body, "<p class=\"play-status\">Stopped: it "), looping.body)
+
+    formatted = client.send(port, "POST", "/play", form, "action=format&code=" + http.encode("x   =   1\nprint( x )\n"))
+    assert(strings.contains(formatted.body, ">x = 1\nprint(x)\n</textarea>"), formatted.body)
+
+    shared = client.send(port, "POST", "/play/share", form, "code=" + http.encode("print(42)\n"))
+    location = client.header_of(shared, "location")
+    assert(shared.status == 303 and location == "/play/" + playground.digest_of("print(42)\n"), location)
+    opened = client.send(port, "GET", location, [], "")
+    assert(opened.status == 200 and strings.contains(opened.body, ">print(42)\n</textarea>") and strings.contains(opened.body, "Link to this program"), opened.body)
+
+    elsewhere: Dict<string, string> = ["Content-Type" = "application/x-www-form-urlencoded", "Origin" = "https://example.com"]
+    assert(client.send(port, "POST", "/play", elsewhere, "action=run&code=print(1)").status == 403)
+    assert(client.send(port, "GET", "/play/000000000000", [], "").status == 404)
+    threads.join(running)

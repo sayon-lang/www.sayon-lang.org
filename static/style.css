@@ -2618,6 +2618,186 @@ select.input {
   }
 }
 
+/* The playground, /play: the program in a box of code, its output beside
+   it, as dark as the site's code, and the buttons above them. */
+
+.wrap.play {
+  padding-top: 32px;
+}
+
+.play-head {
+  max-width: 50rem;
+  margin-bottom: 20px;
+}
+
+.play-head h1 {
+  margin-bottom: 10px;
+  font-size: clamp(2rem, 1.6rem + 1.6vw, 2.75rem);
+  letter-spacing: -0.02em;
+}
+
+.play-share {
+  max-width: 640px;
+  margin-bottom: 16px;
+}
+
+.play-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 20px;
+  margin-bottom: 12px;
+}
+
+.play-bar .buttons {
+  gap: 8px;
+}
+
+.play-examples {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.play-examples label {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.play-examples select.input {
+  width: auto;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.play-panes {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: stretch;
+}
+
+.play-editor {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.play-code {
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 440px;
+  padding: 16px 18px;
+  border: 1px solid var(--code-line);
+  border-radius: var(--corner-box);
+  background: var(--code-page);
+  color: var(--code-ink);
+  font: 0.875rem/1.6 var(--mono);
+  tab-size: 4;
+  white-space: pre;
+  resize: vertical;
+}
+
+.play-code:focus-visible {
+  outline: 2px solid var(--vermilion);
+  outline-offset: 2px;
+}
+
+.play-editor .hint {
+  margin: 8px 0 0;
+}
+
+.play-output {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--code-line);
+  border-radius: var(--corner-box);
+  background: var(--code-page);
+  color: var(--code-ink);
+}
+
+.play-output h2 {
+  margin: 0;
+  padding: 10px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--code-comment);
+  font-family: var(--text);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.play-text {
+  flex: 1 1 auto;
+  min-height: 360px;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.play-text a {
+  color: inherit;
+  text-decoration: underline;
+}
+
+.play-errors {
+  color: var(--code-keyword);
+}
+
+.play-quiet {
+  color: var(--code-comment);
+}
+
+.play-status {
+  margin: 0;
+  padding: 10px 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--code-comment);
+  font-size: 0.875rem;
+}
+
+.play-note {
+  max-width: 60rem;
+  margin: 16px 0 0;
+  color: var(--muted);
+  font-size: 0.9375rem;
+}
+
+/* A guide's program, run in the playground from just below it. */
+.code-run {
+  display: flex;
+  justify-content: flex-end;
+  margin: -12px 0 20px;
+}
+
+.hero-code {
+  min-width: 0;
+}
+
+.hero-code .code-run {
+  margin: 12px 0 0;
+}
+
+@media (max-width: 980px) {
+  .play-panes {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .play-code {
+    min-height: 320px;
+  }
+
+  .play-text {
+    min-height: 160px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

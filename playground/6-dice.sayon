@@ -1,0 +1,12 @@
+# Dice: random numbers you can have again, from a seed
+math = import("standard/math.sayon")
+
+dice = math.new_generator(42)
+rolls: Array<integer> = []
+for _roll in range(5)
+    push(rolls, dice.integer(1, 7))
+print("the same five rolls every time:", rolls)
+
+cards = ["ace", "king", "queen", "jack"]
+dice.shuffle(cards)
+print("and the same order of cards:", cards)

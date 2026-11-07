@@ -19,6 +19,7 @@ moderation = import("src/community/moderation.sayon")
 api = import("src/packages/api.sayon")
 docs = import("src/pages/docs.sayon")
 home = import("src/pages/home.sayon")
+playground = import("src/pages/playground.sayon")
 search = import("src/pages/search.sayon")
 http = import("src/web/http.sayon")
 layout = import("src/web/layout.sayon")
@@ -108,6 +109,10 @@ private function sent(request: http.Request, state: registry.State, view: layout
     path = clone(request.path)
     if path == "/theme"
         return choose_theme(request, state)
+    if path == "/play"
+        return playground.posted(request, state, view)
+    if path == "/play/share"
+        return playground.share_program(request, state, view)
     if path == "/sign-in"
         return account.sign_in(request, state, view)
     if path == "/sign-up"
@@ -226,6 +231,10 @@ function route(request: http.Request, state: registry.State) -> http.Response
         return docs.page(state.guides, position, view)
     if path == "/search"
         return search.results(state, view, asked(request, "q"))
+    if path == "/play"
+        return playground.opened(state, view, asked(request, "example"))
+    if length(parts) == 2 and parts[0] == "play"
+        return playground.shared(state, view, parts[1])
     if path == "/packages"
         query = ""
         if haskey(request.query, "q")
@@ -312,6 +321,10 @@ function rule(method: string, path: string) -> Rule or nothing
             return Rule(count = 60, seconds = 3600)
         case "/community/report"
             return Rule(count = 20, seconds = 3600)
+        case "/play"
+            return Rule(count = 30, seconds = 600)
+        case "/play/share"
+            return Rule(count = 10, seconds = 3600)
         case _
             return nothing
 
@@ -355,6 +368,9 @@ function serve(update listener: network.Listener, state: registry.State, count: 
     # Changes through the API take turns: a publication runs Git, which
     # other publications must not run at the same time.
     publishing: Channel<boolean> = threads.new_channel(1)
+    # The playground's programs take turns too, two at a time, since each
+    # runs Sayon for a few seconds of the processor.
+    playing: Channel<boolean> = threads.new_channel(2)
     answering: Array<Task<nothing>> = []
     served = 0
     while count == nothing or served < count
@@ -363,8 +379,9 @@ function serve(update listener: network.Listener, state: registry.State, count: 
         seen = shared
         limits = windows
         turn = publishing
+        play = playing
         task = threads.spawn(function()
-            outcome = try answer(connection, seen.value, limits, turn)
+            outcome = try answer(connection, seen.value, limits, turn, play)
             if outcome is error
                 print("a request failed:", outcome.message)
         )
@@ -377,7 +394,7 @@ function serve(update listener: network.Listener, state: registry.State, count: 
         if task != nothing
             threads.join(task)
 
-private function answer(update connection: network.Connection, state: registry.State, limits: Shared<Cell<Dict<string, Window>>>, turn: Channel<boolean>)
+private function answer(update connection: network.Connection, state: registry.State, limits: Shared<Cell<Dict<string, Window>>>, turn: Channel<boolean>, play: Channel<boolean>)
     # A computer that sends nothing for this long is let go.
     connection.set_timeout(time.seconds(30))
     request = http.read(connection)
@@ -399,11 +416,16 @@ private function answer(update connection: network.Connection, state: registry.S
             http.write(connection, too_many(request, found), with_body)
             return
     alone = request.method != "GET" and strings.starts_with(request.path, "/api/")
+    playing = request.method == "POST" and (request.path == "/play" or request.path == "/play/share")
     if alone
         threads.send(turn, true)
+    if playing
+        threads.send(play, true)
     response = try route(request, state)
     if alone
         threads.receive(turn)
+    if playing
+        threads.receive(play)
     if response is error
         print("a request failed:", response.message)
         http.write(connection, http.refuse(500, "the website failed to answer; try again later"), with_body)

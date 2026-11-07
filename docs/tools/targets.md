@@ -127,3 +127,18 @@ capability_manifest = 1                        # the manifest the project was wr
 Before checking, `check` and `build` stop for any target that lacks a required capability.
 
 The capabilities, and which targets provide which, are the capability manifest, which has a version: it goes up whenever a capability is added, removed, or renamed, or a target provides others, and not when a target only comes further along. `sayon target list` says which version this compiler has, and `sayon target manifest` prints the whole of it as JSON: each capability with what it lets a program do, and each target with its platform, processor, state, and capabilities. A project that names `capability_manifest` is refused by a compiler of another version, which would check its capabilities by other rules.
+
+## The sandbox
+
+`sayon run --sandbox main.sayon` runs a program from anyone, as the website's playground does, kept from the computer it runs on. It is checked for this computer with only the `console`, `tasks`, `clock`, `random`, `json`, `math`, `text`, and `collections` capabilities, so reaching anything else is `E_CAPABILITY`, as for any target without it, and `supports` is false for the rest. Platform branches are decided for this computer, the one it runs on, so no branch that was not checked runs. While it runs, the interpreter refuses those operations again (`SandboxError`), in case the checker let one through.
+
+The program is one file: it imports only modules of the standard library (`E_SANDBOX_IMPORT` otherwise), and the compiler reads nothing else for it, not even a project around it.
+
+The sandbox stops a program after 5 seconds of processor time or 10 seconds in all, or when it uses more than 256 MiB of memory or writes more than 64 KiB of output; the checking counts too. It ends with status 3, after a line saying which limit it went past:
+
+```text
+$ sayon run --sandbox loop.sayon
+the sandbox stopped the program: it used 5 seconds of processor time
+```
+
+The operating system backs these limits, a little past them: on Windows a job object, which also lets the program start no other process, and on Linux a limit on processor time.

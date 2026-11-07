@@ -10,6 +10,7 @@ Without a file, `run`, `build`, `check`, `lint`, and `test` use the project in t
 |---|---|
 | `sayon run [file] [-- arguments]` | Checks a program and runs it in the interpreter. The words after `--` are the program's, which `os.arguments()` gives it |
 | `sayon run --native [file]` | Compiles the program to a native executable, and runs that |
+| `sayon run --sandbox <file>` | Runs one file from anyone in the interpreter, kept from the computer, as the website's playground does: see [the sandbox](targets.md#the-sandbox) |
 | `sayon build [file]` | Compiles a native executable: for a project, to `build/debug/<name>`, or `build/release/<name>` with `--release`; for a file alone, beside it, named after it |
 
 | Option | For | What it does |

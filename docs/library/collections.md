@@ -4,7 +4,7 @@ Beside arrays and dictionaries, `standard/collections` has a `Set`, which holds 
 
 A `Map` keeps its keys in order, smallest first, where a dictionary keeps the order they were added in. Its keys are numbers or strings, floats too, but not NaN. Looking a key up, adding one, removing one, and finding the keys around a key take time proportional to log n for n keys. A `List` keeps values in a sequence where adding or taking out a value anywhere takes constant time: each value added gets a `Position`, which names it until it is taken out, however the list changes around it. Using a position whose value was taken out is a `ValueError`.
 
-```sayon
+```sayon run
 collections = import("standard/collections.sayon")
 
 prices = collections.new_map()

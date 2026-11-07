@@ -1,0 +1,313 @@
+# The playground, at /play: a program written in a plain form, run in
+# Sayon's sandbox (`sayon run --sandbox`), on this computer, in a folder of
+# its own that goes after it ran. The sandbox gives a program only the
+# console, tasks, clocks, random numbers, and the library's pure parts,
+# and stops it after a few seconds or past a little memory or output. It
+# can also be formatted, and shared at an address of its own, kept in
+# `<data>/playground/shared` by its digest. The examples are the programs
+# of `playground`, each named by its first line.
+
+crypto = import("standard/crypto.sayon")
+filesystem = import("standard/filesystem.sayon")
+io = import("standard/io.sayon")
+os = import("standard/os.sayon")
+strings = import("standard/strings.sayon")
+time = import("standard/time.sayon")
+pages = import("src/accounts/pages.sayon")
+registry = import("src/packages/registry.sayon")
+files = import("src/web/files.sayon")
+html = import("src/web/html.sayon")
+http = import("src/web/http.sayon")
+layout = import("src/web/layout.sayon")
+
+constant EXAMPLES = "playground"
+constant MOST_BYTES = 65536
+constant STOP = "the sandbox stopped the program: "
+
+# What a run gave: what the program wrote to its output and its errors,
+# its status, and how long it took. A status of -1 is a run that could not
+# start.
+type Ran = [output: string, errors: string, status: integer, seconds: float]
+
+# What Sayon gave for a program in its folder, and the program as the
+# folder held it after, as `sayon fmt` left it.
+type Done = [ran: Ran, code: string]
+
+# What the output's pane shows: its text, as HTML, and how the run ended.
+type Shown = [text: string, status: string]
+
+# An example: its name in its address, its title and what it shows, from
+# its first line, `# Title: what it shows`, and its code.
+type Example = [name: string, title: string, about: string, code: string]
+
+# The examples, in the order of their files' names, which start with their
+# place, as `1-hello.sayon`.
+function examples() -> Array<Example>
+    out: Array<Example> = []
+    if not filesystem.is_directory(EXAMPLES)
+        return out
+    for file in filesystem.list(EXAMPLES)
+        if filesystem.extension(file) != "sayon"
+            continue
+        code = io.read_file(filesystem.join(EXAMPLES, file))
+        lines = strings.lines(code)
+        title = ""
+        if length(lines) > 0 and strings.starts_with(lines[0], "#")
+            title = strings.trim(strings.slice(lines[0], 1, length(lines[0])))
+        about = ""
+        colon = strings.find(title, ":")
+        if colon != nothing
+            about = strings.trim(strings.slice(title, colon + 1, length(title)))
+            title = strings.slice(title, 0, colon)
+        name = strings.slice(file, 0, length(file) - 6)
+        dash = strings.find(name, "-")
+        if dash != nothing
+            name = strings.slice(name, dash + 1, length(name))
+        push(out, Example(name = name, title = title, about = about, code = code))
+    return out
+
+# The program to run Sayon with: `SAYON_PLAYGROUND`, or the `sayon` the
+# system finds.
+private function sayon() -> string
+    chosen = os.environment("SAYON_PLAYGROUND")
+    if chosen != nothing and chosen != ""
+        return chosen
+    return "sayon"
+
+# The folder `<data>/playground/<part>`, made when it is not there.
+private function under(state: registry.State, part: string) -> string
+    top = filesystem.join(state.data, "playground")
+    if not filesystem.is_directory(top)
+        filesystem.create_directory(top)
+    folder = filesystem.join(top, part)
+    if not filesystem.is_directory(folder)
+        filesystem.create_directory(folder)
+    return folder
+
+# Takes a folder away with what is in it.
+private function remove_folder(folder: string)
+    if not filesystem.exists(folder)
+        return
+    entries = filesystem.walk(folder)
+    position = length(entries) - 1
+    while position >= 0
+        filesystem.remove(filesystem.join(folder, entries[position]))
+        position -= 1
+    filesystem.remove(folder)
+
+# Runs Sayon with `arguments` on `code`, written as main.sayon in an empty
+# folder of its own, under `<data>/playground/runs`.
+private function with_sayon(state: registry.State, code: string, arguments: Array<string>) -> Done
+    folder = filesystem.join(under(state, "runs"), crypto.hex(crypto.random_bytes(8)))
+    filesystem.create_directory(folder)
+    io.write_file(filesystem.join(folder, "main.sayon"), code)
+    started = time.start()
+    done = try os.run(sayon(), arguments, folder)
+    seconds = time.in_seconds(time.elapsed(started))
+    after = io.read_file(filesystem.join(folder, "main.sayon"))
+    remove_folder(folder)
+    if done is error
+        return Done(ran = Ran(output = "", errors = "The playground could not start Sayon: {done.message}", status = -1, seconds = seconds), code = after)
+    return Done(ran = Ran(output = clone(done.output), errors = clone(done.errors), status = done.status, seconds = seconds), code = after)
+
+# Runs a program in the sandbox.
+function run(state: registry.State, code: string) -> Ran
+    done = with_sayon(state, code, ["run", "--sandbox", "--color", "never", "main.sayon"])
+    return clone(done.ran)
+
+# Formats a program: what Sayon gave, and the program formatted when it
+# has no errors.
+function format(state: registry.State, code: string) -> Done
+    return with_sayon(state, code, ["fmt", "main.sayon"])
+
+# The address of a shared program: the start of its digest.
+function digest_of(code: string) -> string
+    return strings.slice(crypto.hex(crypto.sha256(strings.bytes(code))), 0, 12)
+
+# Keeps a program to share, by its digest, and gives the digest.
+function keep(state: registry.State, code: string) -> string
+    id = digest_of(code)
+    file = filesystem.join(under(state, "shared"), id + ".sayon")
+    if not filesystem.is_file(file)
+        files.save_text(file, code)
+    return id
+
+# A shared program, or nothing when there is none at that address.
+function kept(state: registry.State, id: string) -> string or nothing
+    if length(id) != 12
+        return nothing
+    for symbol in strings.characters(id)
+        if not strings.contains("0123456789abcdef", symbol)
+            return nothing
+    file = filesystem.join(filesystem.join(filesystem.join(state.data, "playground"), "shared"), id + ".sayon")
+    if not filesystem.is_file(file)
+        return nothing
+    return io.read_file(file)
+
+# Text from Sayon as HTML, with each code of a diagnostic, such as
+# `[E_MOVED_VALUE]`, a link to what it means.
+function linked(text: string) -> string
+    out = html.text(text)
+    for mark in ["[E_", "[W_"]
+        pieces = strings.split(out, mark)
+        made = clone(pieces[0])
+        for index in range(1, length(pieces))
+            close = strings.find(pieces[index], "]")
+            if close == nothing
+                made = made + mark + pieces[index]
+                continue
+            code = strings.slice(mark, 1, 3) + strings.slice(pieces[index], 0, close)
+            rest = strings.slice(pieces[index], close, length(pieces[index]))
+            made = made + "[<a href=\"/docs/reference/error-codes#{strings.lower(code)}\">{code}</a>" + rest
+        out = made
+    return out
+
+# What the output's pane shows for a run: what it printed, then its errors,
+# without the sandbox's line about stopping it, which the status says.
+function shown_of(ran: Ran) -> Shown
+    seconds = strings.decimal(ran.seconds, 2)
+    lines: Array<string> = []
+    said = ""
+    for line in strings.lines(ran.errors)
+        if strings.starts_with(line, STOP)
+            said = strings.slice(line, length(STOP), length(line))
+        else
+            push(lines, clone(line))
+    text = linked(ran.output)
+    errors = strings.trim_end(strings.join(lines, "\n"))
+    if errors != ""
+        text = text + "<span class=\"play-errors\">" + linked(errors) + "</span>"
+    if text == ""
+        text = "<span class=\"play-quiet\">It printed nothing.</span>"
+    status = "Exited with status {ran.status} after {seconds} s"
+    if said != ""
+        status = "Stopped: {said}"
+    elseif ran.status == -1
+        status = "Not run"
+    elseif ran.status == 2 and strings.contains(ran.errors, "nothing was run")
+        status = "Not run: the program has errors"
+    elseif ran.status == 0
+        status = "Finished in {seconds} s"
+    return Shown(text = text, status = status)
+
+# The page: the program in its box, the buttons, the examples, and what the
+# output's pane shows, or a notice; `id` names a shared program, for its
+# link.
+function page(state: registry.State, view: layout.Visitor, code: string, shown: Shown or nothing, notice: string = "", id: string = "", status: integer = 200) -> http.Response
+    body: Array<string> = []
+    push(body, "<div class=\"wrap play\">")
+    push(body, "  <header class=\"play-head\">")
+    push(body, "    <h1>Playground</h1>")
+    push(body, "    <p class=\"lead\">Write a Sayon program and run it here. It runs on the website, in a sandbox, with the console, tasks, clocks, random numbers, and the library's pure parts, for a few seconds.</p>")
+    push(body, "  </header>")
+    if notice != ""
+        push(body, "  " + layout.notice("error", notice))
+    if id != ""
+        push(body, "  <div class=\"field play-share\"><label for=\"shared\">Link to this program</label><input class=\"input\" id=\"shared\" type=\"text\" readonly value=\"{html.escape(state.address)}/play/{id}\"></div>")
+    push(body, "  <form id=\"examples\" method=\"get\" action=\"/play\"></form>")
+    push(body, "  <form class=\"play-form\" method=\"post\" action=\"/play\">")
+    push(body, "    <div class=\"play-bar\">")
+    push(body, "      <div class=\"buttons\">")
+    push(body, "        <button class=\"button primary\" type=\"submit\" name=\"action\" value=\"run\">Run</button>")
+    push(body, "        <button class=\"button\" type=\"submit\" name=\"action\" value=\"format\">Format</button>")
+    push(body, "        <button class=\"button\" type=\"submit\" formaction=\"/play/share\">Share</button>")
+    push(body, "      </div>")
+    push(body, "      <div class=\"play-examples\">")
+    push(body, "        <label for=\"example\">Examples</label>")
+    push(body, "        <select class=\"input\" id=\"example\" name=\"example\" form=\"examples\">")
+    for example in examples()
+        push(body, "          <option value=\"{example.name}\">{html.text(example.title)}: {html.text(example.about)}</option>")
+    push(body, "        </select>")
+    push(body, "        <button class=\"button\" type=\"submit\" form=\"examples\">Open</button>")
+    push(body, "      </div>")
+    push(body, "    </div>")
+    push(body, "    <div class=\"play-panes\">")
+    push(body, "      <div class=\"play-editor\">")
+    push(body, "        <label class=\"hidden\" for=\"code\">Your program</label>")
+    push(body, "        <textarea class=\"play-code\" id=\"code\" name=\"code\" spellcheck=\"false\" autocapitalize=\"off\" autocomplete=\"off\" wrap=\"off\" rows=\"18\">{html.text(code)}</textarea>")
+    push(body, "        <p class=\"hint\">Indent with four spaces. Format lays the program out as Sayon is written.</p>")
+    push(body, "      </div>")
+    push(body, "      <section class=\"play-output\" aria-labelledby=\"output-title\" aria-live=\"polite\">")
+    push(body, "        <h2 id=\"output-title\">Output</h2>")
+    pane = clone(shown)
+    if pane == nothing
+        push(body, "        <pre class=\"play-text\"><span class=\"play-quiet\">Run the program to see what it prints.</span></pre>")
+    else
+        push(body, "        <pre class=\"play-text\">{pane.text}</pre>")
+        push(body, "        <p class=\"play-status\">{html.text(pane.status)}</p>")
+    push(body, "      </section>")
+    push(body, "    </div>")
+    push(body, "  </form>")
+    push(body, "  <p class=\"play-note\">Programs here cannot read files, reach the network, or start other programs, and one stops after 5 seconds of the processor or 10 in all, or past 256 MiB of memory or 64 KiB of output. <a href=\"/docs/get-started/first-program\">Your first program</a> shows how to run Sayon on your own computer, with nothing kept from it.</p>")
+    push(body, "</div>")
+    return layout.page(view, "Playground · Sayon", body, status, true, "play", "Write a Sayon program and run it in your browser.")
+
+# The page for GET /play: the example `name`, or the first.
+function opened(state: registry.State, view: layout.Visitor, name: string) -> http.Response
+    all = examples()
+    code = ""
+    if length(all) > 0
+        code = clone(all[0].code)
+    for example in all
+        if example.name == name
+            code = clone(example.code)
+    return page(state, view, code, nothing)
+
+# The page of a shared program, /play/<id>.
+function shared(state: registry.State, view: layout.Visitor, id: string) -> http.Response
+    code = kept(state, id)
+    if code == nothing
+        return page(state, view, "", nothing, "There is no program at this address.", "", 404)
+    return page(state, view, code, nothing, "", id)
+
+# The program a form sent, with `\r\n` as `\n`, or the page that refuses
+# it: one sent from another site, or too long.
+private function program_of(request: http.Request, state: registry.State, view: layout.Visitor) -> string or http.Response
+    code = strings.replace(pages.value(http.form(request), "code"), "\r\n", "\n")
+    if not pages.from_here(request, state)
+        return page(state, view, code, nothing, "This form must be sent from the playground's own page.", "", 403)
+    if bytelength(code) > MOST_BYTES
+        return page(state, view, code, nothing, "A program here is 64 KiB at most.", "", 413)
+    return code
+
+# What a program sent by the form asks: to run it, or to format it.
+function posted(request: http.Request, state: registry.State, view: layout.Visitor) -> http.Response
+    code = program_of(request, state, view)
+    if typeof(code) == "Response"
+        return code
+    if pages.value(http.form(request), "action") == "format"
+        done = format(state, code)
+        if done.ran.status == 0
+            return page(state, view, done.code, nothing)
+        problem = strings.trim(done.ran.errors + done.ran.output)
+        return page(state, view, code, Shown(text = linked(problem), status = "Not formatted: the program has errors"))
+    return page(state, view, code, shown_of(run(state, code)))
+
+# Shares a program sent by the form: it is kept, and the browser goes to
+# its address.
+function share_program(request: http.Request, state: registry.State, view: layout.Visitor) -> http.Response
+    code = program_of(request, state, view)
+    if typeof(code) == "Response"
+        return code
+    if strings.trim(code) == ""
+        return page(state, view, code, nothing, "Write a program to share first.")
+    return http.redirect("/play/" + keep(state, code))
+
+test "an example's title and what it shows are its first line"
+    found = examples()
+    assert(length(found) >= 6 and found[0].name == "hello" and found[0].title == "Hello", found[0].name)
+    assert(found[0].about == "printing, and values written into strings")
+
+test "the pane says how a run ended"
+    stopped = shown_of(Ran(output = "", errors = "the sandbox stopped the program: it ran for 10 seconds\n", status = 3, seconds = 10.0))
+    assert(stopped.status == "Stopped: it ran for 10 seconds" and stopped.text == "<span class=\"play-quiet\">It printed nothing.</span>", stopped.text)
+    assert(shown_of(Ran(output = "hi\n", errors = "", status = 0, seconds = 0.25)).status == "Finished in 0.25 s")
+    assert(shown_of(Ran(output = "", errors = "error[E_X]: no\n\n1 error found; nothing was run\n", status = 2, seconds = 0.1)).status == "Not run: the program has errors")
+    assert(shown_of(Ran(output = "", errors = "", status = 7, seconds = 0.5)).status == "Exited with status 7 after 0.50 s")
+
+test "codes in what Sayon wrote link to what they mean"
+    assert(linked("error[E_MOVED_VALUE]: a < b") == "error[<a href=\"/docs/reference/error-codes#e_moved_value\">E_MOVED_VALUE</a>]: a &lt; b")
+    assert(linked("warning[W_UNUSED_VARIABLE]: x") == "warning[<a href=\"/docs/reference/error-codes#w_unused_variable\">W_UNUSED_VARIABLE</a>]: x")
+
+test "a shared program's address is its digest's start"
+    assert(digest_of("print(1)\n") == digest_of("print(1)\n") and digest_of("print(1)\n") != digest_of("print(2)\n") and length(digest_of("")) == 12)

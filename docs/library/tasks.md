@@ -6,7 +6,7 @@ Tasks let a program do several things at once, and channels carry values between
 
 `standard/threads.sayon` runs tasks together. A task is a fiber: the tasks take turns on one thread, and one runs until it waits, for a message, for room in a channel, for another task, for time to pass, or in `threads.pause()`. A spawned task starts when the task that spawned it first waits.
 
-```sayon
+```sayon run
 threads = import("standard/threads.sayon")
 
 handle = threads.spawn(function() -> integer
