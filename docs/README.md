@@ -1,6 +1,6 @@
 # Sayon's documentation
 
-Guides to Sayon as it is implemented today: installing it, writing programs, its standard library, its tools, and references to look things up.
+Everything about Sayon as it works today: installing it, writing programs, the standard library, the tools, and lists to look things up in.
 
 ## Get started
 
@@ -11,7 +11,7 @@ Install Sayon, then write and run a first program.
 
 ## The language
 
-How Sayon programs are written. What is planned for later is in the [feature ledger](reference/features.md); using it is an `E_UNAVAILABLE` error that names its milestone.
+How Sayon programs are written. Features planned for later are in the [feature ledger](reference/features.md), and using one now gives an `E_UNAVAILABLE` error that names the milestone it's planned for.
 
 - [Basics](language/basics.md): programs, source files, comments, names, and bindings
 - [Values and operators](language/values.md): numbers, strings, arrays, dictionaries, and what works on them

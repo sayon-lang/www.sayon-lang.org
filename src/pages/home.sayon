@@ -48,10 +48,10 @@ function diagnostic() -> Array<string>
 
 function points() -> Array<Point>
     return [
-        Point(title = "Reads like what it does", text = "Blocks by indentation, whole words for keywords, and values written into strings where they go. Types are inferred, and you name them where it helps."),
-        Point(title = "Safe without trying", text = "The compiler checks ownership and infers borrowing, so each value is cleaned up exactly once, at a time you can tell from the code. No garbage collector, no hidden copies."),
-        Point(title = "One program, many places", text = "Run it in the interpreter, or compile it through LLVM to a native program for Windows or Linux, WebAssembly for WASI and web pages, or an Android app."),
-        Point(title = "Errors that teach", text = "Every diagnostic has a stable code, points at the problem, and suggests a concrete fix. `sayon explain` says more about any of them.")
+        Point(title = "Reads like a script", text = "Blocks are indentation, keywords are plain words, and strings fill in values right where you write them. Types are inferred, and you can spell them out where it helps."),
+        Point(title = "No garbage collector", text = "The compiler checks who owns each value and works out borrowing for you, so every value is freed exactly once, at a point you can see in the code. Nothing is copied behind your back."),
+        Point(title = "Runs in lots of places", text = "Run it in the interpreter while you work on it, then compile it through LLVM for Windows or Linux, WebAssembly for WASI and web pages, or an Android app."),
+        Point(title = "Errors that help", text = "Every error has a stable code, points at the problem, and suggests a fix. `sayon explain` tells you more about any of them.")
     ]
 
 # The diagnostic as a terminal shows it, its first line and its help marked.
@@ -73,7 +73,7 @@ function home(view: layout.Visitor, guides: docs.Docs) -> http.Response
     push(out, "      <section class=\"hero\">")
     push(out, "        <div>")
     push(out, "          <h1>Programming made easy. Safety made automatic.</h1>")
-    push(out, "          <p class=\"lead\">" + html.prose("Sayon means “easy”. Ordinary programs need fewer decisions, less boilerplate, and less setup, while the compiler checks who owns each value, so memory is freed on time without a garbage collector.") + "</p>")
+    push(out, "          <p class=\"lead\">" + html.prose("Sayon reads like a script and runs like a compiled program. The compiler works out the types and who owns each value, so memory is freed on time without a garbage collector.") + "</p>")
     push(out, "          <div class=\"buttons\">")
     push(out, "            <a class=\"button primary large\" href=\"/docs/get-started/first-program\">Get started</a>")
     push(out, "            <a class=\"button large\" href=\"/docs\">Read the docs</a>")
@@ -144,4 +144,4 @@ function home(view: layout.Visitor, guides: docs.Docs) -> http.Response
         push(out, "        </div>")
         push(out, "      </section>")
     push(out, "    </div>")
-    return layout.page(view, "Sayon: Programming made easy. Safety made automatic.", out, 200, true, "", "Sayon is a readable programming language whose compiler checks ownership for you: no garbage collector, no hidden copies, and errors that say how to fix them.")
+    return layout.page(view, "Sayon: Programming made easy. Safety made automatic.", out, 200, true, "", "Sayon is a programming language that reads like a script and runs like a compiled program, with ownership checked by the compiler instead of a garbage collector.")

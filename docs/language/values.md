@@ -1,6 +1,6 @@
 # Values and operators
 
-The values a program writes down, numbers, text, arrays, and dictionaries, and the operators that work on them.
+The values you can write straight into a program (numbers, text, arrays, and dictionaries) and the operators that work on them.
 
 ## Literals
 

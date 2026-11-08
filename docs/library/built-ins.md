@@ -15,6 +15,7 @@
 | `remove(update array, position)` | Removes and returns the element at a position, moving the later ones down; `BoundsError` outside the array |
 | `remove(update dict, key)` | Removes a key's entry and returns its value, or `nothing` when the key is absent; the other entries keep their order |
 | `swap(update array, first, second)` | Exchanges two elements |
+| `swap(update array, position, update other, other_position)` | Exchanges an element of one array with an element of another array of the same type; the two can't be the same array |
 | `share(own value)`, `cell(own value)` | A `Shared<T>` or a `Cell<T>`; see [Shared values](../language/ownership.md#shared-values) |
 | `view(items, start, end)`, `mutable_view(update items, start, end)` | A view of elements; see [Views](../language/ownership.md#views) |
 | `split_view(update view, count)` | Splits the first `count` elements off a view into a view of their own |

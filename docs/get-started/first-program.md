@@ -1,6 +1,6 @@
 # Your first program
 
-Sayon runs a single file as it is, or a project of many files. This page writes one of each, then checks, tests, and formats it. It needs Sayon installed: see [Installing](installing.md).
+Sayon can run a single file on its own, or a project made of many files. This page walks through one of each, then checks, tests, and formats the project. You'll need Sayon installed first (see [Installing](installing.md)).
 
 ## A script
 

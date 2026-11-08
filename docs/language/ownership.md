@@ -1,6 +1,6 @@
 # Ownership
 
-Each string, array, dictionary, and error, and each structure or enum value that holds one, has exactly one owner, and is destroyed when its owner's scope ends. Sayon checks ownership while compiling; there is no garbage collector, and nothing is copied unless you ask.
+Every string, array, dictionary, and error has exactly one owner, and so does any structure or enum that holds one. When the owner's scope ends, the value is freed. Sayon checks all of this while compiling, so there's no garbage collector, and nothing gets copied unless you ask for it.
 
 - Assigning or passing an owned value to an `own` parameter transfers it. The previous owner can no longer use it, until it is assigned a new value.
 - `clone(value)` makes an independent copy. `move(value)` makes a transfer explicit.
