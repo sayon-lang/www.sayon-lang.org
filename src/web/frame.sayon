@@ -123,7 +123,7 @@ function bottom() -> Array<string>
     push(out, "    <div class=\"foot-inner\">")
     push(out, "      <div class=\"foot-brand\">")
     push(out, "        " + brand())
-    push(out, "        <p>Programming made easy. Safety made automatic.</p>")
+    push(out, "        <p>Sayon is a programming language whose compiler checks who owns each value, so programs need no garbage collector.</p>")
     push(out, "      </div>")
     docs = [["/docs/get-started", "Get started"], ["/docs/language", "The language"], ["/docs/library", "Standard library"], ["/docs/tools", "Tools"], ["/docs/reference", "Reference"], ["/play", "Playground"]]
     packages = [["/packages", "Every package"], ["/docs/tools/projects#publishing", "Publishing a package"], ["/account", "Your account"]]

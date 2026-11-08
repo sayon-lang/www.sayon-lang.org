@@ -106,7 +106,7 @@ test "the first page, the guides, and the packages are one website"
         server.serve(listener, state, 14)
     )
     first = network.get(address + "/")
-    assert(first.status == 200 and strings.contains(first.text(), "Programming made easy. Safety made automatic."))
+    assert(first.status == 200 and strings.contains(first.text(), "<h1>The Sayon programming language</h1>"))
     assert(strings.contains(first.text(), "href=\"/docs\"") and strings.contains(first.text(), "href=\"/packages\""))
     overview = network.get(address + "/docs")
     assert(overview.status == 200 and strings.contains(overview.text(), "<h1>Sayon's documentation</h1>"), overview.text())

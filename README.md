@@ -4,8 +4,6 @@
 
 <h1 align="center">www.sayon-lang.org</h1>
 
-<p align="center">Programming made easy. Safety made automatic.</p>
-
 This is [Sayon](https://github.com/sayon-lang/sayon)'s website. It's a single Sayon program that serves everything: the home page, the guides, a playground for trying code, the package registry, the community forum, and the accounts people use to publish and post. It will live at `www.sayon-lang.org`. Until then it runs on your own computer, which is also where `sayon` looks for its registry by default.
 
 ## Running it
