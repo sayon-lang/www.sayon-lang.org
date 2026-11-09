@@ -1,11 +1,13 @@
-# The community's forum: threads in categories, each started by an account
-# and answered by others, kept in `<data>/community`. `threads.json` lists
-# every thread, and `<id>.json` holds a thread's posts, its start first;
-# `reports.json` holds the posts reported to moderators, `seen.json` how
-# many replies each account saw of its own threads, and `activity.json`
-# when each account posted in the last day. Each change reads its file and
-# saves it whole without waiting, so that tasks answering at the same time
-# never interleave in it.
+##
+The community's forum: threads in categories, each started by an account
+and answered by others, kept in `<data>/community`. `threads.json` lists
+every thread, and `<id>.json` holds a thread's posts, its start first;
+`reports.json` holds the posts reported to moderators, `seen.json` how
+many replies each account saw of its own threads, and `activity.json`
+when each account posted in the last day. Each change reads its file and
+saves it whole without waiting, so that tasks answering at the same time
+never interleave in it.
+##
 
 collections = import("standard/collections.sayon")
 filesystem = import("standard/filesystem.sayon")
@@ -21,9 +23,11 @@ constant LONGEST_TITLE = 120
 constant LONGEST_POST = 20000
 constant LONGEST_REASON = 500
 
-# A part of the forum: the key in its address, its name, what goes there,
-# whether only admins start threads in it, and whether its threads are
-# questions, which whoever asked marks solved by a reply.
+##
+A part of the forum: the key in its address, its name, what goes there,
+whether only admins start threads in it, and whether its threads are
+questions, which whoever asked marks solved by a reply.
+##
 type Category = [key: string, label: string, about: string, admins_only: boolean, solvable: boolean]
 
 function categories() -> Array<Category>
@@ -42,21 +46,27 @@ function find_category(key: string) -> Category or nothing
             return clone(each)
     return nothing
 
-# A thread as lists show it: its number; its title and category; who
-# started it; when it started and when it was last posted in, in seconds
-# since 1970; how many replies it has; the reply that solved it; and
-# whether moderators pinned it to the top of its category, locked it to
-# replies, or hid it.
+##
+A thread as lists show it: its number; its title and category; who
+started it; when it started and when it was last posted in, in seconds
+since 1970; how many replies it has; the reply that solved it; and
+whether moderators pinned it to the top of its category, locked it to
+replies, or hid it.
+##
 type Thread = [id: integer, title: string, category: string, author: string, created: integer, active: integer, replies: integer, solved: integer or nothing, pinned: boolean, locked: boolean, hidden: boolean]
 
-# A post: its number in its thread, from 1 for the start; who wrote it,
-# when, and when they last changed it; its Markdown; and whether a
-# moderator hid it.
+##
+A post: its number in its thread, from 1 for the start; who wrote it,
+when, and when they last changed it; its Markdown; and whether a
+moderator hid it.
+##
 type Post = [number: integer, author: string, created: integer, edited: integer or nothing, text: string, hidden: boolean]
 
-# A post reported to the moderators: the report's number; the thread and
-# the post; who reported it, why, and when; and whether a moderator has
-# yet to look at it.
+##
+A post reported to the moderators: the report's number; the thread and
+the post; who reported it, why, and when; and whether a moderator has
+yet to look at it.
+##
 type Report = [id: integer, thread: integer, post: integer, reporter: string, reason: string, created: integer, open: boolean]
 
 private function folder(data: string) -> string
@@ -130,8 +140,10 @@ function edit(data: string, id: integer, number: integer, text: string, title: s
             all["{id}"].title = clone(title)
             save_threads(data, all)
 
-# Whether a thread comes before another in a list: pinned ones first when
-# `pinned_first`, then the latest posted in.
+##
+Whether a thread comes before another in a list: pinned ones first when
+`pinned_first`, then the latest posted in.
+##
 private function comes_before(a: Thread, b: Thread, pinned_first: boolean) -> boolean
     if pinned_first and a.pinned != b.pinned
         return a.pinned
@@ -139,8 +151,10 @@ private function comes_before(a: Thread, b: Thread, pinned_first: boolean) -> bo
         return a.active > b.active
     return a.id > b.id
 
-# The threads to list: those of one category, or of all for "", whose
-# titles hold every word of `query`, and the hidden ones `with_hidden`.
+##
+The threads to list: those of one category, or of all for "", whose
+titles hold every word of `query`, and the hidden ones `with_hidden`.
+##
 function listed(all: Dict<string, Thread>, key: string, query: string, with_hidden: boolean, pinned_first: boolean) -> Array<Thread>
     words = strings.split(strings.lower(strings.trim(query)), " ")
     out: Array<Thread> = []
@@ -167,8 +181,10 @@ function started_by(all: Dict<string, Thread>, account: string, with_hidden: boo
 
 # ----- what accounts saw and did ----------------------------------------------
 
-# How many replies of each of its threads each account saw, by account and
-# thread.
+##
+How many replies of each of its threads each account saw, by account and
+thread.
+##
 function seen(data: string) -> Dict<string, Dict<string, integer>>
     file = file_of(data, "seen.json")
     if not filesystem.is_file(file)
@@ -282,8 +298,10 @@ function close_reports(data: string, thread: integer, post: integer)
         all[key].open = false
     save_reports(data, all)
 
-# How long ago a moment was, as a list shows it: "just now", "5 minutes
-# ago", "3 hours ago", "2 days ago", or its day.
+##
+How long ago a moment was, as a list shows it: "just now", "5 minutes
+ago", "3 hours ago", "2 days ago", or its day.
+##
 function ago(moment: integer, now: integer) -> string
     apart = now - moment
     if apart < 60

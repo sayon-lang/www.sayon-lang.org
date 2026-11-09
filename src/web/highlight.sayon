@@ -1,7 +1,9 @@
-# Sayon code as HTML, with each word marked by its kind for the page's
-# colors: keywords (`k`), types (`t`), the names of functions where they are
-# called or declared (`f`), numbers (`n`), strings (`s`) with what they
-# interpolate (`i`), and comments (`c`).
+##
+Sayon code as HTML, with each word marked by its kind for the page's
+colors: keywords (`k`), types (`t`), the names of functions where they are
+called or declared (`f`), numbers (`n`), strings (`s`) with what they
+interpolate (`i`), and comments (`c`).
+##
 
 strings = import("standard/strings.sayon")
 html = import("src/web/html.sayon")
@@ -113,11 +115,24 @@ private function highlight_line(line: string) -> string
             index += 1
     return strings.join(out, "")
 
-# Sayon source as HTML, line by line.
+##
+Sayon source as HTML, line by line. A block comment, from a `##` line to
+the next, is a comment on every line.
+##
 function highlight(source: string) -> string
     out: Array<string> = []
+    in_block = false
     for line in strings.split(source, "\n")
-        push(out, highlight_line(line))
+        fence = strings.trim(line) == "##"
+        if fence or in_block
+            if line != ""
+                push(out, span("c", line))
+            else
+                push(out, "")
+            if fence
+                in_block = not in_block
+        else
+            push(out, highlight_line(line))
     return strings.join(out, "\n")
 
 test "each kind of word is marked"
@@ -127,3 +142,6 @@ test "each kind of word is marked"
 test "strings show what they interpolate"
     assert(highlight("print(\"Sum: {{total}}\")") == "<span class=\"f\">print</span>(<span class=\"s\">\"Sum: <span class=\"i\">{{total}}</span>\"</span>)")
     assert(highlight("\"{{{{braces}}}}\"") == "<span class=\"s\">\"{{{{braces}}}}\"</span>")
+
+test "a block comment is a comment on every line"
+    assert(highlight("##\nx = 1\n\n##\ny") == "<span class=\"c\">##</span>\n<span class=\"c\">x = 1</span>\n\n<span class=\"c\">##</span>\ny")

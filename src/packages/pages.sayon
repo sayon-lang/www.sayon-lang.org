@@ -1,6 +1,8 @@
-# The pages about packages: every package with a search, under /packages,
-# the packages a search finds, and a page for each package with the line
-# that adds it to a project, its dependencies, and its versions.
+##
+The pages about packages: every package with a search, under /packages,
+the packages a search finds, and a page for each package with the line
+that adds it to a project, its dependencies, and its versions.
+##
 
 collections = import("standard/collections.sayon")
 strings = import("standard/strings.sayon")
@@ -30,8 +32,10 @@ private function listing(found: Array<registry.Summary>) -> Array<string>
     push(out, "</ul>")
     return out
 
-# How to publish, beside the packages: the steps, as far as the viewer has
-# come.
+##
+How to publish, beside the packages: the steps, as far as the viewer has
+come.
+##
 private function publishing(view: layout.Visitor) -> Array<string>
     out: Array<string> = []
     push(out, "<section class=\"box\" aria-labelledby=\"publish\">")

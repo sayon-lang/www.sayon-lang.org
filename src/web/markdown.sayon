@@ -1,10 +1,12 @@
-# Markdown as the guides are written, made into HTML: headings with the
-# ids GitHub gives them, paragraphs, lists, tables, fenced code (Sayon's
-# highlighted), and HTML passed through; in text, `code`, **strong**,
-# *emphasis*, and links. A link is read from its page's folder, as GitHub
-# reads it, and goes to the guide's page on the website when it names a
-# guide, or else to the file on GitHub. Posts in the forum are made HTML
-# safely instead (`post`).
+##
+Markdown as the guides are written, made into HTML: headings with the
+ids GitHub gives them, paragraphs, lists, tables, fenced code (Sayon's
+highlighted), and HTML passed through; in text, `code`, **strong**,
+*emphasis*, and links. A link is read from its page's folder, as GitHub
+reads it, and goes to the guide's page on the website when it names a
+guide, or else to the file on GitHub. Posts in the forum are made HTML
+safely instead (`post`).
+##
 
 strings = import("standard/strings.sayon")
 html = import("src/web/html.sayon")
@@ -13,8 +15,10 @@ highlight = import("src/web/highlight.sayon")
 # A heading, for a page's contents.
 type Heading = [level: integer, id: string, title: string]
 
-# A page made HTML: its body, its headings, and its title, the first
-# heading's text.
+##
+A page made HTML: its body, its headings, and its title, the first
+heading's text.
+##
 type Document = [body: string, headings: Array<Heading>, title: string]
 
 # The characters from `start` up to, but not including, `end`.
@@ -38,13 +42,17 @@ private function find_double(characters: Array<string>, start: integer, end: int
             return index
     return nothing
 
-# Where the repository's files are, for links to those that are not
-# guides.
+##
+Where the repository's files are, for links to those that are not
+guides.
+##
 constant REPOSITORY = "https://github.com/sayon-lang/www.sayon-lang.org/blob/main/"
 
-# Where a page's links lead: the page's folder in the repository, such as
-# `docs/language`, and each guide's file there, such as
-# `docs/language/types.md`, with its address on the website.
+##
+Where a page's links lead: the page's folder in the repository, such as
+`docs/language`, and each guide's file there, such as
+`docs/language/types.md`, with its address on the website.
+##
 type Links = [folder: string, pages: Dict<string, string>]
 
 # A path in the repository, with `.` and `..` gone.
@@ -57,8 +65,10 @@ function resolve(folder: string, path: string) -> string
             push(kept, clone(part))
     return strings.join(kept, "/")
 
-# A link's address: a guide's page on the website, read from the page's
-# folder as GitHub reads it, or else the file on GitHub.
+##
+A link's address: a guide's page on the website, read from the page's
+folder as GitHub reads it, or else the file on GitHub.
+##
 private function address(target: string, links: Links) -> string
     if strings.contains(target, "://") or strings.starts_with(target, "#") or strings.starts_with(target, "/") or strings.starts_with(target, "mailto:")
         return clone(target)
@@ -73,8 +83,10 @@ private function address(target: string, links: Links) -> string
         return links.pages[found] + fragment
     return REPOSITORY + found + fragment
 
-# Whether a post may link to an address: one on the web, over HTTP or
-# HTTPS, or one on this website.
+##
+Whether a post may link to an address: one on the web, over HTTP or
+HTTPS, or one on this website.
+##
 private function linkable(target: string) -> boolean
     lowered = strings.lower(target)
     if strings.contains(target, "\\") or strings.contains(target, " ")
@@ -137,8 +149,10 @@ private function inline_range(characters: Array<string>, start: integer, end: in
         push(out, html.text(current))
         index += 1
 
-# A line of text as HTML, its links read from `folder`, where `pages`
-# names the guides.
+##
+A line of text as HTML, its links read from `folder`, where `pages`
+names the guides.
+##
 function inline(text: string, safe: boolean = false, folder: string = "docs", pages: Dict<string, string> = []) -> string
     return inline_with(text, safe, Links(folder = clone(folder), pages = clone(pages)))
 
@@ -148,8 +162,10 @@ private function inline_with(text: string, safe: boolean, links: Links) -> strin
     inline_range(characters, 0, length(characters), out, safe, links)
     return strings.join(out, "")
 
-# A heading's id, as GitHub makes it: its text in lowercase, without the
-# marks around code and the like, with `-` for each space.
+##
+A heading's id, as GitHub makes it: its text in lowercase, without the
+marks around code and the like, with `-` for each space.
+##
 function slug(title: string) -> string
     out: Array<string> = []
     for current in strings.characters(strings.lower(title))
@@ -183,8 +199,10 @@ private function heading_level(line: string) -> integer
         return 0
     return level
 
-# Whether a line starts a block other than a paragraph: in a post, HTML
-# does not.
+##
+Whether a line starts a block other than a paragraph: in a post, HTML
+does not.
+##
 private function starts_block(line: string, safe: boolean) -> boolean
     return strings.starts_with(line, "```") or heading_level(line) > 0 or strings.starts_with(line, "|") or strings.starts_with(line, "- ") or strings.starts_with(line, "<") and not safe or is_ordered_item(line)
 
@@ -218,15 +236,19 @@ private function row(line: string, tag: string, safe: boolean, links: Links) -> 
     push(out, "</tr>")
     return strings.join(out, "")
 
-# A post's Markdown as HTML, safe to show among the website's own: HTML in
-# it shows as text, links go only to the web over HTTP or HTTPS or to this
-# website, marked as the poster's, and headings sit below the page's own.
+##
+A post's Markdown as HTML, safe to show among the website's own: HTML in
+it shows as text, links go only to the web over HTTP or HTTPS or to this
+website, marked as the poster's, and headings sit below the page's own.
+##
 function post(source: string) -> string
     return convert(source, true).body
 
-# A page of Markdown as HTML; `safe` for a post. The page's links are read
-# from its `folder` in the repository, where `pages` names each guide's
-# file with its address on the website.
+##
+A page of Markdown as HTML; `safe` for a post. The page's links are read
+from its `folder` in the repository, where `pages` names each guide's
+file with its address on the website.
+##
 function convert(source: string, safe: boolean = false, folder: string = "docs", pages: Dict<string, string> = []) -> Document
     links = Links(folder = clone(folder), pages = clone(pages))
     source_lines = strings.lines(source)
@@ -242,8 +264,10 @@ function convert(source: string, safe: boolean = false, folder: string = "docs",
         if strings.trim(line) == ""
             index += 1
         elseif strings.starts_with(line, "```")
-            # The language is the first word, as GitHub reads it: ```sayon run
-            # is Sayon code, a program the playground can run.
+            ##
+            The language is the first word, as GitHub reads it: ```sayon run
+            is Sayon code, a program the playground can run.
+            ##
             language = strings.trim(strings.slice(line, 3, length(line)))
             runnable = false
             space = strings.find(language, " ")

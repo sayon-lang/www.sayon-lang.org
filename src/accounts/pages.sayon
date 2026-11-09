@@ -1,13 +1,15 @@
-# The website's pages for becoming someone: making an account, signing in
-# and out, verifying an email address, choosing a new password from a link
-# that mail or the operator gives, and approving the sign-ins that `sayon
-# login` starts (src/accounts/logins.sayon). An account's own pages are in
-# src/accounts/dashboard.sayon.
-#
-# A browser holds its session in a cookie that it sends only to this site
-# and only on its own pages' requests (SameSite), and every form must come
-# from one of the website's pages, as browsers say in `Origin`, so that no
-# other site can make a signed-in browser act.
+##
+The website's pages for becoming someone: making an account, signing in
+and out, verifying an email address, choosing a new password from a link
+that mail or the operator gives, and approving the sign-ins that `sayon
+login` starts (src/accounts/logins.sayon). An account's own pages are in
+src/accounts/dashboard.sayon.
+
+A browser holds its session in a cookie that it sends only to this site
+and only on its own pages' requests (SameSite), and every form must come
+from one of the website's pages, as browsers say in `Origin`, so that no
+other site can make a signed-in browser act.
+##
 
 strings = import("standard/strings.sayon")
 accounts = import("src/accounts/accounts.sayon")
@@ -47,8 +49,10 @@ function from_here(request: http.Request, state: registry.State) -> boolean
 function secure(state: registry.State) -> boolean
     return strings.starts_with(state.address, "https://")
 
-# Mails an account a link that verifies `email` for it; why the mail was
-# not sent, or nothing.
+##
+Mails an account a link that verifies `email` for it; why the mail was
+not sent, or nothing.
+##
 function send_verification(state: registry.State, account: string, email: string) -> string or nothing
     all = sessions.verifications(state.data)
     secret = sessions.new_verification(all, account, email)
@@ -56,8 +60,10 @@ function send_verification(state: registry.State, account: string, email: string
     text = strings.join(["Hello {account},", "", "Open this link to verify the email address of your account at Sayon's website:", "", state.address + "/verify/" + secret, "", "The link works for a day. If you did not ask for it, ignore this mail: nothing changes without the link.", "", "Sayon"], "\n")
     return mail.send(state.data, mail.Mail(to = clone(email), subject = "Verify your email for Sayon", text = text))
 
-# Mails an account a link that chooses a new password, unless one was sent
-# in the last two minutes.
+##
+Mails an account a link that chooses a new password, unless one was sent
+in the last two minutes.
+##
 function send_reset(state: registry.State, account: string, email: string)
     all = sessions.resets(state.data)
     if sessions.reset_recently(all, account)
@@ -67,8 +73,10 @@ function send_reset(state: registry.State, account: string, email: string)
     text = strings.join(["Hello {account},", "", "Open this link to choose a new password for your account at Sayon's website:", "", state.address + "/reset/" + secret, "", "The link works once, for an hour. If you did not ask for it, ignore this mail: your password stays as it is.", "", "Sayon"], "\n")
     mail.send(state.data, mail.Mail(to = clone(email), subject = "Choose a new password for Sayon", text = text))
 
-# A page of the website to go to, never another site's: `text`, or
-# `fallback` when `text` is not the address of one.
+##
+A page of the website to go to, never another site's: `text`, or
+`fallback` when `text` is not the address of one.
+##
 function own_page(text: string, fallback: string) -> string
     if not strings.starts_with(text, "/") or strings.starts_with(text, "//")
         return clone(fallback)
@@ -77,8 +85,10 @@ function own_page(text: string, fallback: string) -> string
             return clone(fallback)
     return clone(text)
 
-# Where to go once signed in or out: a page of the website, but not back to
-# signing in.
+##
+Where to go once signed in or out: a page of the website, but not back to
+signing in.
+##
 function next_page(text: string, fallback: string) -> string
     if strings.starts_with(text, "/sign-")
         return clone(fallback)
@@ -126,8 +136,10 @@ private function account_switch(sign_in: string, sign_up: string, making: boolea
         second = " aria-current=\"page\""
     return "<nav class=\"switch\" aria-label=\"Account\"><a href=\"{html.escape(sign_in)}\"{first}>Sign in</a><a href=\"{html.escape(sign_up)}\"{second}>Create account</a></nav>"
 
-# The fields that sign in, or with `making` make an account, ending in the
-# button `action`.
+##
+The fields that sign in, or with `making` make an account, ending in the
+button `action`.
+##
 private function account_form(making: boolean, next: string, approve: boolean, name: string, wrong: boolean, email: string, action: string) -> Array<string>
     target = "/sign-in"
     if making
@@ -177,8 +189,10 @@ function sign_up_page(view: layout.Visitor, next: string, name: string, problem:
         push(inside, clone(line))
     return boxed(view, "Create an account", inside, [], status)
 
-# The page of a sign-in that `sayon login` started, for `view`: approving
-# it, or signing in or making an account first; or how it ended.
+##
+The page of a sign-in that `sayon login` started, for `view`: approving
+it, or signing in or making an account first; or how it ended.
+##
 function login_page(state: registry.State, view: layout.Visitor, code: string, making: boolean = false, name: string = "", problem: string = "", status: integer = 200, email: string = "") -> http.Response
     all = logins.logins(state.data)
     key = logins.find(all, code)
@@ -230,8 +244,10 @@ function login_page(state: registry.State, view: layout.Visitor, code: string, m
         push(after, "<form class=\"after\" method=\"post\" action=\"/sign-out\"><input type=\"hidden\" name=\"next\" value=\"{page}\">Approve only a sign-in you started. Not {html.text(account)}? <button class=\"link\" type=\"submit\">Sign out</button></form>")
     return boxed(view, "Approve a sign-in", inside, after, status)
 
-# The page a form goes back to with a problem: the sign-in's when it came
-# from one, or else signing in, or making an account.
+##
+The page a form goes back to with a problem: the sign-in's when it came
+from one, or else signing in, or making an account.
+##
 private function again(state: registry.State, view: layout.Visitor, next: string, making: boolean, name: string, problem: string, status: integer, email: string = "") -> http.Response
     code = login_code(next)
     if code != nothing
@@ -255,8 +271,10 @@ private function decide(state: registry.State, code: string, account: string, ap
     logins.save_logins(state.data, all)
     return true
 
-# Signs the browser in, approves the sign-in it came from when asked, and
-# goes on to `next`.
+##
+Signs the browser in, approves the sign-in it came from when asked, and
+goes on to `next`.
+##
 private function signed_in(state: registry.State, account: string, next: string, approve: boolean) -> http.Response
     all = sessions.sessions(state.data)
     id = sessions.start(all, account)
@@ -285,8 +303,10 @@ function sign_in(request: http.Request, state: registry.State, view: layout.Visi
     mistaken = "The account's name or the password is wrong."
     if not haskey(all, name)
         return again(state, view, next, false, name, mistaken, 401)
-    # Other requests are answered while the password is checked, so the try
-    # counts as wrong until it proves right: tries sent together count each.
+    ##
+    Other requests are answered while the password is checked, so the try
+    counts as wrong until it proves right: tries sent together count each.
+    ##
     sessions.failed(failures, name)
     sessions.save_failures(state.data, failures)
     if not accounts.password_is(all[name], password)
@@ -328,9 +348,11 @@ function sign_up(request: http.Request, state: registry.State, view: layout.Visi
             problem = "The two passwords differ. Type the same password in both."
     if problem != ""
         return again(state, view, next, true, name, problem, status, email)
-    # Other requests are answered while the password is hashed, so the
-    # accounts are read again after: another may have taken the name or the
-    # address meanwhile.
+    ##
+    Other requests are answered while the password is hashed, so the
+    accounts are read again after: another may have taken the name or the
+    address meanwhile.
+    ##
     hashed = accounts.hash_password(password)
     all = accounts.accounts(state.data)
     clash = taken(all, name, email)
@@ -341,8 +363,10 @@ function sign_up(request: http.Request, state: registry.State, view: layout.Visi
     send_verification(state, name, email)
     return signed_in(state, name, next, approve)
 
-# Why another account keeps this one from being made, since it has the
-# name or the address, or "".
+##
+Why another account keeps this one from being made, since it has the
+name or the address, or "".
+##
 private function taken(all: Dict<string, accounts.Account>, name: string, email: string) -> string
     if haskey(all, name)
         return "The name `{name}` is taken. Choose another, or sign in if the account is yours."
@@ -430,9 +454,11 @@ function forgot_page(view: layout.Visitor, sent: boolean, problem: string = "", 
     push(inside, "</form>")
     return boxed(view, "Forgot the password", inside, ["<p class=\"after\"><a href=\"/sign-in\">Back to signing in</a></p>"], status)
 
-# Mails a link that chooses a new password to the verified address of the
-# account a name or an address names. The answer is the same whether or
-# not there is one, so that it tells no one which accounts exist.
+##
+Mails a link that chooses a new password to the verified address of the
+account a name or an address names. The answer is the same whether or
+not there is one, so that it tells no one which accounts exist.
+##
 function forgot(request: http.Request, state: registry.State, view: layout.Visitor) -> http.Response
     if not from_here(request, state)
         return forgot_page(view, false, FOREIGN, 403)
@@ -484,9 +510,11 @@ function reset_password(request: http.Request, state: registry.State, view: layo
         return reset_page(state, view, secret, weak, 400)
     if password != value(fields, "again")
         return reset_page(state, view, secret, "The two passwords differ. Type the same password in both.", 400)
-    # The link is used up first, so that it works once, and the accounts
-    # read after the password is hashed, since other requests are answered
-    # meanwhile.
+    ##
+    The link is used up first, so that it works once, and the accounts
+    read after the password is hashed, since other requests are answered
+    meanwhile.
+    ##
     remove(resets, accounts.hash(secret))
     sessions.save_resets(state.data, resets)
     hashed = accounts.hash_password(password)

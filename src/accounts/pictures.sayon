@@ -1,9 +1,11 @@
-# Profile pictures: a PNG for each account that chose one, kept in
-# `<data>/pictures/<name>.png`. The settings page's form sends a PNG or JPEG
-# image as it is; the website decodes it, turned as a photo's orientation
-# says, takes its middle square, makes it SIDE pixels a side, and keeps
-# those pixels alone, so that nothing else the file held stays, such as
-# where a photo was taken.
+##
+Profile pictures: a PNG for each account that chose one, kept in
+`<data>/pictures/<name>.png`. The settings page's form sends a PNG or JPEG
+image as it is; the website decodes it, turned as a photo's orientation
+says, takes its middle square, makes it SIDE pixels a side, and keeps
+those pixels alone, so that nothing else the file held stays, such as
+where a photo was taken.
+##
 
 crypto = import("standard/crypto.sayon")
 filesystem = import("standard/filesystem.sayon")
@@ -16,8 +18,10 @@ files = import("src/web/files.sayon")
 # How many pixels a side a picture is kept at.
 constant SIDE = 256
 
-# The most pixels an image sent may have, which its header tells before
-# anything is decoded: a photo of a large camera, and no more.
+##
+The most pixels an image sent may have, which its header tells before
+anything is decoded: a photo of a large camera, and no more.
+##
 constant MOST_PIXELS = 40000000
 
 # Why bytes sent are not an image the website takes, or "".
@@ -31,8 +35,10 @@ function problem(bytes: Array<byte>) -> string
         return "That image of {size.width} by {size.height} pixels is too large. Choose one of 40 million pixels at most."
     return ""
 
-# The PNG to keep for an image: its middle square, SIDE pixels a side.
-# Fails with ImageError for what does not decode.
+##
+The PNG to keep for an image: its middle square, SIDE pixels a side.
+Fails with ImageError for what does not decode.
+##
 function made(bytes: Array<byte>) -> Array<byte>
     image = graphics.decode_image(bytes)
     side = image.width
@@ -42,8 +48,10 @@ function made(bytes: Array<byte>) -> Array<byte>
     canvas.draw_part(image, (image.width - side) / 2, (image.height - side) / 2, side, side, 0, 0, SIDE, SIDE)
     return canvas.png()
 
-# `made` on a thread of its own, since a photo takes a while to decode, and
-# the website answers others meanwhile.
+##
+`made` on a thread of its own, since a photo takes a while to decode, and
+the website answers others meanwhile.
+##
 function made_apart(bytes: Array<byte>) -> Array<byte>
     sent = clone(bytes)
     making = threads.spawn_parallel(function() -> Array<byte>
@@ -54,8 +62,10 @@ function made_apart(bytes: Array<byte>) -> Array<byte>
 private function file_of(data: string, account: string) -> string
     return filesystem.join(filesystem.join(data, "pictures"), account + ".png")
 
-# Keeps an account's picture, and gives its version: the start of its
-# SHA-256, which its address carries, so that browsers keep each version.
+##
+Keeps an account's picture, and gives its version: the start of its
+SHA-256, which its address carries, so that browsers keep each version.
+##
 function keep(data: string, account: string, png: Array<byte>) -> string
     filesystem.create_directory(filesystem.join(data, "pictures"))
     files.save_bytes(file_of(data, account), png)

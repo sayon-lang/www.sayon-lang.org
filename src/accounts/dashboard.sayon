@@ -1,9 +1,11 @@
-# An account's own pages, for its owner: the dashboard at /account, with
-# the account's packages, threads, tokens, and email; its tokens at
-# /account/tokens, made and revoked there; and its settings at
-# /account/settings: a few words about its owner, its email address, the
-# mail it gets about replies, its password, and the browsers signed in to
-# it.
+##
+An account's own pages, for its owner: the dashboard at /account, with
+the account's packages, threads, tokens, and email; its tokens at
+/account/tokens, made and revoked there; and its settings at
+/account/settings: a few words about its owner, its email address, the
+mail it gets about replies, its password, and the browsers signed in to
+it.
+##
 
 strings = import("standard/strings.sayon")
 time = import("standard/time.sayon")
@@ -31,9 +33,11 @@ function owned(state: registry.State, account: string) -> Array<registry.Summary
                 push(out, clone(summary))
     return out
 
-# The head of an account's pages: its picture or initial, its name, and
-# since when it exists, with the page's own title below when it has one;
-# then the tabs between the pages, and a link to the public profile.
+##
+The head of an account's pages: its picture or initial, its name, and
+since when it exists, with the page's own title below when it has one;
+then the tabs between the pages, and a link to the public profile.
+##
 private function head(account: string, picture: string or nothing, since: string, title: string) -> Array<string>
     out: Array<string> = ["<header class=\"account-head\">"]
     push(out, "  " + layout.avatar(account, picture))
@@ -371,9 +375,11 @@ function change_profile(request: http.Request, state: registry.State, view: layo
     accounts.save_accounts(state.data, all)
     return http.redirect("/account/settings?done=profile")
 
-# Keeps a new picture for the account, from the image the settings page's
-# form sends: `pictures` checks it, and keeps its middle square as pixels
-# alone.
+##
+Keeps a new picture for the account, from the image the settings page's
+form sends: `pictures` checks it, and keeps its middle square as pixels
+alone.
+##
 function change_picture(request: http.Request, state: registry.State, view: layout.Visitor) -> http.Response
     account = signed_in_account(view)
     if account == nothing
@@ -390,8 +396,10 @@ function change_picture(request: http.Request, state: registry.State, view: layo
     if png is error
         return settings_page(state, view, "", "That image could not be read; it may be damaged. Choose another.", 400)
     version = pictures.keep(state.data, account, png)
-    # The image was made on a thread of its own while others were answered,
-    # so the accounts are read now.
+    ##
+    The image was made on a thread of its own while others were answered,
+    so the accounts are read now.
+    ##
     all = accounts.accounts(state.data)
     if not haskey(all, account)
         return http.redirect(SIGN_IN)
@@ -478,8 +486,10 @@ function change_password(request: http.Request, state: registry.State, view: lay
         return settings_page(state, view, "", weak, 400)
     if password != pages.value(fields, "again")
         return settings_page(state, view, "", "The two new passwords differ. Type the same password in both.", 400)
-    # Other requests are answered while the passwords are checked and
-    # hashed, so the accounts are read again before saving.
+    ##
+    Other requests are answered while the passwords are checked and
+    hashed, so the accounts are read again before saving.
+    ##
     hashed = accounts.hash_password(password)
     all = accounts.accounts(state.data)
     if not haskey(all, account)

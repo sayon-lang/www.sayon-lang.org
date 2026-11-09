@@ -1,25 +1,27 @@
-# Runs Sayon's website: its first page, the guides of `docs`, the package
-# registry with its API and its index, and accounts, on this computer.
-#
-#     sayon run -- [--port 4100] [--data data] [--index <folder>] [--account <name>]... [--admin <name>]...
-#     sayon run -- [--port 4100] [--data data] --reset <name>
-#
-# Run it from this folder. It serves at http://127.0.0.1:<port> (`--port 0`
-# takes a free one), which at port 4100 is `sayon`'s registry by default;
-# reads the guides of `docs` once, as it starts; and keeps accounts,
-# owners, and archives in `--data`, and the index in `--index` (by default
-# `index` inside the data folder; a clone of packages-index gets a commit
-# for each publication). Once it listens it prints one line of JSON: its
-# address, its index's address, and a token for each `--account`, which it
-# makes, or whose tokens it replaces with that one. The operator's token,
-# for making accounts later, is SAYON_REGISTRY_ADMIN_TOKEN. People make
-# their own accounts on its pages. Each `--admin` makes an account an admin
-# of the website, who appoints the forum's moderators.
-#
-# `--reset <name>` serves nothing: it prints a line of JSON with a link
-# that chooses the account's password, once, within an hour, for an
-# account made with `--account` or a password forgotten. The website
-# serving that data folder at that port answers it.
+##
+Runs Sayon's website: its first page, the guides of `docs`, the package
+registry with its API and its index, and accounts, on this computer.
+
+    sayon run -- [--port 4100] [--data data] [--index <folder>] [--account <name>]... [--admin <name>]...
+    sayon run -- [--port 4100] [--data data] --reset <name>
+
+Run it from this folder. It serves at http://127.0.0.1:<port> (`--port 0`
+takes a free one), which at port 4100 is `sayon`'s registry by default;
+reads the guides of `docs` once, as it starts; and keeps accounts,
+owners, and archives in `--data`, and the index in `--index` (by default
+`index` inside the data folder; a clone of packages-index gets a commit
+for each publication). Once it listens it prints one line of JSON: its
+address, its index's address, and a token for each `--account`, which it
+makes, or whose tokens it replaces with that one. The operator's token,
+for making accounts later, is SAYON_REGISTRY_ADMIN_TOKEN. People make
+their own accounts on its pages. Each `--admin` makes an account an admin
+of the website, who appoints the forum's moderators.
+
+`--reset <name>` serves nothing: it prints a line of JSON with a link
+that chooses the account's password, once, within an hour, for an
+account made with `--account` or a password forgotten. The website
+serving that data folder at that port answers it.
+##
 
 filesystem = import("standard/filesystem.sayon")
 json = import("standard/json.sayon")

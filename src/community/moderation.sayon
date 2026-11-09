@@ -1,7 +1,9 @@
-# What the forum's moderators do: pin, lock, move, and hide threads; hide
-# replies; look at the posts people reported; keep an account from
-# posting for some days; and remove an account's picture. The website's
-# admins also make accounts moderators, and moderators again members.
+##
+What the forum's moderators do: pin, lock, move, and hide threads; hide
+replies; look at the posts people reported; keep an account from
+posting for some days; and remove an account's picture. The website's
+admins also make accounts moderators, and moderators again members.
+##
 
 strings = import("standard/strings.sayon")
 time = import("standard/time.sayon")
@@ -28,8 +30,10 @@ private function moderator_of(state: registry.State, view: layout.Visitor) -> co
         return nothing
     return someone
 
-# Pins a thread, locks it, hides it, or moves it to another category; or
-# undoes it.
+##
+Pins a thread, locks it, hides it, or moves it to another category; or
+undoes it.
+##
 function moderate(request: http.Request, state: registry.State, view: layout.Visitor) -> http.Response
     if moderator_of(state, view) == nothing
         return site.not_found(view)
@@ -66,8 +70,10 @@ function moderate(request: http.Request, state: registry.State, view: layout.Vis
     forum.save_threads(state.data, all)
     return http.redirect(community.address_of(all[key]))
 
-# Hides a reply from everyone but moderators, which closes its reports, or
-# shows it again.
+##
+Hides a reply from everyone but moderators, which closes its reports, or
+shows it again.
+##
 function moderate_post(request: http.Request, state: registry.State, view: layout.Visitor) -> http.Response
     if moderator_of(state, view) == nothing
         return site.not_found(view)
@@ -104,8 +110,10 @@ private function excerpt(text: string) -> string
         return strings.slice(flat, 0, 240) + "…"
     return flat
 
-# The posts people reported that no moderator looked at yet, the oldest
-# first.
+##
+The posts people reported that no moderator looked at yet, the oldest
+first.
+##
 function reports_page(state: registry.State, view: layout.Visitor, done: string) -> http.Response
     if moderator_of(state, view) == nothing
         return site.not_found(view)
@@ -167,10 +175,12 @@ function dismiss(request: http.Request, state: registry.State, view: layout.Visi
         forum.close_report(state.data, id)
     return http.redirect("/community/reports?done=dismissed")
 
-# What a moderator may do to an account, by the profile's tools: none to
-# their own; an admin makes members moderators, and moderators members;
-# a moderator keeps a member from posting and removes their picture, and
-# an admin a moderator's too.
+##
+What a moderator may do to an account, by the profile's tools: none to
+their own; an admin makes members moderators, and moderators members;
+a moderator keeps a member from posting and removes their picture, and
+an admin a moderator's too.
+##
 function may_change(actor: accounts.Account, actor_name: string, target: accounts.Account, target_name: string, action: string) -> boolean
     if actor_name == target_name or not accounts.moderates(actor) or accounts.is_admin(target)
         return false

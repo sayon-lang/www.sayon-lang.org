@@ -1,6 +1,8 @@
-# A person's public page, /users/<name>: since when their account exists,
-# the few words they wrote about themselves, the packages they own, and
-# the threads they started; with the moderators' tools for the account.
+##
+A person's public page, /users/<name>: since when their account exists,
+the few words they wrote about themselves, the packages they own, and
+the threads they started; with the moderators' tools for the account.
+##
 
 time = import("standard/time.sayon")
 accounts = import("src/accounts/accounts.sayon")
@@ -75,9 +77,11 @@ function profile(state: registry.State, view: layout.Visitor, name: string) -> h
     push(body, "</div>")
     return layout.page(view, "{name} · Sayon", body, 200, true, "", "{name} on Sayon's website: their packages and threads.")
 
-# An account's picture, as PNG. Asked for at its version's address, as
-# the pages ask, it is kept for a year, since a new picture has a new
-# address; otherwise for five minutes.
+##
+An account's picture, as PNG. Asked for at its version's address, as
+the pages ask, it is kept for a year, since a new picture has a new
+address; otherwise for five minutes.
+##
 function picture(state: registry.State, view: layout.Visitor, name: string, versioned: boolean) -> http.Response
     all = accounts.accounts(state.data)
     if not index.valid_name(name) or not haskey(all, name)

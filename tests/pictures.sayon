@@ -17,8 +17,10 @@ function halves(width: integer, height: integer) -> Array<byte>
     canvas.fill_rectangle(width / 2, 0, width - width / 2, height, graphics.rgb(20, 40, 210))
     return canvas.png()
 
-# A JPEG image with an EXIF segment after its start saying it is shown
-# turned a quarter clockwise, as a phone held upright writes it.
+##
+A JPEG image with an EXIF segment after its start saying it is shown
+turned a quarter clockwise, as a phone held upright writes it.
+##
 function upright(jpeg: Array<byte>) -> Array<byte>
     out: Array<byte> = [255, 216, 255, 225, 0, 34]
     exif: Array<byte> = [69, 120, 105, 102, 0, 0, 77, 77, 0, 42, 0, 0, 0, 8, 0, 1, 1, 18, 0, 3, 0, 0, 0, 1, 0, 6, 0, 0, 0, 0, 0, 0]
@@ -91,8 +93,10 @@ test "a picture is chosen, kept as its middle square, shown, and removed"
     assert(client.ask(talk, "POST", "/community/new", ada, "category=ideas&title=Pictures+beside+posts&text=They+show.").status == 303)
     assert(strings.contains(client.ask(talk, "GET", "/community/ideas/1", [], "").body, "src=\"{address}\""))
 
-    # A photo is turned as its orientation says: red, its top left corner,
-    # is shown at the top right, and blue at the top left.
+    ##
+    A photo is turned as its orientation says: red, its top left corner,
+    is shown at the top right, and blue at the top left.
+    ##
     photo = io.read_file_bytes("tests/photo.jpg")
     assert(choose(talk, ada, "photo.jpg", "image/jpeg", upright(photo)).status == 303)
     turned = picture_of(talk, data, "ada")
@@ -101,8 +105,10 @@ test "a picture is chosen, kept as its middle square, shown, and removed"
     assert(right.red > 180 and right.blue < 90 and left.blue > 160 and left.red < 90)
     kept = clone(accounts.accounts(data)["ada"].picture)
 
-    # What is not a PNG or JPEG image, nothing, too large, or damaged is
-    # refused, saying why, and the picture stays.
+    ##
+    What is not a PNG or JPEG image, nothing, too large, or damaged is
+    refused, saying why, and the picture stays.
+    ##
     refused = choose(talk, ada, "notes.txt", "text/plain", strings.bytes("Not a picture at all."))
     assert(refused.status == 400 and strings.contains(strings.from_bytes(refused.body), "not a PNG or JPEG image"))
     assert(strings.contains(strings.from_bytes(choose(talk, ada, "", "application/octet-stream", []).body), "Choose a picture first."))

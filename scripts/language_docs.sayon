@@ -1,15 +1,17 @@
-# Copies the references written beside Sayon's compiler, the standard
-# library's API, the error codes, and the feature ledger, from a checkout
-# of sayon-lang/sayon into `docs/reference`, where the website shows them
-# as guides (`docs.references` names them). Run it from the repository's
-# top folder, with the language checked out beside it, as ../sayon, or
-# named:
-#
-#     sayon run scripts/language_docs.sayon
-#     sayon run scripts/language_docs.sayon -- --check ../sayon
-#
-# With `--check` it copies nothing, and fails when a copy is not the
-# language's text; the tests check so when ../sayon is there.
+##
+Copies the references written beside Sayon's compiler, the standard
+library's API, the error codes, and the feature ledger, from a checkout
+of sayon-lang/sayon into `docs/reference`, where the website shows them
+as guides (`docs.references` names them). Run it from the repository's
+top folder, with the language checked out beside it, as ../sayon, or
+named:
+
+    sayon run scripts/language_docs.sayon
+    sayon run scripts/language_docs.sayon -- --check ../sayon
+
+With `--check` it copies nothing, and fails when a copy is not the
+language's text; the tests check so when ../sayon is there.
+##
 
 filesystem = import("standard/filesystem.sayon")
 io = import("standard/io.sayon")

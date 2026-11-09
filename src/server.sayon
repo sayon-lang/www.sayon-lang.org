@@ -1,8 +1,10 @@
-# Answers each connection, each in a task of its own: the API and the
-# index (src/packages/api.sayon); the first page (src/pages/home.sayon),
-# the guides (src/pages/docs.sayon), and the pages about packages
-# (src/packages/pages.sayon), accounts (src/accounts), and the community's
-# forum (src/community); and the files of `static`.
+##
+Answers each connection, each in a task of its own: the API and the
+index (src/packages/api.sayon); the first page (src/pages/home.sayon),
+the guides (src/pages/docs.sayon), and the pages about packages
+(src/packages/pages.sayon), accounts (src/accounts), and the community's
+forum (src/community); and the files of `static`.
+##
 
 filesystem = import("standard/filesystem.sayon")
 io = import("standard/io.sayon")
@@ -45,9 +47,11 @@ private function kind_of(path: string) -> string
         case _
             return "application/octet-stream"
 
-# A file of `static`, or nothing. One asked for with its version, `?v=`, as
-# the pages ask, is kept for a year, since a new version has a new address;
-# others for five minutes.
+##
+A file of `static`, or nothing. One asked for with its version, `?v=`, as
+the pages ask, is kept for a year, since a new version has a new address;
+others for five minutes.
+##
 private function static_file(path: string, versioned: boolean) -> http.Response or nothing
     if strings.contains(path, "..") or strings.contains(path, "\\") or path == "/"
         return nothing
@@ -69,9 +73,11 @@ private function host_of(address: string) -> string
         return clone(address)
     return strings.slice(address, start + 3, length(address))
 
-# A registry on this computer is reached at one address, so that its
-# cookie and its forms' origin are always the same: pages asked for at
-# `localhost` or `[::1]` move to 127.0.0.1.
+##
+A registry on this computer is reached at one address, so that its
+cookie and its forms' origin are always the same: pages asked for at
+`localhost` or `[::1]` move to 127.0.0.1.
+##
 private function moved(request: http.Request, state: registry.State) -> http.Response or nothing
     if request.method != "GET" or not haskey(request.headers, "host")
         return nothing
@@ -83,8 +89,10 @@ private function moved(request: http.Request, state: registry.State) -> http.Res
         return http.redirect(state.address + request.target, 308)
     return nothing
 
-# Remembers the theme a browser chose, "light" or "dark", in a cookie for a
-# year, and goes back to the page it was chosen on.
+##
+Remembers the theme a browser chose, "light" or "dark", in a cookie for a
+year, and goes back to the page it was chosen on.
+##
 private function choose_theme(request: http.Request, state: registry.State) -> http.Response
     fields = http.form(request)
     response = http.redirect(account.own_page(account.value(fields, "back"), "/"))
@@ -96,8 +104,10 @@ private function choose_theme(request: http.Request, state: registry.State) -> h
         response.headers["Set-Cookie"] = "{THEME_COOKIE}={chosen}; Path=/; Max-Age=31536000; SameSite=Lax; HttpOnly{secure}"
     return response
 
-# The theme a request's browser chose, "light" or "dark", or "" for its
-# system's.
+##
+The theme a request's browser chose, "light" or "dark", or "" for its
+system's.
+##
 private function theme_of(request: http.Request) -> string
     chosen = http.cookie(request, THEME_COOKIE)
     if chosen != nothing and (chosen == "light" or chosen == "dark")
@@ -171,9 +181,11 @@ private function asked(request: http.Request, name: string) -> string
         return clone(request.query[name])
     return ""
 
-# A page of the community's forum: the latest threads, a category's, a
-# thread, the forms that start a thread and change a post, and the
-# moderators' reports.
+##
+A page of the community's forum: the latest threads, a category's, a
+thread, the forms that start a thread and change a post, and the
+moderators' reports.
+##
 private function community_page(request: http.Request, state: registry.State, view: layout.Visitor, parts: Array<string>) -> http.Response
     if length(parts) == 1
         return community.forum_page(state, view, "", asked(request, "q"), asked(request, "page"))
@@ -283,16 +295,20 @@ function route(request: http.Request, state: registry.State) -> http.Response
         return found
     return site.not_found(view)
 
-# How often one computer may do a thing: at most `count` times in
-# `seconds`.
+##
+How often one computer may do a thing: at most `count` times in
+`seconds`.
+##
 type Rule = [count: integer, seconds: integer]
 
 # How often a computer did a thing lately: since when, and how many times.
 type Window = [start: integer, count: integer]
 
-# The rule for a request, for those that make accounts, sign in, send
-# mail, change a password or a picture, start a sign-in, or post, or
-# nothing.
+##
+The rule for a request, for those that make accounts, sign in, send
+mail, change a password or a picture, start a sign-in, or post, or
+nothing.
+##
 function rule(method: string, path: string) -> Rule or nothing
     if method != "POST"
         return nothing
@@ -328,8 +344,10 @@ function rule(method: string, path: string) -> Rule or nothing
         case _
             return nothing
 
-# Counts one more use of a rule by `key`; whether it went past the rule.
-# Windows long over are forgotten once there are many.
+##
+Counts one more use of a rule by `key`; whether it went past the rule.
+Windows long over are forgotten once there are many.
+##
 function limited(update windows: Dict<string, Window>, key: string, rule: Rule, now: integer) -> boolean
     if haskey(windows, key) and windows[key].start + rule.seconds > now
         windows[key].count += 1
@@ -355,21 +373,27 @@ private function too_many(request: http.Request, rule: Rule) -> http.Response
     response.headers["Retry-After"] = "{rule.seconds}"
     return response
 
-# Answers `count` connections, or without end: each in a task of its own,
-# so that one slow to send its request holds up no one else. The tasks
-# share one thread and a file is read or saved without waiting, so each
-# change to the data is whole when another task looks; a task that waits
-# meanwhile, for a password's hash, mail, or Git, reads the data again
-# after. With `count`, it returns once every one is answered.
+##
+Answers `count` connections, or without end: each in a task of its own,
+so that one slow to send its request holds up no one else. The tasks
+share one thread and a file is read or saved without waiting, so each
+change to the data is whole when another task looks; a task that waits
+meanwhile, for a password's hash, mail, or Git, reads the data again
+after. With `count`, it returns once every one is answered.
+##
 function serve(update listener: network.Listener, state: registry.State, count: integer or nothing = nothing)
     shared = share(clone(state))
     empty: Dict<string, Window> = []
     windows = share(cell(empty))
-    # Changes through the API take turns: a publication runs Git, which
-    # other publications must not run at the same time.
+    ##
+    Changes through the API take turns: a publication runs Git, which
+    other publications must not run at the same time.
+    ##
     publishing: Channel<boolean> = threads.new_channel(1)
-    # The playground's programs take turns too, two at a time, since each
-    # runs Sayon for a few seconds of the processor.
+    ##
+    The playground's programs take turns too, two at a time, since each
+    runs Sayon for a few seconds of the processor.
+    ##
     playing: Channel<boolean> = threads.new_channel(2)
     answering: Array<Task<nothing>> = []
     served = 0

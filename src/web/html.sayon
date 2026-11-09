@@ -1,5 +1,7 @@
-# Writing HTML: text made safe to put in a page, and prose whose `code`
-# is marked as code.
+##
+Writing HTML: text made safe to put in a page, and prose whose `code`
+is marked as code.
+##
 
 strings = import("standard/strings.sayon")
 

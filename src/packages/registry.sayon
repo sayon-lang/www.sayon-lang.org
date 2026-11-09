@@ -1,14 +1,18 @@
-# What the API and the pages share: where the website keeps its data, the
-# packages its index holds, and its guides.
+##
+What the API and the pages share: where the website keeps its data, the
+packages its index holds, and its guides.
+##
 
 filesystem = import("standard/filesystem.sayon")
 strings = import("standard/strings.sayon")
 index = import("src/packages/index.sayon")
 docs = import("src/pages/docs.sayon")
 
-# The website: its data folder (accounts, owners, archives), its index
-# folder, the address it serves at, the operator's token, and the guides,
-# made HTML when it starts.
+##
+The website: its data folder (accounts, owners, archives), its index
+folder, the address it serves at, the operator's token, and the guides,
+made HTML when it starts.
+##
 type State = [data: string, index: string, address: string, admin: string, guides: docs.Docs]
 
 # A package as a list shows it.
@@ -18,8 +22,10 @@ type Summary = [name: string, latest: string, description: string]
 function archive_path(state: State, name: string, version: string) -> string
     return filesystem.join(filesystem.join(filesystem.join(state.data, "archives"), name), version + ".archive")
 
-# Whether an address can be a registry's, as `sayon` reaches registries:
-# HTTPS, or plain HTTP to this computer, for a registry run locally.
+##
+Whether an address can be a registry's, as `sayon` reaches registries:
+HTTPS, or plain HTTP to this computer, for a registry run locally.
+##
 function valid_address(address: string) -> boolean
     for symbol in ["?", "#", " ", "\""]
         if strings.contains(address, symbol)
@@ -43,8 +49,10 @@ function summaries(state: State) -> Array<Summary>
             push(out, Summary(name = clone(name), latest = clone(latest.version), description = clone(latest.description)))
     return out
 
-# The packages whose names or descriptions hold the words, an exact name
-# first, `limit` of them at most.
+##
+The packages whose names or descriptions hold the words, an exact name
+first, `limit` of them at most.
+##
 function search(state: State, query: string, limit: integer) -> Array<Summary>
     words = strings.lower(strings.trim(query))
     exact: Array<Summary> = []

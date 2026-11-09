@@ -71,8 +71,10 @@ test "tries sent together each count, and accounts made together both stay"
     made = client.send(port, "POST", "/sign-up", form_of(port), "name=dana&email=dana%40example.com&password=quiet+harbor+lantern&again=quiet+harbor+lantern")
     assert(made.status == 303, made.body)
 
-    # Twelve wrong passwords at once: ten are checked, and two are told to
-    # wait, as twelve in a row would be.
+    ##
+    Twelve wrong passwords at once: ten are checked, and two are told to
+    wait, as twelve in a row would be.
+    ##
     tries: Array<Task<integer>> = []
     for _count in range(12)
         push(tries, threads.spawn(function() -> integer
@@ -120,16 +122,20 @@ test "pages run no script, and the theme a browser chooses stays"
     assert(strings.contains(plain.body, "<html lang=\"en\">") and strings.contains(plain.body, "<form class=\"theme-switch\" method=\"post\" action=\"/theme\">"))
     assert(client.send(port, "GET", "/site.js", [], "").status == 404)
 
-    # The theme's switch is a form: the website keeps the theme chosen, and
-    # goes back to the page, even one that signs in.
+    ##
+    The theme's switch is a form: the website keeps the theme chosen, and
+    goes back to the page, even one that signs in.
+    ##
     chosen = client.send(port, "POST", "/theme", form_of(port), "theme=dark&back=%2Fsign-in%3Fnext%3D%252Fpackages")
     assert(chosen.status == 303 and client.header_of(chosen, "location") == "/sign-in?next=%2Fpackages", chosen.body)
     assert(client.cookie_of(chosen) == "sayon_theme=dark")
     dark = client.send(port, "GET", "/packages", ["Cookie" = "sayon_theme=dark"], "")
     assert(strings.contains(dark.body, "<html lang=\"en\" data-theme=\"dark\">") and strings.contains(dark.body, "<meta name=\"theme-color\" content=\"#12151b\">"))
 
-    # Another site's form and a theme not known change nothing, and a way
-    # back to another site goes to the first page.
+    ##
+    Another site's form and a theme not known change nothing, and a way
+    back to another site goes to the first page.
+    ##
     outside: Dict<string, string> = ["Content-Type" = "application/x-www-form-urlencoded", "Origin" = "https://example.com"]
     assert(client.header_of(client.send(port, "POST", "/theme", outside, "theme=dark&back=%2F"), "set-cookie") == "")
     assert(client.header_of(client.send(port, "POST", "/theme", form_of(port), "theme=pink&back=%2F"), "set-cookie") == "")

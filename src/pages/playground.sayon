@@ -1,11 +1,13 @@
-# The playground, at /play: a program written in a plain form, run in
-# Sayon's sandbox (`sayon run --sandbox`), on this computer, in a folder of
-# its own that goes after it ran. The sandbox gives a program only the
-# console, tasks, clocks, random numbers, and the library's pure parts,
-# and stops it after a few seconds or past a little memory or output. It
-# can also be formatted, and shared at an address of its own, kept in
-# `<data>/playground/shared` by its digest. The examples are the programs
-# of `playground`, each named by its first line.
+##
+The playground, at /play: a program written in a plain form, run in
+Sayon's sandbox (`sayon run --sandbox`), on this computer, in a folder of
+its own that goes after it ran. The sandbox gives a program only the
+console, tasks, clocks, random numbers, and the library's pure parts,
+and stops it after a few seconds or past a little memory or output. It
+can also be formatted, and shared at an address of its own, kept in
+`<data>/playground/shared` by its digest. The examples are the programs
+of `playground`, each named by its first line.
+##
 
 crypto = import("standard/crypto.sayon")
 filesystem = import("standard/filesystem.sayon")
@@ -24,24 +26,32 @@ constant EXAMPLES = "playground"
 constant MOST_BYTES = 65536
 constant STOP = "the sandbox stopped the program: "
 
-# What a run gave: what the program wrote to its output and its errors,
-# its status, and how long it took. A status of -1 is a run that could not
-# start.
+##
+What a run gave: what the program wrote to its output and its errors,
+its status, and how long it took. A status of -1 is a run that could not
+start.
+##
 type Ran = [output: string, errors: string, status: integer, seconds: float]
 
-# What Sayon gave for a program in its folder, and the program as the
-# folder held it after, as `sayon fmt` left it.
+##
+What Sayon gave for a program in its folder, and the program as the
+folder held it after, as `sayon fmt` left it.
+##
 type Done = [ran: Ran, code: string]
 
 # What the output's pane shows: its text, as HTML, and how the run ended.
 type Shown = [text: string, status: string]
 
-# An example: its name in its address, its title and what it shows, from
-# its first line, `# Title: what it shows`, and its code.
+##
+An example: its name in its address, its title and what it shows, from
+its first line, `# Title: what it shows`, and its code.
+##
 type Example = [name: string, title: string, about: string, code: string]
 
-# The examples, in the order of their files' names, which start with their
-# place, as `1-hello.sayon`.
+##
+The examples, in the order of their files' names, which start with their
+place, as `1-hello.sayon`.
+##
 function examples() -> Array<Example>
     out: Array<Example> = []
     if not filesystem.is_directory(EXAMPLES)
@@ -66,8 +76,10 @@ function examples() -> Array<Example>
         push(out, Example(name = name, title = title, about = about, code = code))
     return out
 
-# The program to run Sayon with: `SAYON_PLAYGROUND`, or the `sayon` the
-# system finds.
+##
+The program to run Sayon with: `SAYON_PLAYGROUND`, or the `sayon` the
+system finds.
+##
 private function sayon() -> string
     chosen = os.environment("SAYON_PLAYGROUND")
     if chosen != nothing and chosen != ""
@@ -95,8 +107,10 @@ private function remove_folder(folder: string)
         position -= 1
     filesystem.remove(folder)
 
-# Runs Sayon with `arguments` on `code`, written as main.sayon in an empty
-# folder of its own, under `<data>/playground/runs`.
+##
+Runs Sayon with `arguments` on `code`, written as main.sayon in an empty
+folder of its own, under `<data>/playground/runs`.
+##
 private function with_sayon(state: registry.State, code: string, arguments: Array<string>) -> Done
     folder = filesystem.join(under(state, "runs"), crypto.hex(crypto.random_bytes(8)))
     filesystem.create_directory(folder)
@@ -115,8 +129,10 @@ function run(state: registry.State, code: string) -> Ran
     done = with_sayon(state, code, ["run", "--sandbox", "--color", "never", "main.sayon"])
     return clone(done.ran)
 
-# Formats a program: what Sayon gave, and the program formatted when it
-# has no errors.
+##
+Formats a program: what Sayon gave, and the program formatted when it
+has no errors.
+##
 function format(state: registry.State, code: string) -> Done
     return with_sayon(state, code, ["fmt", "main.sayon"])
 
@@ -144,8 +160,10 @@ function kept(state: registry.State, id: string) -> string or nothing
         return nothing
     return io.read_file(file)
 
-# Text from Sayon as HTML, with each code of a diagnostic, such as
-# `[E_MOVED_VALUE]`, a link to what it means.
+##
+Text from Sayon as HTML, with each code of a diagnostic, such as
+`[E_MOVED_VALUE]`, a link to what it means.
+##
 function linked(text: string) -> string
     out = html.text(text)
     for mark in ["[E_", "[W_"]
@@ -162,8 +180,10 @@ function linked(text: string) -> string
         out = made
     return out
 
-# What the output's pane shows for a run: what it printed, then its errors,
-# without the sandbox's line about stopping it, which the status says.
+##
+What the output's pane shows for a run: what it printed, then its errors,
+without the sandbox's line about stopping it, which the status says.
+##
 function shown_of(ran: Ran) -> Shown
     seconds = strings.decimal(ran.seconds, 2)
     lines: Array<string> = []
@@ -190,9 +210,11 @@ function shown_of(ran: Ran) -> Shown
         status = "Finished in {seconds} s"
     return Shown(text = text, status = status)
 
-# The page: the program in its box, the buttons, the examples, and what the
-# output's pane shows, or a notice; `id` names a shared program, for its
-# link.
+##
+The page: the program in its box, the buttons, the examples, and what the
+output's pane shows, or a notice; `id` names a shared program, for its
+link.
+##
 function page(state: registry.State, view: layout.Visitor, code: string, shown: Shown or nothing, notice: string = "", id: string = "", status: integer = 200) -> http.Response
     body: Array<string> = []
     push(body, "<div class=\"wrap play\">")
@@ -260,8 +282,10 @@ function shared(state: registry.State, view: layout.Visitor, id: string) -> http
         return page(state, view, "", nothing, "There is no program at this address.", "", 404)
     return page(state, view, code, nothing, "", id)
 
-# The program a form sent, with `\r\n` as `\n`, or the page that refuses
-# it: one sent from another site, or too long.
+##
+The program a form sent, with `\r\n` as `\n`, or the page that refuses
+it: one sent from another site, or too long.
+##
 private function program_of(request: http.Request, state: registry.State, view: layout.Visitor) -> string or http.Response
     code = strings.replace(pages.value(http.form(request), "code"), "\r\n", "\n")
     if not pages.from_here(request, state)
@@ -283,8 +307,10 @@ function posted(request: http.Request, state: registry.State, view: layout.Visit
         return page(state, view, code, Shown(text = linked(problem), status = "Not formatted: the program has errors"))
     return page(state, view, code, shown_of(run(state, code)))
 
-# Shares a program sent by the form: it is kept, and the browser goes to
-# its address.
+##
+Shares a program sent by the form: it is kept, and the browser goes to
+its address.
+##
 function share_program(request: http.Request, state: registry.State, view: layout.Visitor) -> http.Response
     code = program_of(request, state, view)
     if typeof(code) == "Response"

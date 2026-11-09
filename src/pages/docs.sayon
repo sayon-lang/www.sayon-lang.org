@@ -1,9 +1,11 @@
-# The guides, under /docs: the Markdown of `docs`, made HTML once when the
-# site starts, in the categories and the order of its map, docs/README.md.
-# The docs' first page shows the categories with their guides; each
-# category has a page listing its guides with their summaries; and each
-# guide's page has the categories beside it, its sections, where its text
-# is written, and the guides before and after it, in the map's order.
+##
+The guides, under /docs: the Markdown of `docs`, made HTML once when the
+site starts, in the categories and the order of its map, docs/README.md.
+The docs' first page shows the categories with their guides; each
+category has a page listing its guides with their summaries; and each
+guide's page has the categories beside it, its sections, where its text
+is written, and the guides before and after it, in the map's order.
+##
 
 filesystem = import("standard/filesystem.sayon")
 io = import("standard/io.sayon")
@@ -18,33 +20,43 @@ constant LANGUAGE = "https://github.com/sayon-lang/sayon/"
 constant EDIT = "Edit this page on GitHub"
 constant DESCRIPTION = "The guides to Sayon: installing it, the language, its standard library, its tools, and references to look things up."
 
-# A category of the map: its folder in `docs`, which is its address under
-# /docs, its name, and its sentence as HTML.
+##
+A category of the map: its folder in `docs`, which is its address under
+/docs, its name, and its sentence as HTML.
+##
 type Category = [key: string, label: string, summary: string]
 
-# A part of a guide, for searching: its heading's id ("" for the guide's
-# start), its title, and its text, plain and in lowercase for matching.
+##
+A part of a guide, for searching: its heading's id ("" for the guide's
+start), its title, and its text, plain and in lowercase for matching.
+##
 type Section = [id: string, title: string, text: string, lowered: string]
 
-# A guide: its file from the repository's top folder, its address under
-# /docs, its name and its summary in the map, its category's position,
-# where its text is written and what the link there says, its text made
-# HTML, and its sections.
+##
+A guide: its file from the repository's top folder, its address under
+/docs, its name and its summary in the map, its category's position,
+where its text is written and what the link there says, its text made
+HTML, and its sections.
+##
 type Guide = [source: string, slug: string, label: string, summary: string, category: integer, origin: string, change: string, document: markdown.Document, sections: Array<Section>]
 
-# The guides: the map's title and first paragraph, the categories, and the
-# guides in the map's order.
+##
+The guides: the map's title and first paragraph, the categories, and the
+guides in the map's order.
+##
 type Docs = [title: string, intro: string, categories: Array<Category>, guides: Array<Guide>]
 
 # No guides, for a website that serves none, as tests do.
 function none() -> Docs
     return Docs(title = "", intro = "", categories = [], guides = [])
 
-# A reference written beside the language's code, in the `docs` folder of
-# sayon-lang/sayon, of which `docs` here holds a copy that
-# scripts/language_docs.sayon makes: its file there, from the language's
-# top folder, its copy here, from `docs`, and where its text is written
-# and what the link there says.
+##
+A reference written beside the language's code, in the `docs` folder of
+sayon-lang/sayon, of which `docs` here holds a copy that
+scripts/language_docs.sayon makes: its file there, from the language's
+top folder, its copy here, from `docs`, and where its text is written
+and what the link there says.
+##
 type Reference = [theirs: string, ours: string, origin: string, change: string]
 
 function references() -> Array<Reference>
@@ -54,8 +66,10 @@ function references() -> Array<Reference>
         Reference(theirs = "docs/features.md", ours = "reference/features.md", origin = LANGUAGE + "blob/main/docs/features.md", change = clone(EDIT))
     ]
 
-# The references whose copy in `folder` is not the text of the language's
-# checkout at `language`: their copies' names.
+##
+The references whose copy in `folder` is not the text of the language's
+checkout at `language`: their copies' names.
+##
 function stale(language: string, folder: string) -> Array<string>
     out: Array<string> = []
     for reference in references()
@@ -83,8 +97,10 @@ private function map_entry(line: string) -> Entry or nothing
         summary = strings.slice(after, 2, length(after))
     return Entry(label = strings.slice(line, 3, middle), path = strings.slice(rest, 0, end), summary = summary)
 
-# Whether a tag, as written between `<` and `>`, ends a run of text, as a
-# table's cell or a block does: in plain text, a space.
+##
+Whether a tag, as written between `<` and `>`, ends a run of text, as a
+table's cell or a block does: in plain text, a space.
+##
 private function separates(tag: string) -> boolean
     name = clone(tag)
     if strings.starts_with(name, "/")
@@ -96,9 +112,11 @@ private function separates(tag: string) -> boolean
         return true
     return name == "td" or name == "th" or name == "tr" or name == "li" or name == "p" or name == "div" or name == "pre" or name == "br"
 
-# Text without its tags, with the entities HTML marks it with read back,
-# and a space where a cell, an item, or a block ends. It works a tag at a
-# time, as the guides are many and long.
+##
+Text without its tags, with the entities HTML marks it with read back,
+and a space where a cell, an item, or a block ends. It works a tag at a
+time, as the guides are many and long.
+##
 function plain(content: string) -> string
     text = strings.replace(content, "\n", " ")
     text = strings.replace(text, "\r", " ")
@@ -122,15 +140,19 @@ function plain(content: string) -> string
     text = strings.replace(text, "&quot;", "\"")
     return strings.replace(text, "&amp;", "&")
 
-# A summary of the map, written after a colon there, as a sentence of its
-# own: its first letter in capitals.
+##
+A summary of the map, written after a colon there, as a sentence of its
+own: its first letter in capitals.
+##
 function sentence(text: string) -> string
     if text == ""
         return ""
     return strings.upper(strings.slice(text, 0, 1)) + strings.slice(text, 1, length(text))
 
-# A guide's parts, at its headings of levels 2 and 3, for searching: what
-# comes before the first is the guide's start, under its title.
+##
+A guide's parts, at its headings of levels 2 and 3, for searching: what
+comes before the first is the guide's start, under its title.
+##
 function sections_of(document: markdown.Document) -> Array<Section>
     out: Array<Section> = []
     id = ""
@@ -160,10 +182,12 @@ private function section(id: string, title: string, lines: Array<string>) -> Sec
     lowered = strings.lower(text)
     return Section(id = clone(id), title = clone(title), text = text, lowered = lowered)
 
-# Reads the map, `folder`/README.md, and the guides it names, and makes
-# them HTML. A guide in a folder of `folder` is at its path there, without
-# `.md`; one outside it, such as ../PROTOCOL.md, is under its category's
-# folder, by its name in lowercase.
+##
+Reads the map, `folder`/README.md, and the guides it names, and makes
+them HTML. A guide in a folder of `folder` is at its path there, without
+`.md`; one outside it, such as ../PROTOCOL.md, is under its category's
+folder, by its name in lowercase.
+##
 function load(folder: string) -> Docs
     title = "Documentation"
     intro: Array<string> = []
@@ -258,8 +282,10 @@ function moved(slug: string) -> string or nothing
         case _
             return nothing
 
-# The categories and their guides, as a list of links, the current guide
-# (or category) marked; `guide` and `category` are -1 for none.
+##
+The categories and their guides, as a list of links, the current guide
+(or category) marked; `guide` and `category` are -1 for none.
+##
 private function categorized(docs: Docs, guide: integer, category: integer, indent: string) -> Array<string>
     out: Array<string> = []
     for index in range(length(docs.categories))
@@ -279,8 +305,10 @@ private function categorized(docs: Docs, guide: integer, category: integer, inde
         push(out, indent + "</div>")
     return out
 
-# The docs' sidebar, and on a phone the menu that holds the same list,
-# naming where the page is.
+##
+The docs' sidebar, and on a phone the menu that holds the same list,
+naming where the page is.
+##
 private function navigation(docs: Docs, guide: integer, category: integer, place: string) -> Array<string>
     out: Array<string> = []
     push(out, "  <details class=\"docs-menu\">")
@@ -304,8 +332,10 @@ private function trail(docs: Docs, category: integer, current: string) -> string
         return out + "<li aria-current=\"page\">{html.text(current)}</li></ol>"
     return out + "<li aria-current=\"page\">{html.text(docs.categories[category].label)}</li></ol>"
 
-# A page's sections and their subsections, as a list of links; none for a
-# page of fewer than three.
+##
+A page's sections and their subsections, as a list of links; none for a
+page of fewer than three.
+##
 private function contents(document: markdown.Document) -> Array<string>
     out: Array<string> = []
     count = 0
@@ -333,9 +363,11 @@ private function contents(document: markdown.Document) -> Array<string>
     push(out, "</ul>")
     return out
 
-# The docs' first page: the map's title and paragraph, a search, the first
-# category as where to start, with a button for each of its guides, and
-# the other categories with their guides.
+##
+The docs' first page: the map's title and paragraph, a search, the first
+category as where to start, with a button for each of its guides, and
+the other categories with their guides.
+##
 function home(docs: Docs, view: layout.Visitor) -> http.Response
     out: Array<string> = []
     push(out, "<div class=\"wrap docs-home\">")

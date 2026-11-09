@@ -8,8 +8,10 @@ server = import("src/server.sayon")
 http = import("src/web/http.sayon")
 client = import("tests/client.sayon")
 
-# These run Sayon's sandbox: the `sayon` the system finds, or the one
-# SAYON_PLAYGROUND names, which has `sayon run --sandbox`.
+##
+These run Sayon's sandbox: the `sayon` the system finds, or the one
+SAYON_PLAYGROUND names, which has `sayon run --sandbox`.
+##
 
 # The programs of the guides marked ```sayon run, by where they are.
 function marked(guides: docs.Docs) -> Dict<string, string>

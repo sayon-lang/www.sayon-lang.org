@@ -1,5 +1,7 @@
-# Sayon's first page: what Sayon is like, a first program, and how to
-# start.
+##
+Sayon's first page: what Sayon is like, a first program, and how to
+start.
+##
 
 strings = import("standard/strings.sayon")
 docs = import("src/pages/docs.sayon")
@@ -31,8 +33,10 @@ function sample() -> string
 function output() -> string
     return "Sum: 6\n3"
 
-# What `sayon check` says of a value used after it moved, in the compiler's
-# own words.
+##
+What `sayon check` says of a value used after it moved, in the compiler's
+own words.
+##
 function diagnostic() -> Array<string>
     return [
         "error[E_MOVED_VALUE]: `names` was transferred to `team`",

@@ -1,7 +1,9 @@
-# The index (PROTOCOL.md, "The index"): a folder, usually a clone of
-# packages-index, with a file for each package, which holds
-# a line of JSON for each of its versions, oldest first. Lines are only
-# ever added, each by writing the file anew.
+##
+The index (PROTOCOL.md, "The index"): a folder, usually a clone of
+packages-index, with a file for each package, which holds
+a line of JSON for each of its versions, oldest first. Lines are only
+ever added, each by writing the file anew.
+##
 
 filesystem = import("standard/filesystem.sayon")
 io = import("standard/io.sayon")
@@ -15,8 +17,10 @@ semver = import("src/packages/semver.sayon")
 # A version of a package, as its line in the index says.
 type Entry = [name: string, version: string, digest: string, description: string, dependencies: Array<manifest.Dependency>, published: string]
 
-# A package's file in the index, as crates.io-index places them: `1/a`,
-# `2/ab`, `3/a/abc`, and `ab/cd/abcdef` for longer names.
+##
+A package's file in the index, as crates.io-index places them: `1/a`,
+`2/ab`, `3/a/abc`, and `ab/cd/abcdef` for longer names.
+##
 function path(name: string) -> string
     count = length(name)
     if count == 1
@@ -27,8 +31,10 @@ function path(name: string) -> string
         return "3/" + strings.slice(name, 0, 1) + "/" + name
     return strings.slice(name, 0, 2) + "/" + strings.slice(name, 2, 4) + "/" + name
 
-# Whether text is a package's name: lowercase letters, digits, and `_`,
-# starting with a letter, 64 characters at most.
+##
+Whether text is a package's name: lowercase letters, digits, and `_`,
+starting with a letter, 64 characters at most.
+##
 function valid_name(name: string) -> boolean
     if name == "" or length(name) > 64
         return false
@@ -54,10 +60,12 @@ function entries(folder: string, name: string) -> Array<Entry>
             push(out, entry)
     return out
 
-# Adds a version's line to its package's file, and commits it when the
-# folder is a Git repository. The file is written anew, whole, through a
-# temporary one, so that a crash never leaves half a line, which would
-# keep every version of the package from being read.
+##
+Adds a version's line to its package's file, and commits it when the
+folder is a Git repository. The file is written anew, whole, through a
+temporary one, so that a crash never leaves half a line, which would
+keep every version of the package from being read.
+##
 function add(folder: string, entry: Entry)
     relative = path(entry.name)
     file = filesystem.join(folder, relative)
@@ -85,8 +93,10 @@ function names(folder: string) -> Array<string>
             push(out, name)
     return out
 
-# The latest version: the greatest release, or, before the first release,
-# the greatest pre-release.
+##
+The latest version: the greatest release, or, before the first release,
+the greatest pre-release.
+##
 function latest(versions: Array<Entry>) -> Entry or nothing
     best_release = -1
     best_any = -1

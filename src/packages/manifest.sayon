@@ -1,12 +1,16 @@
-# The parts of a package's `sayon.toml` the registry reads: its name,
-# version, and description, and its dependencies, each of which must come
-# from a registry. Manifests are read as Sayon writes them: `[table]`
-# headers, and `key = value` lines of strings, arrays, and inline tables.
+##
+The parts of a package's `sayon.toml` the registry reads: its name,
+version, and description, and its dependencies, each of which must come
+from a registry. Manifests are read as Sayon writes them: `[table]`
+headers, and `key = value` lines of strings, arrays, and inline tables.
+##
 
 strings = import("standard/strings.sayon")
 
-# A dependency, as the index records it; `registry` is nothing for the
-# registry the package comes from.
+##
+A dependency, as the index records it; `registry` is nothing for the
+registry the package comes from.
+##
 type Dependency = [alias: string, package: string, requirement: string, registry: string or nothing]
 
 type Manifest = [name: string, version: string, description: string, dependencies: Array<Dependency>]

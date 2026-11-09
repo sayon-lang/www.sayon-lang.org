@@ -1,6 +1,8 @@
-# Writing the registry's files whole: each through a temporary file beside
-# it, renamed over it once written, so that no file is ever half written,
-# not even by a crash or a power cut part way.
+##
+Writing the registry's files whole: each through a temporary file beside
+it, renamed over it once written, so that no file is ever half written,
+not even by a crash or a power cut part way.
+##
 
 filesystem = import("standard/filesystem.sayon")
 io = import("standard/io.sayon")

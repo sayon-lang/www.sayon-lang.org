@@ -1,6 +1,8 @@
-# HTTP/1.1 as the registry speaks it: a request read whole, with its
-# headers and body, and a response written whole, one of each for every
-# connection.
+##
+HTTP/1.1 as the registry speaks it: a request read whole, with its
+headers and body, and a response written whole, one of each for every
+connection.
+##
 
 json = import("standard/json.sayon")
 network = import("standard/network.sayon")
@@ -9,9 +11,11 @@ strings = import("standard/strings.sayon")
 # The most a request's body may hold: an archive, and a little more.
 constant LARGEST = 10486784
 
-# A request: its method, its target as it came, and the target's path and
-# query; its headers, by lowercase names; its body; and the address of the
-# computer that sent it.
+##
+A request: its method, its target as it came, and the target's path and
+query; its headers, by lowercase names; its body; and the address of the
+computer that sent it.
+##
 type Request = [method: string, target: string, path: string, query: Dict<string, string>, headers: Dict<string, string>, body: Array<byte>, client: string]
 
 type Response = [status: integer, kind: string, headers: Dict<string, string>, body: Array<byte>]
@@ -62,9 +66,11 @@ function json_text(status: integer, content: string) -> Response
 function refuse(status: integer, message: string) -> Response
     return json_text(status, json.encode_value(Refusal(error = clone(message))))
 
-# What a page is sent with: it may not be put in another site's frame, run
-# any script (the website has none), or be kept, since it shows who is
-# signed in.
+##
+What a page is sent with: it may not be put in another site's frame, run
+any script (the website has none), or be kept, since it shows who is
+signed in.
+##
 constant PAGE_POLICY = "default-src 'self'; script-src 'none'; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
 
 # A page of HTML.
@@ -77,8 +83,10 @@ function page(status: integer, content: string) -> Response
     response.headers["Cache-Control"] = "no-store"
     return response
 
-# Sends the browser to another address, with GET: after a form, so that
-# going back or reloading never sends it twice.
+##
+Sends the browser to another address, with GET: after a form, so that
+going back or reloading never sends it twice.
+##
 function redirect(location: string, status: integer = 303) -> Response
     response = text(status, "text/plain; charset=utf-8", "See " + location)
     response.headers["Location"] = clone(location)
@@ -111,8 +119,10 @@ function decode(text: string) -> string
 
 private constant HEX = "0123456789ABCDEF"
 
-# Text made fit to put in a part of an address: each byte but letters,
-# digits, and `-._~` written as `%XX`.
+##
+Text made fit to put in a part of an address: each byte but letters,
+digits, and `-._~` written as `%XX`.
+##
 function encode(text: string) -> string
     out: Array<string> = []
     for value in strings.bytes(text)
@@ -136,8 +146,10 @@ function parse_query(text: string) -> Dict<string, string>
             out[decode(strings.slice(part, 0, equals))] = decode(strings.slice(part, equals + 1, length(part)))
     return out
 
-# The next request, a response refusing it, or nothing when the connection
-# ends first.
+##
+The next request, a response refusing it, or nothing when the connection
+ends first.
+##
 function read(update connection: network.Connection) -> Request or Response or nothing
     line = connection.read_line()
     if line == nothing
@@ -161,8 +173,10 @@ function read(update connection: network.Connection) -> Request or Response or n
         size = given
     if size > LARGEST
         return refuse(413, "a package holds 10 MiB at most")
-    # A body arrives in parts, as the network carries it, so it is read until
-    # it is whole.
+    ##
+    A body arrives in parts, as the network carries it, so it is read until
+    it is whole.
+    ##
     body: Array<byte> = []
     if size > 0
         body = connection.read_exactly(size)
@@ -195,9 +209,11 @@ function form(request: Request) -> Dict<string, string>
         return []
     return parse_query(content)
 
-# A part of a form sent as multipart/form-data, as a form with a file is:
-# its field's name, the file's name and type as the browser gave them, and
-# its bytes.
+##
+A part of a form sent as multipart/form-data, as a form with a file is:
+its field's name, the file's name and type as the browser gave them, and
+its bytes.
+##
 type Upload = [field: string, file: string, kind: string, bytes: Array<byte>]
 
 # The boundary between the parts of a multipart/form-data body, or "".
@@ -238,9 +254,11 @@ private function part_header(head: string, name: string) -> string
             return strings.trim(strings.slice(line, colon + 1, length(line)))
     return ""
 
-# The parts of a form sent as multipart/form-data, in order. The body is
-# read as Latin-1, a character for each byte, so that it is searched as
-# text and each part's bytes come back as they were sent.
+##
+The parts of a form sent as multipart/form-data, in order. The body is
+read as Latin-1, a character for each byte, so that it is searched as
+text and each part's bytes come back as they were sent.
+##
 function form_parts(request: Request) -> Array<Upload>
     out: Array<Upload> = []
     boundary = boundary_of(request)
@@ -284,9 +302,11 @@ function bearer(request: Request) -> string or nothing
             return token
     return nothing
 
-# Writes a response, with its body unless the request was HEAD, and
-# finishes sending, since a connection carries one response: the other
-# side reads to its end at once, before the connection is let go.
+##
+Writes a response, with its body unless the request was HEAD, and
+finishes sending, since a connection carries one response: the other
+side reads to its end at once, before the connection is let go.
+##
 function write(update connection: network.Connection, response: Response, with_body: boolean = true)
     connection.write("HTTP/1.1 {response.status} {reason(response.status)}\r\n")
     connection.write("Content-Type: {response.kind}\r\n")

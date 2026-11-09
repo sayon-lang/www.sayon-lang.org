@@ -1,13 +1,15 @@
-# The mail the website sends: links that verify an email address or choose
-# a new password, and news of replies.
-#
-# With SAYON_MAIL_HOST set, each mail goes to that SMTP server: over TLS
-# from the start at port 465 (SAYON_MAIL_PORT, 465 by default), or after
-# STARTTLS at another port; signing in with SAYON_MAIL_USER and
-# SAYON_MAIL_PASSWORD when they are set; from SAYON_MAIL_FROM. A server on
-# this computer is spoken to without TLS, for trying it. Without a server,
-# as where the website is tried, each mail is written to `<data>/mail/`
-# instead, and the log says where.
+##
+The mail the website sends: links that verify an email address or choose
+a new password, and news of replies.
+
+With SAYON_MAIL_HOST set, each mail goes to that SMTP server: over TLS
+from the start at port 465 (SAYON_MAIL_PORT, 465 by default), or after
+STARTTLS at another port; signing in with SAYON_MAIL_USER and
+SAYON_MAIL_PASSWORD when they are set; from SAYON_MAIL_FROM. A server on
+this computer is spoken to without TLS, for trying it. Without a server,
+as where the website is tried, each mail is written to `<data>/mail/`
+instead, and the log says where.
+##
 
 crypto = import("standard/crypto.sayon")
 filesystem = import("standard/filesystem.sayon")
@@ -95,8 +97,10 @@ function date(moment: time.DateTime) -> string
     clock = strings.pad_start("{moment.hour}", 2, "0") + ":" + strings.pad_start("{moment.minute}", 2, "0") + ":" + strings.pad_start("{moment.second}", 2, "0")
     return "{days[time.weekday(moment) - 1]}, {day} {months[moment.month - 1]} {moment.year} {clock} +0000"
 
-# The whole message, its headers and its text, with lines ending in CRLF,
-# and those of the text that start with `.` given another, as DATA needs.
+##
+The whole message, its headers and its text, with lines ending in CRLF,
+and those of the text that start with `.` given another, as DATA needs.
+##
 function message(from: string, mail: Mail, moment: time.DateTime) -> string
     lines: Array<string> = []
     push(lines, "From: " + from)
@@ -181,8 +185,10 @@ function keep(data: string, mail: Mail) -> string
     files.save_text(file, message(FROM, mail, time.now()))
     return file
 
-# Sends a mail, or keeps it when no server is set; why it was not sent, or
-# nothing.
+##
+Sends a mail, or keeps it when no server is set; why it was not sent, or
+nothing.
+##
 function send(data: string, mail: Mail) -> string or nothing
     chosen = server()
     if chosen == nothing

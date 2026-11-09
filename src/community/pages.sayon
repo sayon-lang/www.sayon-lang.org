@@ -1,8 +1,10 @@
-# The forum's pages, under /community: the latest threads, of every
-# category or of one; a thread, with the reply that solved it and a form
-# for another; and the forms that start a thread, change a post, mark the
-# reply that solved a question, and report a post to the moderators, whose
-# own pages are in src/community/moderation.sayon.
+##
+The forum's pages, under /community: the latest threads, of every
+category or of one; a thread, with the reply that solved it and a form
+for another; and the forms that start a thread, change a post, mark the
+reply that solved a question, and report a post to the moderators, whose
+own pages are in src/community/moderation.sayon.
+##
 
 strings = import("standard/strings.sayon")
 time = import("standard/time.sayon")
@@ -47,9 +49,11 @@ function moderates(someone: Member or nothing) -> boolean
         return false
     return accounts.moderates(someone.account)
 
-# Why someone signed in may not post now, or "" when they may: once their
-# email is verified, unless the moderators suspended them, and `NEW_POSTS`
-# times a day at most in their account's first week.
+##
+Why someone signed in may not post now, or "" when they may: once their
+email is verified, unless the moderators suspended them, and `NEW_POSTS`
+times a day at most in their account's first week.
+##
 function posting_problem(state: registry.State, someone: Member) -> string
     if not accounts.may_publish(someone.account)
         return "Verify your email to post: open the link the website mailed you, or mail it again from your settings."
@@ -144,8 +148,10 @@ private function tabs(key: string) -> Array<string>
     push(out, "</nav>")
     return out
 
-# The head's button that starts a thread: one that signs in first for
-# someone who is not, and none where only admins start threads.
+##
+The head's button that starts a thread: one that signs in first for
+someone who is not, and none where only admins start threads.
+##
 private function start_action(someone: Member or nothing, part: forum.Category or nothing, base: string) -> string
     target = "/community/new"
     if part != nothing
@@ -170,8 +176,10 @@ private function query_part(query: string, page: integer) -> string
         return ""
     return "?" + strings.join(parts, "&amp;")
 
-# The latest threads, of every category or of one, whose titles hold the
-# words of `query`, `PAGE_SIZE` at a time.
+##
+The latest threads, of every category or of one, whose titles hold the
+words of `query`, `PAGE_SIZE` at a time.
+##
 function forum_page(state: registry.State, view: layout.Visitor, key: string, query: string, page_text: string) -> http.Response
     part = forum.find_category(key)
     if key != "" and part == nothing
@@ -232,8 +240,10 @@ function forum_page(state: registry.State, view: layout.Visitor, key: string, qu
     push(body, "</div>")
     return layout.page(view, "{title} · Sayon", body, 200, true, "community", lead)
 
-# What a post shows of its author: their role, as "Admin", "Moderator",
-# or "" for none, and the version of their picture.
+##
+What a post shows of its author: their role, as "Admin", "Moderator",
+or "" for none, and the version of their picture.
+##
 type Face = [role: string, picture: string or nothing]
 
 # The faces of the accounts that have a role or a picture.
@@ -254,9 +264,11 @@ private function faces_of(state: registry.State) -> Dict<string, Face>
 private function post_button(action: string, thread: integer, number: integer, extra: string, label: string, kind: string) -> string
     return "<form method=\"post\" action=\"{action}\"><input type=\"hidden\" name=\"thread\" value=\"{thread}\"><input type=\"hidden\" name=\"post\" value=\"{number}\">{extra}<button class=\"button small {kind}\" type=\"submit\">{label}</button></form>"
 
-# What the one looking may do to a post: change their own, mark the reply
-# that solved their question, hide a reply as a moderator, or report
-# someone else's.
+##
+What the one looking may do to a post: change their own, mark the reply
+that solved their question, hide a reply as a moderator, or report
+someone else's.
+##
 private function post_actions(thread: forum.Thread, post: forum.Post, viewer: string, moderator: boolean, solvable: boolean) -> Array<string>
     out: Array<string> = []
     if viewer == ""
@@ -386,8 +398,10 @@ private function reply_box(state: registry.State, someone: Member or nothing, th
     push(out, "</section>")
     return out
 
-# A thread: its start, the reply that solved it, the other replies, and the
-# form for one more.
+##
+A thread: its start, the reply that solved it, the other replies, and the
+form for one more.
+##
 function thread_page(state: registry.State, view: layout.Visitor, key: string, id_text: string, done: string = "", problem: string = "", draft: string = "", status: integer = 200) -> http.Response
     id = number_of(id_text)
     if id == nothing
@@ -525,8 +539,10 @@ function start_thread(request: http.Request, state: registry.State, view: layout
     forum.note_post(state.data, someone.name)
     return http.redirect("/community/{part.key}/{id}")
 
-# Mails a thread's author that someone replied, unless they replied
-# themselves, have no verified address, or turned such mail off.
+##
+Mails a thread's author that someone replied, unless they replied
+themselves, have no verified address, or turned such mail off.
+##
 private function tell_author(state: registry.State, thread: forum.Thread, number: integer, replier: string)
     if thread.author == replier
         return
@@ -590,8 +606,10 @@ private function editing_problem(someone: Member, found: Editing) -> string
         return "This thread is locked: its posts stay as they are."
     return ""
 
-# The form that changes a post: with what it says, or with what was sent
-# when `given`.
+##
+The form that changes a post: with what it says, or with what was sent
+when `given`.
+##
 function edit_page(state: registry.State, view: layout.Visitor, thread_text: string, number_text: string, title: string = "", text: string = "", problem: string = "", status: integer = 200, given: boolean = false) -> http.Response
     someone = member(state, view)
     if someone == nothing
@@ -662,8 +680,10 @@ function save_edit(request: http.Request, state: registry.State, view: layout.Vi
     forum.edit(state.data, found.thread.id, found.post.number, text, title)
     return http.redirect(address_of(found.thread) + "#post-{found.post.number}")
 
-# Marks the reply that solved a question, or unmarks it: for whoever asked,
-# and for moderators.
+##
+Marks the reply that solved a question, or unmarks it: for whoever asked,
+and for moderators.
+##
 function solve(request: http.Request, state: registry.State, view: layout.Visitor) -> http.Response
     fields = http.form(request)
     someone = member(state, view)

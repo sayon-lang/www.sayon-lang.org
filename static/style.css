@@ -135,7 +135,6 @@ svg {
 }
 
 code,
-kbd,
 pre {
   font-family: var(--mono);
 }
@@ -147,21 +146,6 @@ pre {
   background: var(--mist);
   font-size: 0.875em;
   overflow-wrap: anywhere;
-}
-
-kbd {
-  display: inline-grid;
-  place-items: center;
-  min-width: 22px;
-  height: 22px;
-  padding: 0 6px;
-  border: 1px solid var(--border);
-  border-bottom-width: 2px;
-  border-radius: var(--corner);
-  background: var(--page);
-  color: var(--muted);
-  font-size: 0.75rem;
-  line-height: 1;
 }
 
 pre {

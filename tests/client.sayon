@@ -1,6 +1,8 @@
-# What the website's tests share: a client that speaks HTTP as a browser
-# does and sees each answer as it comes, accounts signed in without their
-# pages, and clearing a test's folder.
+##
+What the website's tests share: a client that speaks HTTP as a browser
+does and sees each answer as it comes, accounts signed in without their
+pages, and clearing a test's folder.
+##
 
 filesystem = import("standard/filesystem.sayon")
 io = import("standard/io.sayon")
@@ -11,15 +13,19 @@ sessions = import("src/accounts/sessions.sayon")
 docs = import("src/pages/docs.sayon")
 registry = import("src/packages/registry.sayon")
 
-# An answer as the website wrote it: its status, its headers by lowercase
-# name, and its body.
+##
+An answer as the website wrote it: its status, its headers by lowercase
+name, and its body.
+##
 type Answer = [status: integer, headers: Dict<string, string>, body: string]
 
 # An answer whose body is bytes, such as an image.
 type Bytes = [status: integer, headers: Dict<string, string>, body: Array<byte>]
 
-# A request with a body of bytes, and the answer: its head read line by
-# line, and its body as long as its `Content-Length` says.
+##
+A request with a body of bytes, and the answer: its head read line by
+line, and its body as long as its `Content-Length` says.
+##
 function send_bytes(port: integer, method: string, target: string, headers: Dict<string, string>, body: Array<byte>) -> Bytes
     connection = network.connect("127.0.0.1", port)
     connection.write("{method} {target} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Length: {length(body)}\r\nConnection: close\r\n")
@@ -45,8 +51,10 @@ function send_bytes(port: integer, method: string, target: string, headers: Dict
         size = strings.parse_integer(headers_read["content-length"])
     return Bytes(status = status, headers = headers_read, body = connection.read_exactly(size))
 
-# A form of one file as a browser sends it, as multipart/form-data: the
-# Content-Type to send it with, and its body.
+##
+A form of one file as a browser sends it, as multipart/form-data: the
+Content-Type to send it with, and its body.
+##
 type Multipart = [kind: string, body: Array<byte>]
 
 function multipart(field: string, file: string, kind: string, bytes: Array<byte>) -> Multipart
@@ -64,8 +72,10 @@ function website(data: string, port: integer) -> registry.State
     filesystem.create_directory(filesystem.join(data, "index"))
     return registry.State(data = clone(data), index = filesystem.join(data, "index"), address = "http://127.0.0.1:{port}", admin = "operator", guides = docs.none())
 
-# Makes verified accounts, a year old, each signed in: the headers that
-# its forms are sent with, by name.
+##
+Makes verified accounts, a year old, each signed in: the headers that
+its forms are sent with, by name.
+##
 function people(data: string, port: integer, names: Array<string>) -> Dict<string, Dict<string, string>>
     all = accounts.accounts(data)
     kept = sessions.sessions(data)
@@ -91,8 +101,10 @@ function clear(folder: string)
         position -= 1
     filesystem.remove(folder)
 
-# A request on a connection of its own, as a browser sends it, and the
-# answer as it comes: a redirect, and the cookie it sets, are not followed.
+##
+A request on a connection of its own, as a browser sends it, and the
+answer as it comes: a redirect, and the cookie it sets, are not followed.
+##
 function send(port: integer, method: string, target: string, headers: Dict<string, string>, body: string) -> Answer
     connection = network.connect("127.0.0.1", port)
     connection.write("{method} {target} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Length: {bytelength(body)}\r\nConnection: close\r\n")
@@ -114,8 +126,10 @@ function send(port: integer, method: string, target: string, headers: Dict<strin
             headers_read[strings.lower(strings.trim(strings.slice(line, 0, colon)))] = strings.trim(strings.slice(line, colon + 1, length(line)))
     return Answer(status = status, headers = headers_read, body = strings.slice(text, end + 4, length(text)))
 
-# A test's talk with the website: its port, and how many requests it sent,
-# so that it can make up the count of requests the server was given.
+##
+A test's talk with the website: its port, and how many requests it sent,
+so that it can make up the count of requests the server was given.
+##
 type Talk = [port: integer, sent: integer]
 
 # A request as `send` makes it, counted.
@@ -128,8 +142,10 @@ function ask_bytes(update talk: Talk, method: string, target: string, headers: D
     talk.sent += 1
     return send_bytes(talk.port, method, target, headers, body)
 
-# Sends quick requests until `count` were sent, so that a server given
-# that count returns.
+##
+Sends quick requests until `count` were sent, so that a server given
+that count returns.
+##
 function finish(update talk: Talk, count: integer)
     while talk.sent < count
         ask(talk, "GET", "/api/v1", [], "")
@@ -147,9 +163,11 @@ function cookie_of(answer: Answer) -> string
         return set
     return strings.slice(set, 0, end)
 
-# The address of the link in the newest mail to `to` whose address holds
-# `part`, such as /verify/, as the website kept it in `<data>/mail`; the
-# mail is then put away, so that the next look finds the next one.
+##
+The address of the link in the newest mail to `to` whose address holds
+`part`, such as /verify/, as the website kept it in `<data>/mail`; the
+mail is then put away, so that the next look finds the next one.
+##
 function mail_link(data: string, to: string, part: string) -> string
     folder = filesystem.join(data, "mail")
     names = filesystem.walk(folder)

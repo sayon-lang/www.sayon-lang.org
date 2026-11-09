@@ -1,5 +1,7 @@
-# Versions as semantic versioning writes them, `1.2.3` with an optional
-# pre-release such as `1.2.3-beta.1`, and their order.
+##
+Versions as semantic versioning writes them, `1.2.3` with an optional
+pre-release such as `1.2.3-beta.1`, and their order.
+##
 
 strings = import("standard/strings.sayon")
 
@@ -48,10 +50,12 @@ function parse(text: string) -> Version or nothing
         push(numbers, value)
     return Version(major = numbers[0], minor = numbers[1], patch = numbers[2], pre = pre)
 
-# Whether text is a range of versions as `sayon` reads them: `*`, or
-# comparators between commas, each an operator (`>=`, `<=`, `>`, `<`, `=`,
-# `^`, `~`, or none) and one to three numbers, with a pre-release only
-# after all three.
+##
+Whether text is a range of versions as `sayon` reads them: `*`, or
+comparators between commas, each an operator (`>=`, `<=`, `>`, `<`, `=`,
+`^`, `~`, or none) and one to three numbers, with a pre-release only
+after all three.
+##
 function valid_range(text: string) -> boolean
     trimmed = strings.trim(text)
     if trimmed == "*"
@@ -83,9 +87,11 @@ private function sign(difference: integer) -> integer
         return 1
     return 0
 
-# Semantic versioning's order: negative when `first` comes before `second`.
-# A pre-release comes before its release, and pre-releases compare
-# identifier by identifier, numbers as numbers and before words.
+##
+Semantic versioning's order: negative when `first` comes before `second`.
+A pre-release comes before its release, and pre-releases compare
+identifier by identifier, numbers as numbers and before words.
+##
 function compare(first: Version, second: Version) -> integer
     if first.major != second.major
         return sign(first.major - second.major)

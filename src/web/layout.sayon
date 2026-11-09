@@ -1,5 +1,7 @@
-# The pages of Sayon's website in its frame (src/web/frame.sayon): the
-# bar's search and account, and what the pages share.
+##
+The pages of Sayon's website in its frame (src/web/frame.sayon): the
+bar's search and account, and what the pages share.
+##
 
 strings = import("standard/strings.sayon")
 frame = import("src/web/frame.sayon")
@@ -11,17 +13,21 @@ constant DESCRIPTION = "Sayon is a readable programming language whose compiler 
 constant CHECK_ICON = "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M5 12.5l4.5 4.5L19 7.5\"/></svg>"
 constant STOP_ICON = "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.2\" stroke-linecap=\"round\" aria-hidden=\"true\"><path d=\"M7 7l10 10M17 7L7 17\"/></svg>"
 
-# Who is looking at a page: the account its browser is signed in to, or
-# nothing, and the version of its picture; the address of the page, for
-# coming back to it after signing in, or "" on the pages that sign in; the
-# words the bar's search shows; the theme the browser chose, "light" or
-# "dark", or "" for its system's; and where the page is, for the theme's
-# switch to come back to.
+##
+Who is looking at a page: the account its browser is signed in to, or
+nothing, and the version of its picture; the address of the page, for
+coming back to it after signing in, or "" on the pages that sign in; the
+words the bar's search shows; the theme the browser chose, "light" or
+"dark", or "" for its system's; and where the page is, for the theme's
+switch to come back to.
+##
 type Visitor = [account: string or nothing, picture: string or nothing, here: string, query: string, theme: string, at: string]
 
-# An account's picture, at its address for the picture's version, or the
-# account's initial on the logo's color when it has none: a box of the
-# class `initial`, and of `kind` too, when given.
+##
+An account's picture, at its address for the picture's version, or the
+account's initial on the logo's color when it has none: a box of the
+class `initial`, and of `kind` too, when given.
+##
 function avatar(name: string, picture: string or nothing, kind: string = "") -> string
     classes = "initial"
     if kind != ""
@@ -31,16 +37,20 @@ function avatar(name: string, picture: string or nothing, kind: string = "") -> 
         return "<img class=\"{classes}\" src=\"/users/{name}/picture?v={version}\" alt=\"\">"
     return "<span class=\"{classes}\" aria-hidden=\"true\">{html.text(strings.slice(name, 0, 1))}</span>"
 
-# A search: the bar's, of the whole website, or `large`, a page's own;
-# `placeholder` says what it finds, and `action` is where it goes.
+##
+A search: the bar's, of the whole website, or `large`, a page's own;
+`placeholder` says what it finds, and `action` is where it goes.
+##
 function search_box(query: string, large: boolean, placeholder: string = "Search Sayon", action: string = "/search") -> string
     kind = "search"
     if large
         kind = "search large"
     return "<form class=\"{kind}\" action=\"{action}\" role=\"search\">{frame.SEARCH_ICON}<input class=\"input\" type=\"search\" name=\"q\" value=\"{html.escape(query)}\" placeholder=\"{html.escape(placeholder)}\" aria-label=\"{html.escape(placeholder)}\" autocomplete=\"off\"></form>"
 
-# The bar's way to search on a phone, where its field does not fit: a link
-# to the search's page.
+##
+The bar's way to search on a phone, where its field does not fit: a link
+to the search's page.
+##
 function search_link() -> string
     return "<a class=\"icon-button search-link\" href=\"/search\" aria-label=\"Search Sayon\" title=\"Search Sayon\">{frame.SEARCH_ICON}</a>"
 
@@ -55,9 +65,11 @@ function account_tool(view: Visitor) -> string
     menu = menu + "<div class=\"menu-items\"><a href=\"/account\">Your account</a><a href=\"/users/{account}\">Your profile</a><a href=\"/account/tokens\">Tokens</a><a href=\"/account/settings\">Settings</a><hr>"
     return menu + "<form method=\"post\" action=\"/sign-out\"><button type=\"submit\">Sign out</button></form></div></details>"
 
-# A page: its title, the bar for `view` (with a search unless the page
-# has its own), the part of the site it is in (as `frame.sections` names
-# them), what its main part holds, and a description, or the site's.
+##
+A page: its title, the bar for `view` (with a search unless the page
+has its own), the part of the site it is in (as `frame.sections` names
+them), what its main part holds, and a description, or the site's.
+##
 function page(view: Visitor, title: string, body: Array<string>, status: integer = 200, bar_search: boolean = true, section: string = "", description: string = "") -> http.Response
     tools: Array<string> = []
     if bar_search

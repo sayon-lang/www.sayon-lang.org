@@ -1,8 +1,10 @@
-# The website's search, at /search: the guides' sections, by their
-# headings and their text; the packages, by their names and descriptions;
-# and the forum's threads, by their titles. A section holds every word of
-# the search to be found, and one whose heading holds a word comes before
-# one whose text does.
+##
+The website's search, at /search: the guides' sections, by their
+headings and their text; the packages, by their names and descriptions;
+and the forum's threads, by their titles. A section holds every word of
+the search to be found, and one whose heading holds a word comes before
+one whose text does.
+##
 
 collections = import("standard/collections.sayon")
 strings = import("standard/strings.sayon")
@@ -21,8 +23,10 @@ constant MOST_PACKAGES = 10
 constant MOST_THREADS = 10
 constant PLACEHOLDER = "Search the docs, packages, and forum"
 
-# A section a search found: its guide's position, its own, and how well it
-# matches.
+##
+A section a search found: its guide's position, its own, and how well it
+matches.
+##
 type Hit = [guide: integer, section: integer, score: integer]
 
 # The words of a search, in lowercase, eight at most.
@@ -33,9 +37,11 @@ function words_of(query: string) -> Array<string>
             push(out, clone(word))
     return out
 
-# The guides' sections that hold every word, the best first: a word in a
-# section's heading counts ten, in its text one, and in its guide's name
-# three more.
+##
+The guides' sections that hold every word, the best first: a word in a
+section's heading counts ten, in its text one, and in its guide's name
+three more.
+##
 function find_sections(guides: docs.Docs, words: Array<string>) -> Array<Hit>
     hits: Array<Hit> = []
     if length(words) == 0
@@ -89,8 +95,10 @@ private function between(items: Array<string>, start: integer, end: integer) -> 
             push(out, clone(items[index]))
     return out
 
-# A part of a section's text around the first word it holds, about two
-# lines long, cut at spaces, with the words marked.
+##
+A part of a section's text around the first word it holds, about two
+lines long, cut at spaces, with the words marked.
+##
 function snippet(text: string, lowered: string, words: Array<string>) -> string
     first = length(text)
     for word in words

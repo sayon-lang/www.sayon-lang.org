@@ -1,8 +1,10 @@
-# The sign-ins `sayon login` starts. The command is given a secret that
-# only it knows, and a code that its user checks on the registry's page
-# for the sign-in, /login/<code>. Once they approve it there, the command
-# trades the secret for a new token of their account, once. A sign-in no
-# one approves expires after ten minutes.
+##
+The sign-ins `sayon login` starts. The command is given a secret that
+only it knows, and a code that its user checks on the registry's page
+for the sign-in, /login/<code>. Once they approve it there, the command
+trades the secret for a new token of their account, once. A sign-in no
+one approves expires after ten minutes.
+##
 
 crypto = import("standard/crypto.sayon")
 filesystem = import("standard/filesystem.sayon")
@@ -19,13 +21,17 @@ constant LASTS = 600
 # How often the command asks whether its sign-in is approved, in seconds.
 constant INTERVAL = 2
 
-# The letters of codes: no vowels, so that no code spells a word, and none
-# that could be mistaken for a digit.
+##
+The letters of codes: no vowels, so that no code spells a word, and none
+that could be mistaken for a digit.
+##
 constant LETTERS = "BCDFGHJKLMNPQRSTVWXZ"
 
-# A sign-in: its code, the computer it is for, when it began and when it
-# expires (in seconds since 1970), and once its user decides, the account
-# it is approved for, or that it was denied.
+##
+A sign-in: its code, the computer it is for, when it began and when it
+expires (in seconds since 1970), and once its user decides, the account
+it is approved for, or that it was denied.
+##
 type Login = [code: string, machine: string, created: string, expires: integer, account: string or nothing, denied: boolean]
 
 # What `start` gives the command.
@@ -75,8 +81,10 @@ function valid_code(text: string) -> boolean
             return false
     return true
 
-# A computer's name as `sayon login` sends it, made fit to show: letters,
-# digits, spaces, `-`, `_`, and `.`, 64 of them at most.
+##
+A computer's name as `sayon login` sends it, made fit to show: letters,
+digits, spaces, `-`, `_`, and `.`, 64 of them at most.
+##
 function machine_name(text: string) -> string
     out = ""
     for letter in strings.characters(strings.trim(text))

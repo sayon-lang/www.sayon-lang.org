@@ -1,6 +1,8 @@
-# The registry's API (PROTOCOL.md), under `/api/v1`, and its index, under
-# `/index`: what `sayon publish`, `login`, `logout`, `search`, and `install`
-# ask.
+##
+The registry's API (PROTOCOL.md), under `/api/v1`, and its index, under
+`/index`: what `sayon publish`, `login`, `logout`, `search`, and `install`
+ask.
+##
 
 crypto = import("standard/crypto.sayon")
 filesystem = import("standard/filesystem.sayon")
@@ -27,15 +29,19 @@ type Made = [name: string, token: string]
 type Published = [name: string, version: string, digest: string]
 type Found = [packages: Array<registry.Summary>]
 
-# A sign-in `sayon login` starts, for the computer it names, and what it is
-# given: the secret it asks with, the code its user checks, how often to
-# ask, and for how long, in seconds.
+##
+A sign-in `sayon login` starts, for the computer it names, and what it is
+given: the secret it asks with, the code its user checks, how often to
+ask, and for how long, in seconds.
+##
 type LoginAsked = [machine: string or nothing]
 type LoginStarted = [secret: string, code: string, interval: integer, expires: integer]
 type LoginPolled = [secret: string]
 
-# How a sign-in stands: "waiting", "denied", or "approved", with the account
-# and its new token.
+##
+How a sign-in stands: "waiting", "denied", or "approved", with the account
+and its new token.
+##
 type LoginState = [status: string, account: string or nothing, token: string or nothing]
 
 type Revoked = [revoked: boolean]
@@ -51,8 +57,10 @@ function parts(path: string) -> Array<string>
             push(out, clone(part))
     return out
 
-# The account a request's token belongs to, or the refusal. The token is
-# marked as used, for its account's page.
+##
+The account a request's token belongs to, or the refusal. The token is
+marked as used, for its account's page.
+##
 private function authenticate(request: http.Request, state: registry.State) -> string or http.Response
     token = http.bearer(request)
     if token == nothing
@@ -92,9 +100,11 @@ private function make_account(request: http.Request, state: registry.State) -> h
         status = 200
     return http.json_text(status, json.encode_value(Made(name = clone(asked.name), token = made)))
 
-# Publishes a version: the archive, checked, with its manifest naming the
-# package and the version, by the package's owner or, for a new package, by
-# whoever publishes it first. A version never changes.
+##
+Publishes a version: the archive, checked, with its manifest naming the
+package and the version, by the package's owner or, for a new package, by
+whoever publishes it first. A version never changes.
+##
 private function publish(request: http.Request, state: registry.State, name: string, version: string) -> http.Response
     account = authenticate(request, state)
     if typeof(account) != "string"
@@ -119,8 +129,10 @@ private function publish(request: http.Request, state: registry.State, name: str
         return http.refuse(400, read)
     if read.name != name or read.version != version
         return http.refuse(400, "the archive's sayon.toml is {read.name} {read.version}, not {name} {version}")
-    # Its dependencies are listed as `sayon` reads them, or no one could
-    # install the version.
+    ##
+    Its dependencies are listed as `sayon` reads them, or no one could
+    install the version.
+    ##
     for dependency in read.dependencies
         for named in [clone(dependency.alias), clone(dependency.package)]
             if not index.valid_name(named)
@@ -137,9 +149,11 @@ private function publish(request: http.Request, state: registry.State, name: str
         if entry.version == version
             return http.refuse(409, "{name} {version} is already published, and versions never change; publish a new version")
     digest = "sha256:" + crypto.hex(crypto.sha256(request.body))
-    # The archive goes first, whole, so that no version is ever listed
-    # without one. After a crash between the two, the version is not listed,
-    # and publishing it again replaces the archive.
+    ##
+    The archive goes first, whole, so that no version is ever listed
+    without one. After a crash between the two, the version is not listed,
+    and publishing it again replaces the archive.
+    ##
     target = registry.archive_path(state, name, version)
     filesystem.create_directory(filesystem.parent(target))
     files.save_bytes(target, request.body)
@@ -206,8 +220,10 @@ private function start_login(request: http.Request, state: registry.State) -> ht
     reply = LoginStarted(secret = clone(started.secret), code = clone(started.code), interval = logins.INTERVAL, expires = logins.LASTS)
     return http.json_text(201, json.encode_value(reply))
 
-# Tells `sayon login` how its sign-in stands, and once it is approved gives
-# it a new token of the account, once.
+##
+Tells `sayon login` how its sign-in stands, and once it is approved gives
+it a new token of the account, once.
+##
 private function poll_login(request: http.Request, state: registry.State) -> http.Response
     text = try strings.from_bytes(request.body)
     if text is error
@@ -229,8 +245,10 @@ private function poll_login(request: http.Request, state: registry.State) -> htt
     machine = clone(all[key].machine)
     kept = accounts.tokens(state.data)
     token = accounts.add_token(kept, approved, machine)
-    # The sign-in goes first: a crash between the two then loses the token
-    # rather than letting the secret take a second one.
+    ##
+    The sign-in goes first: a crash between the two then loses the token
+    rather than letting the secret take a second one.
+    ##
     remove(all, key)
     logins.save_logins(state.data, all)
     accounts.save_tokens(state.data, kept)

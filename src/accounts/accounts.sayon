@@ -1,8 +1,10 @@
-# Accounts and what shows who holds one: a password, kept as
-# `crypto.hash_password` makes it, for the registry's pages; and tokens,
-# for `sayon` on a computer, each shown once, when it is made, and kept as
-# its SHA-256. And who owns each package. All of it is JSON in the
-# registry's data folder, each file written whole (src/files.sayon).
+##
+Accounts and what shows who holds one: a password, kept as
+`crypto.hash_password` makes it, for the registry's pages; and tokens,
+for `sayon` on a computer, each shown once, when it is made, and kept as
+its SHA-256. And who owns each package. All of it is JSON in the
+registry's data folder, each file written whole (src/files.sayon).
+##
 
 crypto = import("standard/crypto.sayon")
 filesystem = import("standard/filesystem.sayon")
@@ -13,40 +15,50 @@ threads = import("standard/threads.sayon")
 time = import("standard/time.sayon")
 files = import("src/web/files.sayon")
 
-# An account: when it was made; its password, unless the operator made it
-# and no one has chosen one yet; its email address; whether it may publish
-# and post (`verified`: its email was verified, or the operator made it, or
-# it was made before accounts had email, which leaves it nothing); its
-# role, "admin" or "moderator", or nothing for anyone else; a few words
-# about its owner; whether its owner is mailed news, such as replies
-# (nothing for yes); until when moderators keep it from posting, in
-# seconds since 1970; and the version of its picture
-# (src/accounts/pictures.sayon), or nothing for none.
+##
+An account: when it was made; its password, unless the operator made it
+and no one has chosen one yet; its email address; whether it may publish
+and post (`verified`: its email was verified, or the operator made it, or
+it was made before accounts had email, which leaves it nothing); its
+role, "admin" or "moderator", or nothing for anyone else; a few words
+about its owner; whether its owner is mailed news, such as replies
+(nothing for yes); until when moderators keep it from posting, in
+seconds since 1970; and the version of its picture
+(src/accounts/pictures.sayon), or nothing for none.
+##
 type Account = [created: string, password: string or nothing, email: string or nothing, verified: boolean or nothing, role: string or nothing, bio: string or nothing, notify: boolean or nothing, suspended: integer or nothing, picture: string or nothing]
 
-# A token: the account it belongs to, what it is for, such as the computer
-# `sayon login` ran on, and when it was made and last used.
+##
+A token: the account it belongs to, what it is for, such as the computer
+`sayon login` ran on, and when it was made and last used.
+##
 type Token = [account: string, name: string, created: string, used: string or nothing]
 
 # A new account, made now.
 function new_account(own password: string or nothing, own email: string or nothing, verified: boolean) -> Account
     return Account(created = time.format(time.now()), password = password, email = email, verified = verified, role = nothing, bio = nothing, notify = nothing, suspended = nothing, picture = nothing)
 
-# Whether an account may publish packages and post: unless it is waiting
-# for its email to be verified.
+##
+Whether an account may publish packages and post: unless it is waiting
+for its email to be verified.
+##
 function may_publish(account: Account) -> boolean
     return account.verified != false
 
-# Whether an account looks after the forum: its moderators, and the
-# website's admins, who also appoint the moderators.
+##
+Whether an account looks after the forum: its moderators, and the
+website's admins, who also appoint the moderators.
+##
 function moderates(account: Account) -> boolean
     return account.role == "moderator" or account.role == "admin"
 
 function is_admin(account: Account) -> boolean
     return account.role == "admin"
 
-# Until when moderators keep an account from posting, in seconds since
-# 1970, or nothing when it may post.
+##
+Until when moderators keep an account from posting, in seconds since
+1970, or nothing when it may post.
+##
 function suspended_until(account: Account, now: integer) -> integer or nothing
     until = clone(account.suspended)
     if until != nothing and until > now
@@ -61,9 +73,11 @@ function is_new(account: Account, now: integer) -> boolean
 constant LONGEST_EMAIL = 254
 constant LONGEST_BIO = 160
 
-# What is wrong with text as an email address, or nothing: it is one
-# address, `name@domain.tld`, without spaces or what a mail's header could
-# take for more.
+##
+What is wrong with text as an email address, or nothing: it is one
+address, `name@domain.tld`, without spaces or what a mail's header could
+take for more.
+##
 function email_problem(text: string) -> string or nothing
     if text == ""
         return "Give an email address, where the website can send you a link to choose a new password."
@@ -156,8 +170,10 @@ function add_token(update all: Dict<string, Token>, account: string, name: strin
     all[hash(token)] = Token(account = clone(account), name = clone(name), created = time.format(time.now()), used = nothing)
     return token
 
-# Takes away an account's tokens, every one, or the one whose id is `only`;
-# whether it took any.
+##
+Takes away an account's tokens, every one, or the one whose id is `only`;
+whether it took any.
+##
 function remove_tokens(update all: Dict<string, Token>, account: string, only: string or nothing = nothing) -> boolean
     gone: Array<string> = []
     for key, token in all
@@ -167,9 +183,11 @@ function remove_tokens(update all: Dict<string, Token>, account: string, only: s
         remove(all, key)
     return length(gone) > 0
 
-# Makes an account for the registry's operator, or with `replace` takes
-# away an existing one's tokens, and gives it a new token: the token, or
-# nothing when the account exists and is not to be replaced.
+##
+Makes an account for the registry's operator, or with `replace` takes
+away an existing one's tokens, and gives it a new token: the token, or
+nothing when the account exists and is not to be replaced.
+##
 function make(update all: Dict<string, Account>, update tokens: Dict<string, Token>, name: string, replace: boolean) -> string or nothing
     if haskey(all, name)
         if not replace
@@ -190,9 +208,11 @@ function password_problem(name: string, password: string) -> string or nothing
         return "Choose a password that does not hold the account's name."
     return nothing
 
-# Whether a password is the account's own. The check takes a second on
-# purpose, so it runs on a thread of its own, and the website answers
-# others meanwhile.
+##
+Whether a password is the account's own. The check takes a second on
+purpose, so it runs on a thread of its own, and the website answers
+others meanwhile.
+##
 function password_is(account: Account, password: string) -> boolean
     stored = clone(account.password)
     if stored == nothing
@@ -204,8 +224,10 @@ function password_is(account: Account, password: string) -> boolean
     )
     return threads.join(checking)
 
-# A password made safe to keep, as `crypto.hash_password` makes it, on a
-# thread of its own, for the same reason.
+##
+A password made safe to keep, as `crypto.hash_password` makes it, on a
+thread of its own, for the same reason.
+##
 function hash_password(password: string) -> string
     given = clone(password)
     hashing = threads.spawn_parallel(function() -> string
@@ -230,8 +252,10 @@ function upgrade(data: string)
             all[token] = Token(account = clone(name), name = clone(OPERATOR), created = clone(account.created), used = nothing)
             moved = true
     if moved
-        # The tokens go first: a crash before the accounts are written
-        # leaves them in both, and upgrading again moves the same ones.
+        ##
+        The tokens go first: a crash before the accounts are written
+        leaves them in both, and upgrading again moves the same ones.
+        ##
         save_tokens(data, all)
         save_accounts(data, accounts(data))
 

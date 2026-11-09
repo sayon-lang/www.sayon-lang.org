@@ -1,8 +1,10 @@
 # Ownership: each value has one owner, and clone makes a second
 names = ["Ada", "Grace"]
 
-# Giving names to team moves the list: without clone, the last line would
-# be an error, E_MOVED_VALUE. Take clone away and run it to see.
+##
+Giving names to team moves the list: without clone, the last line would
+be an error, E_MOVED_VALUE. Take clone away and run it to see.
+##
 team = clone(names)
 push(team, "Barbara")
 

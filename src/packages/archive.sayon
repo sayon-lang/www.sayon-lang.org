@@ -1,8 +1,10 @@
-# Package archives (PROTOCOL.md, "Archives"): the domain
-# `sayon-package-digest-1` and a NUL byte, then each file in the order of
-# its path as its path's length, the path, its contents' length, and the
-# contents, each length 8 bytes, least significant first. They are checked
-# as `sayon` checks them.
+##
+Package archives (PROTOCOL.md, "Archives"): the domain
+`sayon-package-digest-1` and a NUL byte, then each file in the order of
+its path as its path's length, the path, its contents' length, and the
+contents, each length 8 bytes, least significant first. They are checked
+as `sayon` checks them.
+##
 
 strings = import("standard/strings.sayon")
 
@@ -15,8 +17,10 @@ constant MOST_FILES = 10000
 # A file of an archive: its path, and where its contents are.
 type File = [path: string, start: integer, end: integer]
 
-# The length written at `at`, or nothing when it is cut short or longer
-# than any archive.
+##
+The length written at `at`, or nothing when it is cut short or longer
+than any archive.
+##
 private function length_at(archive: Array<byte>, at: integer) -> integer or nothing
     if at + 8 > length(archive)
         return nothing
@@ -47,8 +51,10 @@ function valid_path(path: string) -> boolean
     top = clone(parts[0])
     return top != "build" and top != "target" and top != "sayon.lock"
 
-# The files of an archive, or why it is refused: each path once, in order,
-# none differing from another only in case, and none leaving the package.
+##
+The files of an archive, or why it is refused: each path once, in order,
+none differing from another only in case, and none leaving the package.
+##
 function files(archive: Array<byte>) -> Array<File> or string
     damaged = "the archive is damaged or not a Sayon package"
     domain = strings.bytes(DOMAIN)

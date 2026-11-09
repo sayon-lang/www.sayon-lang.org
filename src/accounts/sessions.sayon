@@ -1,7 +1,9 @@
-# Browsers signed in to accounts: each holds a cookie of 32 random bytes,
-# which the registry keeps as their SHA-256, for 30 days or until its owner
-# signs out. And the passwords given wrongly for each account, so that
-# guessing one takes long.
+##
+Browsers signed in to accounts: each holds a cookie of 32 random bytes,
+which the registry keeps as their SHA-256, for 30 days or until its owner
+signs out. And the passwords given wrongly for each account, so that
+guessing one takes long.
+##
 
 crypto = import("standard/crypto.sayon")
 filesystem = import("standard/filesystem.sayon")
@@ -17,28 +19,36 @@ constant COOKIE = "sayon_session"
 # How long a browser stays signed in, in seconds: 30 days.
 constant LASTS = 2592000
 
-# How many wrong passwords in a row an account takes, within how many
-# seconds, before it waits that long to be tried again.
+##
+How many wrong passwords in a row an account takes, within how many
+seconds, before it waits that long to be tried again.
+##
 constant TRIES = 10
 constant WINDOW = 900
 
-# A signed-in browser: its account, and when it was signed in and stops
-# being so, in seconds since 1970.
+##
+A signed-in browser: its account, and when it was signed in and stops
+being so, in seconds since 1970.
+##
 type Session = [account: string, created: string, expires: integer]
 
 # An account's wrong passwords in a row, since the first of them.
 type Failures = [count: integer, since: integer]
 
-# A link the operator makes for choosing an account's password, for an
-# account made without one or a password forgotten: its account, and when
-# it stops working, in seconds since 1970.
+##
+A link the operator makes for choosing an account's password, for an
+account made without one or a password forgotten: its account, and when
+it stops working, in seconds since 1970.
+##
 type Reset = [account: string, expires: integer]
 
 # How long such a link works, in seconds: an hour.
 constant RESET_LASTS = 3600
 
-# A link that verifies an email address: the account, the address it
-# verifies, and when it stops working, in seconds since 1970.
+##
+A link that verifies an email address: the account, the address it
+verifies, and when it stops working, in seconds since 1970.
+##
 type Verification = [account: string, email: string, expires: integer]
 
 # How long a link that verifies an address works, in seconds: a day.
@@ -93,9 +103,11 @@ function finish_others(update all: Dict<string, Session>, account: string, keep:
     for key in gone
         remove(all, key)
 
-# The `Set-Cookie` header that signs a browser in, or with "" out; `secure`
-# when the registry is reached over HTTPS, so that the cookie never travels
-# without it.
+##
+The `Set-Cookie` header that signs a browser in, or with "" out; `secure`
+when the registry is reached over HTTPS, so that the cookie never travels
+without it.
+##
 function cookie(id: string, secure: boolean) -> string
     lasts = LASTS
     if id == ""
@@ -114,8 +126,10 @@ function failures(data: string) -> Dict<string, Failures>
 function save_failures(data: string, all: Dict<string, Failures>)
     files.save_text(filesystem.join(data, "failures.json"), json.encode_value(all))
 
-# How many seconds an account waits before its password may be tried
-# again: 0 but after `TRIES` wrong ones within `WINDOW`.
+##
+How many seconds an account waits before its password may be tried
+again: 0 but after `TRIES` wrong ones within `WINDOW`.
+##
 function wait_for(all: Dict<string, Failures>, account: string) -> integer
     if not haskey(all, account)
         return 0
@@ -137,8 +151,10 @@ function failed(update all: Dict<string, Failures>, account: string)
 function succeeded(update all: Dict<string, Failures>, account: string)
     remove(all, account)
 
-# Whether a link for choosing an account's password was made in the last
-# two minutes, so that asking again sends no more mail.
+##
+Whether a link for choosing an account's password was made in the last
+two minutes, so that asking again sends no more mail.
+##
 function reset_recently(all: Dict<string, Reset>, account: string) -> boolean
     since = time.unix_seconds() + RESET_LASTS - 120
     for _key, reset in all
@@ -162,8 +178,10 @@ function save_verifications(data: string, all: Dict<string, Verification>)
             kept[clone(key)] = clone(verification)
     files.save_text(filesystem.join(data, "verifications.json"), json.encode_value(kept))
 
-# A new link's secret, verifying `email` for an account; the account's
-# earlier links stop working.
+##
+A new link's secret, verifying `email` for an account; the account's
+earlier links stop working.
+##
 function new_verification(update all: Dict<string, Verification>, account: string, email: string) -> string
     gone: Array<string> = []
     for key, verification in all
